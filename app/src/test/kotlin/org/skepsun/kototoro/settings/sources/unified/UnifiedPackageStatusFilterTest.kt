@@ -58,6 +58,35 @@ class UnifiedPackageStatusFilterTest : FunSpec({
 		val filterState = UnifiedSourcesFilterState()
 		filterState.packageStatusFilter shouldBe UnifiedPackageStatusFilter.ALL
 	}
+
+	test("repository filter matches packages and source package fallbacks") {
+		val packageItem = testPackage(id = "p1", isInstalled = true, state = UnifiedSourcePackageState.INSTALLED)
+			.copy(repositoryId = "repo-1")
+		val source = UnifiedSourceItem(
+			id = "source-1",
+			kind = UnifiedSourceKind.MIHON,
+			source = testSource,
+			title = "Source 1",
+			language = null,
+			contentType = org.skepsun.kototoro.parsers.model.ContentType.MANGA,
+			repositoryId = null,
+			repositoryName = null,
+			packageId = packageItem.id,
+			packageName = packageItem.name,
+			isEnabled = true,
+			isPinned = false,
+			isAvailable = true,
+			isInstalled = true,
+			isNsfw = false,
+			isBroken = false,
+		)
+
+		packageItem.matchesRepositoryFilter("repo-1") shouldBe true
+		packageItem.matchesRepositoryFilter("repo-2") shouldBe false
+		source.matchesRepositoryFilter("repo-1", mapOf(packageItem.id to packageItem)) shouldBe true
+		source.matchesRepositoryFilter("repo-2", mapOf(packageItem.id to packageItem)) shouldBe false
+		source.matchesRepositoryFilter(null, mapOf(packageItem.id to packageItem)) shouldBe true
+	}
 })
 
 private fun testPackage(
@@ -81,4 +110,10 @@ private fun testPackage(
 		sourceNames = listOf("Source $id"),
 		state = state,
 	)
+}
+
+private val testSource = object : org.skepsun.kototoro.parsers.model.ContentSource {
+	override val name = "TEST_SOURCE"
+	override val locale = ""
+	override val contentType = org.skepsun.kototoro.parsers.model.ContentType.MANGA
 }

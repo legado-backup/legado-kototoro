@@ -25,6 +25,7 @@ data class UnifiedSourcesFilterState(
     val query: String = "",
     val kinds: Set<UnifiedSourceKind> = emptySet(),
     val contentTypes: Set<ContentType> = emptySet(),
+    val repositoryId: String? = null,
     val languages: Set<String> = emptySet(),
     val locationTypes: Set<UnifiedRepositoryLocationType> = emptySet(),
     val enabledFilter: UnifiedEnabledFilter = UnifiedEnabledFilter.ALL,
@@ -115,4 +116,3 @@ data class MissingSourceHint(
 ) {
     val label: String get() = displayName?.takeIf { it.isNotBlank() } ?: sourceKey
 }
-

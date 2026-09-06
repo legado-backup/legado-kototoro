@@ -130,6 +130,18 @@ data class UnifiedSourceItem(
     val testAvailability: ContentSourceAvailability = ContentSourceAvailability.UNKNOWN,
 )
 
+internal fun UnifiedSourcePackageItem.matchesRepositoryFilter(repositoryId: String?): Boolean =
+    repositoryId == null || this.repositoryId == repositoryId
+
+internal fun UnifiedSourceItem.effectiveRepositoryId(
+    packagesById: Map<String, UnifiedSourcePackageItem>,
+): String? = repositoryId ?: packageId?.let { packagesById[it]?.repositoryId }
+
+internal fun UnifiedSourceItem.matchesRepositoryFilter(
+    repositoryId: String?,
+    packagesById: Map<String, UnifiedSourcePackageItem>,
+): Boolean = repositoryId == null || effectiveRepositoryId(packagesById) == repositoryId
+
 data class UnifiedSourceCatalogState(
     val repositories: List<UnifiedSourceRepositoryItem>,
     val packages: List<UnifiedSourcePackageItem>,

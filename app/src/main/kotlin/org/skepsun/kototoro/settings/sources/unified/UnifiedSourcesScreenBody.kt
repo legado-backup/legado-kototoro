@@ -29,6 +29,8 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Badge
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -44,9 +46,12 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
@@ -78,6 +83,7 @@ fun UnifiedSourcesScreen(
     onSearchQueryChange: (String) -> Unit,
     onKindClick: (UnifiedSourceKind?) -> Unit,
     onContentTypeClick: (ContentType?) -> Unit,
+    onRepositoryFilterClick: (String?) -> Unit,
     onPackageStatusClick: (UnifiedPackageStatusFilter) -> Unit = {},
     onSourceEnabledChange: (String, Boolean) -> Unit,
     onEnableAllSources: () -> Unit,
@@ -221,6 +227,7 @@ fun UnifiedSourcesScreen(
                         state = readyState,
                         onContentTypeClick = onContentTypeClick,
                         onKindClick = onKindClick,
+                        onRepositoryFilterClick = onRepositoryFilterClick,
                         onPackageStatusClick = onPackageStatusClick,
                     )
                 }
@@ -324,14 +331,35 @@ private fun UnifiedSourcesContextualFilterTabs(
     state: UnifiedSourcesUiState.Ready,
     onContentTypeClick: (ContentType?) -> Unit,
     onKindClick: (UnifiedSourceKind?) -> Unit,
+    onRepositoryFilterClick: (String?) -> Unit,
     onPackageStatusClick: (UnifiedPackageStatusFilter) -> Unit,
 ) {
+    val packagesById = remember(state.allPackages) { state.allPackages.associateBy { it.id } }
+    val repositoryOptions = remember(tab, state.allRepositories, state.allPackages, state.allSources) {
+        val referencedRepositoryIds = when (tab) {
+            UNIFIED_SOURCES_TAB_SOURCES -> state.allSources
+                .mapNotNullTo(LinkedHashSet()) { it.effectiveRepositoryId(packagesById) }
+            UNIFIED_SOURCES_TAB_PACKAGES -> state.allPackages
+                .mapNotNullTo(LinkedHashSet()) { it.repositoryId }
+            else -> emptySet()
+        }
+        state.allRepositories
+            .filter { it.id in referencedRepositoryIds || it.id == state.filters.repositoryId }
+            .sortedWith(compareBy({ it.name.lowercase() }, { it.id }))
+    }
     Column(
         modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 4.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         when (tab) {
             UNIFIED_SOURCES_TAB_SOURCES -> {
+                if (repositoryOptions.isNotEmpty()) {
+                    UnifiedRepositoryFilterDropdown(
+                        repositories = repositoryOptions,
+                        selectedRepositoryId = state.filters.repositoryId,
+                        onRepositorySelected = onRepositoryFilterClick,
+                    )
+                }
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     contentPadding = PaddingValues(horizontal = 1.dp),
@@ -393,6 +421,13 @@ private fun UnifiedSourcesContextualFilterTabs(
                 }
             }
             UNIFIED_SOURCES_TAB_PACKAGES -> {
+                if (repositoryOptions.isNotEmpty()) {
+                    UnifiedRepositoryFilterDropdown(
+                        repositories = repositoryOptions,
+                        selectedRepositoryId = state.filters.repositoryId,
+                        onRepositorySelected = onRepositoryFilterClick,
+                    )
+                }
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     contentPadding = PaddingValues(horizontal = 1.dp),
@@ -450,6 +485,86 @@ private fun UnifiedSourcesContextualFilterTabs(
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun UnifiedRepositoryFilterDropdown(
+    repositories: List<UnifiedSourceRepositoryItem>,
+    selectedRepositoryId: String?,
+    onRepositorySelected: (String?) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val style = rememberUnifiedSourcesVisualStyle()
+    val selectedRepository = repositories.firstOrNull { it.id == selectedRepositoryId }
+
+    androidx.compose.foundation.layout.Box {
+        FilterChip(
+            selected = selectedRepository != null,
+            onClick = { expanded = true },
+            shape = style.chipShape,
+            label = {
+                Text(
+                    text = selectedRepository?.name ?: stringResource(R.string.repository_source),
+                    style = MaterialTheme.typography.labelSmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            },
+            trailingIcon = {
+                Icon(
+                    painter = painterResource(R.drawable.ic_expand_more),
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                )
+            },
+        )
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+        ) {
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.all)) },
+                onClick = {
+                    expanded = false
+                    onRepositorySelected(null)
+                },
+                leadingIcon = {
+                    if (selectedRepositoryId == null) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_check),
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                },
+            )
+            repositories.forEach { repository ->
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = repository.name,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    },
+                    onClick = {
+                        expanded = false
+                        onRepositorySelected(repository.id)
+                    },
+                    leadingIcon = {
+                        if (repository.id == selectedRepositoryId) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_check),
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    },
+                )
             }
         }
     }
@@ -585,4 +700,3 @@ private fun UnifiedSourceSelectionBar(
         }
     }
 }
-

@@ -175,6 +175,22 @@ class UnifiedSourcesViewModel @Inject constructor(
         savedStateHandle.get<String>(DL_SAVED_STATE_PACKAGE)
             ?.takeIf { it.isNotBlank() }
             ?.let(::setSearchQuery)
+        // The repository filter dropdown needs each package's repositoryId, which only exists
+        // once the configured repository indexes are merged in — previously that happened on
+        // an explicit pull-refresh only, so on a cold page open every package carried a null
+        // repository and the dropdown stayed hidden. Seed the available catalogs silently
+        // once per ViewModel; a later manual refresh simply replaces the same state.
+        if (availableExternalExtensions.value.isEmpty()) {
+            launchJob(Dispatchers.IO) {
+                runCatching {
+                    withTimeoutOrNull(REFRESH_PACKAGES_TIMEOUT_MS) {
+                        refreshAvailableExternalPackages()
+                        refreshAvailableLnReaderPackages()
+                        refreshAvailableJsonPackages()
+                    }
+                }
+            }
+        }
     }
 
     /**
@@ -278,6 +294,10 @@ class UnifiedSourcesViewModel @Inject constructor(
         filterState.update { state ->
             state.copy(contentTypes = contentType?.let(::setOf) ?: emptySet())
         }
+    }
+
+    fun setRepositoryFilter(repositoryId: String?) {
+        filterState.update { it.copy(repositoryId = repositoryId) }
     }
 
     fun toggleLocationType(locationType: UnifiedRepositoryLocationType) {
@@ -2010,6 +2030,7 @@ class UnifiedSourcesViewModel @Inject constructor(
         val query = filters.query.trim()
         return asSequence()
             .filter { filters.kinds.isEmpty() || it.kind in filters.kinds }
+            .filter { it.matchesRepositoryFilter(filters.repositoryId) }
             .filter { filters.locationTypes.isEmpty() || it.repositoryLocationType(repositoriesById) in filters.locationTypes }
             .filter { filters.languages.isEmpty() || it.language.matchesLanguageFilter(filters.languages) }
             .filter {
@@ -2041,6 +2062,7 @@ class UnifiedSourcesViewModel @Inject constructor(
         return asSequence()
             .filter { filters.kinds.isEmpty() || it.kind in filters.kinds }
             .filter { filters.contentTypes.isEmpty() || it.contentType in filters.contentTypes }
+            .filter { it.matchesRepositoryFilter(filters.repositoryId, packagesById) }
             .filter { filters.languages.isEmpty() || it.language.matchesLanguageFilter(filters.languages) }
             .filter {
                 when (filters.enabledFilter) {
@@ -2112,9 +2134,7 @@ private fun UnifiedSourceItem.repositoryLocationType(
     repositoriesById: Map<String, UnifiedSourceRepositoryItem>,
     packagesById: Map<String, UnifiedSourcePackageItem>,
 ): UnifiedRepositoryLocationType? {
-    repositoryId?.let(repositoriesById::get)?.locationType?.let { return it }
-    val packageRepositoryId = packageId?.let(packagesById::get)?.repositoryId
-    return packageRepositoryId?.let(repositoriesById::get)?.locationType
+    return effectiveRepositoryId(packagesById)?.let(repositoriesById::get)?.locationType
 }
 
 private fun String?.matchesLanguageFilter(languages: Set<String>): Boolean {

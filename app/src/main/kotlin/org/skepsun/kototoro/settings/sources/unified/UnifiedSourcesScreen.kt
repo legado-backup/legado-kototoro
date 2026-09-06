@@ -265,6 +265,7 @@ fun UnifiedSourcesRoute(
         onSearchQueryChange = viewModel::setSearchQuery,
         onKindClick = viewModel::setKindFilter,
         onContentTypeClick = viewModel::setContentTypeFilter,
+        onRepositoryFilterClick = viewModel::setRepositoryFilter,
         onPackageStatusClick = viewModel::setPackageStatusFilter,
         onLanguageFilterClick = { onActivePanelChange(UnifiedToolbarFilterPanel.LANGUAGE) },
         onMoreFiltersClick = { onActivePanelChange(UnifiedToolbarFilterPanel.MORE) },
@@ -645,4 +646,3 @@ fun UnifiedSourcesRoute(
         null -> Unit
     }
 }
-
