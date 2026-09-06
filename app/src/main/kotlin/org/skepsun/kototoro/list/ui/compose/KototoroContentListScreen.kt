@@ -73,6 +73,7 @@ import org.skepsun.kototoro.core.ui.compose.KototoroLoadingIndicator
 import org.skepsun.kototoro.core.ui.compose.KototoroPullToRefreshBox
 import org.skepsun.kototoro.core.ui.compose.VerticalRailAnimatedVisibility
 import org.skepsun.kototoro.core.ui.compose.AppLayoutTokens
+import org.skepsun.kototoro.core.ui.compose.VerticalScrollbar
 import org.skepsun.kototoro.core.ui.compose.CompactPosterCardStyle
 import org.skepsun.kototoro.core.ui.compose.CompactTopBarHorizontalPadding
 import org.skepsun.kototoro.core.ui.compose.compactPosterCardStyle
@@ -190,6 +191,7 @@ fun KototoroContentListScreen(
     listMode: ListMode,
     isRefreshing: Boolean,
     pullRefreshEnabled: Boolean = true,
+    showScrollbar: Boolean = false,
     showRemoveOption: Boolean = false,
     sharedTransitionEnabled: Boolean = true,
     sharedElementInstanceKey: String? = null,
@@ -322,7 +324,7 @@ fun KototoroContentListScreen(
                         onSecondaryAction = secondaryAction,
                     )
                 }
-            } else if (itemCount == 0 && !isRefreshing) {
+            } else if (itemCount == 0 && !isRefreshing && listHeader == null) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text(
                             text = stringResource(R.string.nothing_found),
@@ -448,6 +450,9 @@ fun KototoroContentListScreen(
 
                                 }
                             }
+                            if (showScrollbar) {
+                                VerticalScrollbar(state = actualGridState)
+                            }
                         }
                     }
                     ListMode.LIST -> {
@@ -516,6 +521,9 @@ fun KototoroContentListScreen(
                                 }
                             }
                         }
+                        if (showScrollbar) {
+                            VerticalScrollbar(state = actualListState)
+                        }
                     }
                     ListMode.DETAILED_LIST -> {
                         val actualListState = detailedListState ?: rememberLazyListState()
@@ -582,6 +590,9 @@ fun KototoroContentListScreen(
                                     }
                                 }
                             }
+                        }
+                        if (showScrollbar) {
+                            VerticalScrollbar(state = actualListState)
                         }
                     }
                 }

@@ -130,6 +130,7 @@ fun AppContentListRoute(
     onFilterRailOverrideChanged: (CompactFilterRailOverrideState?) -> Unit = {},
     emitFilterRailOverride: Boolean = true,
     pullRefreshEnabled: Boolean = true,
+    showScrollbar: Boolean = false,
     /**
      * Optional override for the pull-to-refresh action. By default paging lists call
      * `LazyPagingItems.refresh()` and static lists call [ContentListViewModel.onRefresh].
@@ -595,6 +596,7 @@ fun AppContentListRoute(
         listMode = listMode,
         isRefreshing = isRefreshing || (retainedPagingState.pagingIsRefreshing && !retainedPagingState.useRetainedPagingSnapshot),
         pullRefreshEnabled = pullRefreshEnabled,
+        showScrollbar = showScrollbar,
         showRemoveOption = showRemoveOption,
         sharedTransitionEnabled = sharedTransitionEnabled,
         sharedElementInstanceKey = sharedElementInstanceKey,

@@ -3018,4 +3018,21 @@ SHA-256 指纹:
     <string name="pref_glass_param_press_chromatic">按压色差</string>
     <string name="pref_glass_param_press_scale">按压放大</string>
     <string name="pref_glass_param_press_lens">按压折射增强</string>
+    <string name="local_download_manager">下载管理</string>
+    <string name="local_download_idle">查看任务与下载记录</string>
+    <string name="local_download_loading">正在读取下载任务…</string>
+    <string name="local_download_progress">%1$s · %2$d%%</string>
+    <string name="local_download_running">%1$d 项下载中</string>
+    <string name="local_download_queued">%1$d 项排队</string>
+    <string name="local_download_paused">%1$d 项暂停</string>
+    <string name="local_download_failed">%1$d 项失败</string>
+    <string name="local_download_batch">批量操作</string>
+    <string name="local_download_pause_all">全部暂停</string>
+    <string name="local_download_resume_all">全部继续 / 重试</string>
+    <string name="local_download_recent">最近下载</string>
+    <string name="local_download_more">还有 %1$d 项</string>
+    <string name="local_download_chapters_progress">已下载 %1$d/%2$d 章</string>
+    <string name="local_download_chapters_count">已下载 %1$d 章</string>
+    <string name="local_download_storage_used">已下载 %1$s</string>
+    <string name="local_download_storage_free">剩余 %1$s</string>
 </resources>

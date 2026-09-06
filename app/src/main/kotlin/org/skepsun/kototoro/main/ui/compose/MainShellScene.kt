@@ -992,6 +992,14 @@ internal fun LocalTopLevelRouteContent(
                 actions = buildList {
                     add(
                         KototoroTopBarMenuAction(
+                            org.skepsun.kototoro.R.string.local_download_manager,
+                            org.skepsun.kototoro.R.drawable.ic_download,
+                        ) {
+                            appRouter.openDownloads()
+                        },
+                    )
+                    add(
+                        KototoroTopBarMenuAction(
                             org.skepsun.kototoro.R.string._import,
                             org.skepsun.kototoro.R.drawable.ic_import,
                         ) {
@@ -1035,6 +1043,7 @@ internal fun LocalTopLevelRouteContent(
             contentPadding = contentPadding,
             appRouter = appRouter,
             pullRefreshEnabled = false,
+            showScrollbar = true,
             onTopBarOverrideChanged = {
                 onExploreSourceSelectionTopBarChanged(
                     RouteScopedTopBarOverrideState(
@@ -1069,7 +1078,11 @@ internal fun LocalTopLevelRouteContent(
                 }
             },
             onEmptyActionClick = { appRouter.showImportDialog() },
-            listHeader = null,
+            listHeader = {
+                org.skepsun.kototoro.local.ui.compose.LocalDownloadsCardRoute(
+                    onOpenDownloads = appRouter::openDownloads,
+                )
+            },
         )
 
         pendingRemoveSelection?.let { ids ->
@@ -1362,6 +1375,7 @@ internal fun UpdatedTopLevelRouteContent(
             contentPadding = contentPadding,
             appRouter = appRouter,
             showRemoveOption = true,
+            showScrollbar = true,
             // Selection is owned by the route and reported to the main chrome, so the
             // route must not draw its own inline bar: a same-slot duplicate would be
             // captured by the chrome glass backdrop and render as artifacts.
