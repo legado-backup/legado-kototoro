@@ -49,11 +49,26 @@ private const val READER_SETTINGS_MANGA_PAGE = 1
 private const val READER_SETTINGS_NOVEL_PAGE = 2
 private const val READER_SETTINGS_PAGE_COUNT = 3
 
+internal data class ReaderInfoBarSettingsState(
+    val enabled: Boolean,
+    val layoutEnabled: Boolean,
+    val cutoutAvoidanceEnabled: Boolean,
+)
+
+internal fun resolveReaderInfoBarSettingsState(infoBarEnabled: Boolean): ReaderInfoBarSettingsState {
+    return ReaderInfoBarSettingsState(
+        enabled = infoBarEnabled,
+        layoutEnabled = infoBarEnabled,
+        cutoutAvoidanceEnabled = infoBarEnabled,
+    )
+}
+
 @Composable
 fun ReaderSettingsScreen(
     settings: AppSettings,
     onReaderTapActionsClick: () -> Unit,
     onReaderAiSettingsEntryClick: () -> Unit,
+    onReplaceRulesClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val prefs = settings.prefs
@@ -157,6 +172,15 @@ fun ReaderSettingsScreen(
                                 title = stringResource(R.string.novel),
                                 modifier = Modifier.fillMaxWidth(),
                             ) {
+                                item {
+                                    SettingsActionPreference(
+                                        title = stringResource(R.string.replace_rules),
+                                        summary = stringResource(R.string.replace_rules_summary),
+                                        iconRes = R.drawable.ic_filter_menu,
+                                        onClick = onReplaceRulesClick,
+                                    )
+                                }
+
                                 item {
                                     SettingsChoicePreference(
                                         title = stringResource(R.string.novel_reading_mode),
@@ -343,6 +367,18 @@ fun ReaderSettingsScreen(
                                         iconRes = R.drawable.ic_progress_marker,
                                         checked = novelSettings.showReadingStatus,
                                         onCheckedChange = { enabled -> updateNovelSettings { copy(showReadingStatus = enabled) } },
+                                    )
+                                }
+
+                                item {
+                                    SettingsSwitchPreference(
+                                        title = stringResource(R.string.reader_chapter_title_at_bottom),
+                                        summary = stringResource(R.string.reader_chapter_title_at_bottom_summary),
+                                        iconRes = R.drawable.ic_format_size,
+                                        checked = novelSettings.chapterTitleAtBottom,
+                                        onCheckedChange = { enabled ->
+                                            updateNovelSettings { copy(chapterTitleAtBottom = enabled) }
+                                        },
                                     )
                                 }
 
@@ -560,6 +596,11 @@ private fun ReaderMangaSettingsPage(
     readerControlOptions: List<SettingsChoiceOption<ReaderControl>>,
     onReaderAiSettingsEntryClick: () -> Unit,
 ) {
+    val readerInfoBarSettings = resolveReaderInfoBarSettingsState(
+        infoBarEnabled = settings.observeAsState(AppSettings.KEY_READER_BAR) {
+            isReaderBarEnabled
+        }.value,
+    )
     SettingsPreferenceGroup(
         title = "",
         modifier = Modifier.fillMaxWidth(),
@@ -802,9 +843,7 @@ private fun ReaderMangaSettingsPage(
                 title = stringResource(R.string.reader_info_bar),
                 summary = stringResource(R.string.reader_info_bar_summary),
                 iconRes = R.drawable.ic_timeline,
-                checked = settings.observeAsState(AppSettings.KEY_READER_BAR) {
-                    isReaderBarEnabled
-                }.value,
+                checked = readerInfoBarSettings.enabled,
                 onCheckedChange = { settings.prefs.edit { putBoolean(AppSettings.KEY_READER_BAR, it) } },
             )
         }
@@ -816,7 +855,7 @@ private fun ReaderMangaSettingsPage(
                     readerInfoBarLayout
                 }.value,
                 options = readerInfoBarLayoutOptions,
-                enabled = settings.isReaderBarEnabled,
+                enabled = readerInfoBarSettings.layoutEnabled,
                 onValueChange = { settings.readerInfoBarLayout = it },
             )
         }
@@ -828,7 +867,7 @@ private fun ReaderMangaSettingsPage(
                 checked = settings.observeAsState(AppSettings.KEY_READER_BAR_CUTOUT_AVOIDANCE) {
                     isReaderInfoBarCutoutAvoidanceEnabled
                 }.value,
-                enabled = settings.isReaderBarEnabled,
+                enabled = readerInfoBarSettings.cutoutAvoidanceEnabled,
                 onCheckedChange = {
                     settings.prefs.edit { putBoolean(AppSettings.KEY_READER_BAR_CUTOUT_AVOIDANCE, it) }
                 },
@@ -968,8 +1007,8 @@ private fun ReaderMangaSettingsPage(
         }
         item {
             SettingsSliderPreference(
-                title = stringResource(R.string.download_threads),
-                summary = stringResource(R.string.download_threads_summary),
+                title = stringResource(R.string.reader_threads),
+                summary = stringResource(R.string.reader_threads_summary),
                 iconRes = R.drawable.ic_network_cellular,
                 value = settings.observeAsState(AppSettings.KEY_READER_THREADS) { readerThreads }.value,
                 valueRange = 1..10,

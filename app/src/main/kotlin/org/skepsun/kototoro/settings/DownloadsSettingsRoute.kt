@@ -11,19 +11,14 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.stringResource
 import androidx.core.net.toUri
 import androidx.documentfile.provider.DocumentFile
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
@@ -38,15 +33,11 @@ import org.skepsun.kototoro.core.prefs.AppSettings
 import org.skepsun.kototoro.core.prefs.DownloadFormat
 import org.skepsun.kototoro.core.prefs.TriStateOption
 import org.skepsun.kototoro.core.prefs.observeAsState
-import org.skepsun.kototoro.core.ui.theme.KototoroTheme
 import org.skepsun.kototoro.core.util.ext.getQuantityStringSafe
-import org.skepsun.kototoro.settings.compose.SettingsAlertDialog
-import org.skepsun.kototoro.settings.compose.SettingsDialogActionButton
 import org.skepsun.kototoro.core.util.ext.powerManager
 import org.skepsun.kototoro.core.util.ext.printStackTraceDebug
 import org.skepsun.kototoro.core.util.ext.resolveFile
 import org.skepsun.kototoro.core.util.ext.tryLaunch
-import org.skepsun.kototoro.download.ui.worker.DownloadWorker
 import org.skepsun.kototoro.local.data.LocalStorageManager
 import org.skepsun.kototoro.settings.compose.DownloadsSettingsScreen
 import org.skepsun.kototoro.settings.compose.DownloadsSettingsUiState
@@ -66,20 +57,10 @@ fun DownloadsSettingsRoute(
     val context = LocalContext.current
     val preferredDownloadFormat =
         settings.observeAsState(AppSettings.KEY_DOWNLOADS_FORMAT) { preferredDownloadFormat }.value
-    val isDownloadAlignedWithReader =
-        settings.observeAsState(AppSettings.KEY_DOWNLOADS_ALIGN_READER) { isDownloadAlignedWithReader }.value
-    val isDownloadAutoRetryOnNetworkError =
-        settings.observeAsState(AppSettings.KEY_DOWNLOADS_AUTO_RETRY) { isDownloadAutoRetryOnNetworkError }.value
-    val downloadThreads = settings.observeAsState(AppSettings.KEY_DOWNLOADS_THREADS) { downloadThreads }.value
-    val downloadMaxActiveSeries =
-        settings.observeAsState(AppSettings.KEY_DOWNLOADS_MAX_ACTIVE_SERIES) { downloadMaxActiveSeries }.value
-    var showUncappedWarning by remember { mutableStateOf(false) }
-    val downloadRequestDelayMs =
-        settings.observeAsState(AppSettings.KEY_DOWNLOADS_REQUEST_DELAY) { downloadRequestDelayMs }.value
-    val downloadRetryCount =
-        settings.observeAsState(AppSettings.KEY_DOWNLOADS_RETRY_COUNT) { downloadRetryCount }.value
-    val downloadRetryDelayMs =
-        settings.observeAsState(AppSettings.KEY_DOWNLOADS_RETRY_DELAY) { downloadRetryDelayMs }.value
+    val preferredVideoQuality =
+        settings.observeAsState(AppSettings.KEY_DOWNLOADS_VIDEO_QUALITY) { preferredDownloadVideoQuality }.value
+    val isNovelImagesEnabled =
+        settings.observeAsState(AppSettings.KEY_DOWNLOADS_NOVEL_IMAGES) { isDownloadNovelImagesEnabled }.value
     val allowDownloadOnMeteredNetwork =
         settings.observeAsState(AppSettings.KEY_DOWNLOADS_METERED_NETWORK) { allowDownloadOnMeteredNetwork }.value
     val pagesSaveDirKey =
@@ -105,47 +86,13 @@ fun DownloadsSettingsRoute(
     val state = DownloadsSettingsUiState(
         mangaDirectoriesSummary = mangaDirectoriesSummary,
         preferredDownloadFormat = preferredDownloadFormat,
-        isDownloadAlignedWithReader = isDownloadAlignedWithReader,
-        isDownloadAutoRetryOnNetworkError = isDownloadAutoRetryOnNetworkError,
-        downloadThreads = downloadThreads,
-        downloadMaxActiveSeries = downloadMaxActiveSeries,
-        downloadRequestDelayMs = downloadRequestDelayMs,
-        downloadRetryCount = downloadRetryCount,
-        downloadRetryDelayMs = downloadRetryDelayMs,
+        preferredVideoQuality = preferredVideoQuality,
+        isNovelImagesEnabled = isNovelImagesEnabled,
         allowDownloadOnMeteredNetwork = allowDownloadOnMeteredNetwork,
         isDozeIgnoreVisible = isDozeIgnoreAvailable(context, dozeRefreshKey),
         pagesDirectorySummary = pagesDirectorySummary,
         isPagesSavingAskEnabled = isPagesSavingAskEnabled,
     )
-
-    if (showUncappedWarning) {
-        SettingsAlertDialog(
-            title = stringResource(R.string.download_max_active_series_warning_title),
-            onDismissRequest = {
-                showUncappedWarning = false
-            },
-            text = {
-                Text(stringResource(R.string.download_max_active_series_warning_message))
-            },
-            confirmButton = {
-                SettingsDialogActionButton(
-                    text = stringResource(R.string.continue_action),
-                    onClick = {
-                        settings.downloadMaxActiveSeries = AppSettings.UNLIMITED_SERIES
-                        showUncappedWarning = false
-                    },
-                )
-            },
-            dismissButton = {
-                SettingsDialogActionButton(
-                    text = stringResource(android.R.string.cancel),
-                    onClick = {
-                        showUncappedWarning = false
-                    },
-                )
-            },
-        )
-    }
 
     DownloadsSettingsScreen(
         downloadsTitle = context.getString(R.string.downloads),
@@ -156,21 +103,16 @@ fun DownloadsSettingsRoute(
         meteredNetworkOptions = meteredNetworkOptions,
         onMangaDirectoriesClick = onOpenMangaDirectories,
         onPreferredDownloadFormatChange = { settings.preferredDownloadFormat = it },
-        onDownloadAlignReaderChange = { settings.isDownloadAlignedWithReader = it },
-        onDownloadAutoRetryChange = { settings.isDownloadAutoRetryOnNetworkError = it },
-        onDownloadThreadsChange = { settings.downloadThreads = it },
-        onDownloadMaxActiveSeriesChange = { newValue ->
-            if (newValue == AppSettings.UNLIMITED_SERIES) {
-                if (downloadMaxActiveSeries != AppSettings.UNLIMITED_SERIES) {
-                    showUncappedWarning = true
-                }
-            } else {
-                settings.downloadMaxActiveSeries = newValue
-            }
+        onPreferredVideoQualityChange = { value ->
+            settings.preferredDownloadVideoQuality = value
+                .split(',')
+                .map(String::trim)
+                .filter(String::isNotEmpty)
+                .distinct()
+                .joinToString(", ")
+                .ifBlank { "1080p, 720p, 480p" }
         },
-        onDownloadRequestDelayChange = { settings.downloadRequestDelayMs = it },
-        onDownloadRetryCountChange = { settings.downloadRetryCount = it },
-        onDownloadRetryDelayChange = { settings.downloadRetryDelayMs = it },
+        onNovelImagesChange = { settings.isDownloadNovelImagesEnabled = it },
         onAllowMeteredNetworkChange = onAllowMeteredNetworkChange,
         onIgnoreDozeClick = {
             if (!onRequestIgnoreDoze()) {

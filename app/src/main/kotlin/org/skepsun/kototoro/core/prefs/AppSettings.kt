@@ -390,7 +390,7 @@ class AppSettings @Inject constructor(@ApplicationContext private val context: C
                     migratedLegacyThreeNavItems
                 }
                 else -> rawStr.split(',')
-                    .mapNotNull { x -> NavItem.entries.find(x) }
+                    .mapNotNull { x -> if (x == "DOWNLOADS") NavItem.LOCAL else NavItem.entries.find(x) }
                     .filterNot { it == NavItem.DISCOVER }
                     .ifEmpty { defaultMainNavItems }
             }
@@ -1303,6 +1303,19 @@ class AppSettings @Inject constructor(@ApplicationContext private val context: C
     var preferredVideoQuality: String
         get() = prefs.getString(KEY_VIDEO_PREFERRED_QUALITY, "1080p, 720p, 480p") ?: "1080p, 720p, 480p"
         set(value) = prefs.edit { putString(KEY_VIDEO_PREFERRED_QUALITY, value) }
+
+    /**
+     * Quality preference used only when resolving background video downloads.
+     * It intentionally has its own key so playback quality changes do not silently
+     * increase the size of future offline downloads.
+     */
+    var preferredDownloadVideoQuality: String
+        get() = prefs.getString(KEY_DOWNLOADS_VIDEO_QUALITY, "1080p, 720p, 480p") ?: "1080p, 720p, 480p"
+        set(value) = prefs.edit { putString(KEY_DOWNLOADS_VIDEO_QUALITY, value) }
+
+    var isDownloadNovelImagesEnabled: Boolean
+        get() = prefs.getBoolean(KEY_DOWNLOADS_NOVEL_IMAGES, true)
+        set(value) = prefs.edit { putBoolean(KEY_DOWNLOADS_NOVEL_IMAGES, value) }
 
     @get:FloatRange(0.0, 1.0)
     var videoGradientAlpha: Float
@@ -2965,6 +2978,8 @@ class AppSettings @Inject constructor(@ApplicationContext private val context: C
         const val KEY_DOWNLOADS_RETRY_COUNT = "downloads_retry_count"
         const val KEY_DOWNLOADS_RETRY_DELAY = "downloads_retry_delay"
         const val KEY_DOWNLOADS_CHAPTER_DELAY = "downloads_chapter_delay"
+        const val KEY_DOWNLOADS_VIDEO_QUALITY = "downloads_video_quality"
+        const val KEY_DOWNLOADS_NOVEL_IMAGES = "downloads_novel_images"
         const val KEY_ALL_FAVOURITES_VISIBLE = "all_favourites_visible"
         const val KEY_DOH = "doh"
         const val KEY_DOH_CUSTOM_URL = "doh_custom_url"

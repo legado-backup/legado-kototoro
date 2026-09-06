@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -53,7 +52,6 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.google.android.material.snackbar.Snackbar
 import kotlinx.coroutines.launch
 import org.skepsun.kototoro.R
-import org.skepsun.kototoro.core.ui.compose.KototoroSlider
 import org.skepsun.kototoro.core.model.getContentType
 import org.skepsun.kototoro.core.model.getSaveTitleResId
 import org.skepsun.kototoro.core.model.getWholeWorkOptionResId
@@ -67,7 +65,6 @@ import org.skepsun.kototoro.parsers.model.Content
 import org.skepsun.kototoro.parsers.model.ContentType
 import org.skepsun.kototoro.parsers.util.format
 import org.skepsun.kototoro.settings.storage.DirectoryModel
-import kotlin.math.roundToInt
 
 private enum class SelectedMode {
     WHOLE_MANGA, WHOLE_BRANCH, FIRST_CHAPTERS, UNREAD_CHAPTERS
@@ -127,16 +124,10 @@ fun DownloadDialog(
     var showMoreOptions by remember { mutableStateOf(false) }
     var startNow by remember { mutableStateOf(true) }
     var selectedMode by remember { mutableStateOf(SelectedMode.WHOLE_MANGA) }
-    var isAlignReader by remember { mutableStateOf(viewModel.isDownloadAlignedWithReader()) }
-    var isAutoRetry by remember { mutableStateOf(viewModel.isDownloadAutoRetryEnabled()) }
-    var chapterDelaySeconds by remember { mutableStateOf(viewModel.getChapterDownloadDelay()) }
-    var threads by remember { mutableStateOf(viewModel.getDownloadThreads()) }
-    var requestDelayMs by remember { mutableStateOf(viewModel.getDownloadRequestDelayMs()) }
-    var retryCount by remember { mutableStateOf(viewModel.getDownloadRetryCount()) }
-    var retryDelayMs by remember { mutableStateOf(viewModel.getDownloadRetryDelayMs()) }
     var selectedFormat by remember { mutableStateOf<DownloadFormat?>(null) }
     var selectedDestination by remember { mutableStateOf<DirectoryModel?>(null) }
     var selectedVideoQuality by remember { mutableStateOf<String?>(null) }
+    var includeNovelImages by remember { mutableStateOf(viewModel.isDownloadNovelImagesEnabled()) }
     var showDestinationMenu by remember { mutableStateOf(false) }
     var showFormatMenu by remember { mutableStateOf(false) }
     var showVideoQualityMenu by remember { mutableStateOf(false) }
@@ -376,6 +367,29 @@ fun DownloadDialog(
                     }
                 }
 
+                if (contentType == ContentType.NOVEL || contentType == ContentType.HENTAI_NOVEL) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = stringResource(id = R.string.download_novel_images),
+                                style = MaterialTheme.typography.titleSmall,
+                            )
+                            Text(
+                                text = stringResource(id = R.string.download_novel_images_summary),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(
+                            checked = includeNovelImages,
+                            onCheckedChange = { includeNovelImages = it },
+                        )
+                    }
+                }
+
                 // More Options Toggle
                 Row(
                     modifier = Modifier.fillMaxWidth().clickable { showMoreOptions = !showMoreOptions }.padding(vertical = 12.dp),
@@ -434,96 +448,11 @@ fun DownloadDialog(
                             }
                         }
 
-                        // Align reader
-                        Row(modifier = Modifier.fillMaxWidth().padding(top = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(text = stringResource(id = R.string.download_align_reader), style = MaterialTheme.typography.titleSmall)
-                                Text(text = stringResource(id = R.string.download_align_reader_summary), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                            Switch(
-                                checked = isAlignReader,
-                                onCheckedChange = {
-                                    isAlignReader = it
-                                    viewModel.setDownloadAlignedWithReader(it)
-                                }
-                            )
-                        }
-
-                        // Auto retry
-                        Row(modifier = Modifier.fillMaxWidth().padding(top = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text(text = stringResource(id = R.string.download_auto_retry_summary), modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
-                            Switch(
-                                checked = isAutoRetry,
-                                onCheckedChange = {
-                                    isAutoRetry = it
-                                    viewModel.setDownloadAutoRetryEnabled(it)
-                                }
-                            )
-                        }
-
-                        // Threads
-                        DownloadIntSlider(
-                            title = stringResource(id = R.string.download_threads),
-                            value = threads,
-                            valueText = threads.toString(),
-                            valueRange = 1..10,
-                            steps = 8,
-                            enabled = !isAlignReader,
-                            onValueChange = {
-                                threads = it
-                                viewModel.setDownloadThreads(it)
-                            },
-                        )
-
-                        DownloadIntSlider(
-                            title = stringResource(id = R.string.download_request_delay),
-                            value = requestDelayMs,
-                            valueText = "${requestDelayMs}ms",
-                            valueRange = 0..5000,
-                            steps = 49,
-                            stepSize = 100,
-                            enabled = !isAlignReader,
-                            onValueChange = {
-                                requestDelayMs = it
-                                viewModel.setDownloadRequestDelayMs(it)
-                            },
-                        )
-
-                        DownloadIntSlider(
-                            title = stringResource(id = R.string.download_retry_count),
-                            value = retryCount,
-                            valueText = retryCount.toString(),
-                            valueRange = 1..10,
-                            steps = 8,
-                            onValueChange = {
-                                retryCount = it
-                                viewModel.setDownloadRetryCount(it)
-                            },
-                        )
-
-                        DownloadIntSlider(
-                            title = stringResource(id = R.string.download_retry_delay),
-                            value = retryDelayMs,
-                            valueText = "${retryDelayMs}ms",
-                            valueRange = 500..10000,
-                            steps = 18,
-                            stepSize = 500,
-                            onValueChange = {
-                                retryDelayMs = it
-                                viewModel.setDownloadRetryDelayMs(it)
-                            },
-                        )
-
-                        DownloadIntSlider(
-                            title = stringResource(id = R.string.chapter_download_delay),
-                            value = chapterDelaySeconds,
-                            valueText = "${chapterDelaySeconds}s",
-                            valueRange = 0..10,
-                            steps = 9,
-                            onValueChange = {
-                                chapterDelaySeconds = it
-                                viewModel.setChapterDownloadDelay(it)
-                            },
+                        Text(
+                            text = stringResource(id = R.string.download_automatic_strategy_summary),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 16.dp),
                         )
                     }
                 }
@@ -547,6 +476,7 @@ fun DownloadDialog(
                             destination = selectedDestination,
                             allowMetered = allowMetered,
                             preferredQuality = selectedVideoQuality,
+                            includeNovelImages = includeNovelImages,
                         )
                     }
                     val activity = context.findActivity() as? FragmentActivity
@@ -610,54 +540,6 @@ private fun SelectableValueCard(
             onDismissRequest = onDismissRequest,
             content = dropdownContent,
         )
-    }
-}
-
-@Composable
-private fun DownloadIntSlider(
-    title: String,
-    value: Int,
-    valueText: String,
-    valueRange: IntRange,
-    steps: Int,
-    onValueChange: (Int) -> Unit,
-    modifier: Modifier = Modifier,
-    stepSize: Int = 1,
-    enabled: Boolean = true,
-) {
-    Column(modifier = modifier.fillMaxWidth().padding(top = 16.dp)) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleSmall,
-            color = if (enabled) {
-                MaterialTheme.colorScheme.onSurface
-            } else {
-                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-            },
-        )
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            KototoroSlider(
-                value = value.toFloat(),
-                onValueChange = { rawValue ->
-                    val snappedValue = (rawValue / stepSize).roundToInt() * stepSize
-                    onValueChange(snappedValue.coerceIn(valueRange.first, valueRange.last))
-                },
-                valueRange = valueRange.first.toFloat()..valueRange.last.toFloat(),
-                steps = steps,
-                enabled = enabled,
-                modifier = Modifier.weight(1f),
-            )
-            Text(
-                text = valueText,
-                modifier = Modifier.padding(start = 16.dp).width(64.dp),
-                style = MaterialTheme.typography.bodyMedium,
-                color = if (enabled) {
-                    MaterialTheme.colorScheme.onSurface
-                } else {
-                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                },
-            )
-        }
     }
 }
 

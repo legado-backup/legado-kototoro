@@ -25,6 +25,7 @@ data class DownloadState(
     val isStuck: Boolean = false,
     val localContent: LocalContent? = null,
     val downloadedChapters: Int = 0,
+    val isPartial: Boolean = false,
     val timestamp: Long = System.currentTimeMillis(),
     val isCompleted: Boolean = false,
 ) {
@@ -36,7 +37,7 @@ data class DownloadState(
     val percent: Float = if (max > 0) progress.toFloat() / max else PROGRESS_NONE
 
     val isFinalState: Boolean
-        get() = isCompleted || localContent != null || (error != null && !isPaused)
+        get() = isCompleted || isPartial || localContent != null || (error != null && !isPaused)
 
     val isParticularProgress: Boolean
         get() = !isCompleted && localContent == null && error == null && !isPaused && !isStopped && max > 0 && !isIndeterminate
@@ -52,6 +53,7 @@ data class DownloadState(
         .putLong(DATA_TIMESTAMP, timestamp)
         .putString(DATA_ERROR, errorMessage)
         .putInt(DATA_CHAPTERS, downloadedChapters)
+        .putBoolean(DATA_PARTIAL, isPartial)
         .putBoolean(DATA_INDETERMINATE, isIndeterminate)
         .putBoolean(DATA_PAUSED, isPaused)
         .putBoolean(DATA_COMPLETED, isCompleted)
@@ -69,6 +71,7 @@ data class DownloadState(
         private const val DATA_STUCK = "stuck"
         const val DATA_TIMESTAMP = "timestamp"
         private const val DATA_ERROR = "error"
+        private const val DATA_PARTIAL = "partial"
         private const val DATA_INDETERMINATE = "indeterminate"
         private const val DATA_PAUSED = "paused"
         private const val DATA_COMPLETED = "completed"
@@ -98,6 +101,8 @@ data class DownloadState(
         fun getTimestamp(data: Data): Instant = Instant.ofEpochMilli(data.getLong(DATA_TIMESTAMP, 0L))
 
         fun getDownloadedChapters(data: Data): Int = data.getInt(DATA_CHAPTERS, 0)
+
+        fun isPartial(data: Data): Boolean = data.getBoolean(DATA_PARTIAL, false)
 
         fun getTaskKind(data: Data): DownloadTaskKind =
             data.getString(DATA_TASK_KIND)?.let { DownloadTaskKind.entries.find(it) } ?: DownloadTaskKind.DOWNLOAD

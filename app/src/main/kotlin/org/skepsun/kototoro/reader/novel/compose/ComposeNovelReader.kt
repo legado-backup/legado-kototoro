@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsIgnoringVisibility
@@ -72,6 +73,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -90,6 +92,7 @@ import org.skepsun.kototoro.reader.novel.NovelPageTurnAnimation
 import org.skepsun.kototoro.reader.novel.NovelReaderSettings
 import org.skepsun.kototoro.reader.novel.NovelChapterTranslation
 import org.skepsun.kototoro.reader.novel.ReadingMode
+import org.skepsun.kototoro.reader.novel.annotation.NovelMarkingEntity
 import org.skepsun.kototoro.reader.novel.NovelTranslationDisplayMode
 import org.skepsun.kototoro.reader.novel.novelReaderPalette
 import org.skepsun.kototoro.reader.novel.TextDirection as NovelTextDirection
@@ -119,11 +122,19 @@ fun ComposeNovelReader(
     settings: NovelReaderSettings,
     initialPage: Int,
     onPageChanged: (NovelPage) -> Unit,
+    onTextSelectionChanged: (NovelTextSelection?) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     if (pages.isEmpty()) return
     if (settings.readingMode == ReadingMode.SCROLL) {
-        ComposeNovelContinuousReader(pages, settings, initialPage, onPageChanged, modifier)
+        ComposeNovelContinuousReader(
+            pages,
+            settings,
+            initialPage,
+            onPageChanged,
+            onTextSelectionChanged,
+            modifier,
+        )
     } else {
         val pagerState = rememberPagerState(
             initialPage = initialPage.coerceIn(pages.indices),
@@ -139,7 +150,12 @@ fun ComposeNovelReader(
             modifier = modifier.fillMaxSize(),
             key = { pages[it].globalIndex },
         ) { index ->
-            NovelPageText(page = pages[index], settings = settings, modifier = Modifier.fillMaxSize())
+            NovelPageText(
+                page = pages[index],
+                settings = settings,
+                onSelectionChanged = onTextSelectionChanged,
+                modifier = Modifier.fillMaxSize(),
+            )
         }
     }
 }
@@ -150,6 +166,7 @@ private fun ComposeNovelContinuousReader(
     settings: NovelReaderSettings,
     initialPage: Int,
     onPageChanged: (NovelPage) -> Unit,
+    onTextSelectionChanged: (NovelTextSelection?) -> Unit,
     modifier: Modifier,
 ) {
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = initialPage.coerceIn(pages.indices))
@@ -160,7 +177,12 @@ private fun ComposeNovelContinuousReader(
     }
     LazyColumn(state = listState, modifier = modifier.fillMaxSize()) {
         items(count = pages.size, key = { pages[it].globalIndex }) { index ->
-            NovelPageText(page = pages[index], settings = settings, modifier = Modifier.fillParentMaxWidth())
+            NovelPageText(
+                page = pages[index],
+                settings = settings,
+                onSelectionChanged = onTextSelectionChanged,
+                modifier = Modifier.fillParentMaxWidth(),
+            )
         }
     }
 }
@@ -169,6 +191,7 @@ private fun ComposeNovelContinuousReader(
 private fun NovelPageText(
     page: NovelPage,
     settings: NovelReaderSettings,
+    onSelectionChanged: (NovelTextSelection?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val horizontal = settings.marginHorizontal.dp
@@ -176,20 +199,28 @@ private fun NovelPageText(
     val direction = if (settings.textDirection == NovelTextDirection.RTL) TextDirection.Rtl else TextDirection.Ltr
     val alignment = if (direction == TextDirection.Rtl) TextAlign.Right else TextAlign.Start
     Box(modifier = modifier.padding(PaddingValues(horizontal = horizontal, vertical = vertical))) {
-        Text(
-            text = formatNovelParagraphText(
-                text = page.text,
-                indentEnabled = settings.enableParagraphIndent,
-                spacingLines = settings.paragraphSpacingLines,
-            ),
-            style = MaterialTheme.typography.bodyLarge.copy(
-                fontSize = settings.fontSizeSp.sp,
-                lineHeight = (settings.fontSizeSp * settings.lineSpacing).sp,
-                textDirection = direction,
-            ),
-            textAlign = alignment,
-            modifier = Modifier.align(Alignment.TopStart),
-        )
+        NovelSelectionContainer(
+            chapterId = page.chapterId,
+            chapterIndex = page.chapterIndex,
+            chapterText = page.text,
+            onSelectionChanged = onSelectionChanged,
+            renderedText = page.text,
+        ) {
+            Text(
+                text = formatNovelParagraphText(
+                    text = page.text,
+                    indentEnabled = settings.enableParagraphIndent,
+                    spacingLines = settings.paragraphSpacingLines,
+                ),
+                style = MaterialTheme.typography.bodyLarge.copy(
+                    fontSize = settings.fontSizeSp.sp,
+                    lineHeight = (settings.fontSizeSp * settings.lineSpacing).sp,
+                    textDirection = direction,
+                ),
+                textAlign = alignment,
+                modifier = Modifier.align(Alignment.TopStart),
+            )
+        }
     }
 }
 
@@ -204,10 +235,14 @@ fun ComposeNovelChapter(
     settings: NovelReaderSettings,
     translation: NovelChapterTranslation?,
     imageModel: (String) -> Any?,
+    chapterId: Long = 0L,
+    chapterIndex: Int = 0,
+    novelMarkings: List<NovelMarkingEntity> = emptyList(),
     imageContext: NovelComposeImageContext? = null,
     onImageClick: ((String) -> Unit)? = null,
     onTap: ((x: Float, y: Float, viewport: IntSize) -> Unit)? = null,
     onLongPress: (() -> Unit)? = null,
+    onTextSelectionChanged: (NovelTextSelection?) -> Unit = {},
     listState: LazyListState? = null,
     modifier: Modifier = Modifier,
 ) {
@@ -225,86 +260,105 @@ fun ComposeNovelChapter(
         .asPaddingValues()
         .calculateTopPadding()
     val gestureModifier = Modifier.novelReaderGestures(onTap, onLongPress)
-    LazyColumn(
-        state = listState ?: rememberLazyListState(),
-        modifier = modifier
-            .fillMaxSize()
-            .background(Color(palette.backgroundColor))
-            .then(gestureModifier),
-        contentPadding = PaddingValues(
-            start = settings.marginHorizontal.dp,
-            top = statusBarInset + settings.marginVertical.dp,
-            end = settings.marginHorizontal.dp,
-            bottom = settings.marginVertical.dp,
-        ),
-        verticalArrangement = Arrangement.spacedBy(paragraphSpacing),
+    NovelSelectionContainer(
+        chapterId = chapterId,
+        chapterIndex = chapterIndex,
+        chapterText = content,
+        onSelectionChanged = onTextSelectionChanged,
     ) {
-        items(count = blocks.size, key = { index ->
-            when (val block = blocks[index]) {
-                is NovelComposeBlock.Image -> block.key
-                is NovelComposeBlock.Text -> block.key
-            }
-        }) { index ->
-            when (val block = blocks[index]) {
-                is NovelComposeBlock.Image -> NovelComposeImage(
-                    path = block.path,
-                    imageModel = imageModel,
-                    imageContext = imageContext,
-                    onClick = onImageClick,
-                )
-
-                is NovelComposeBlock.Text -> {
-                    val original = formatNovelParagraphText(
-                        text = block.original,
-                        indentEnabled = settings.enableParagraphIndent,
-                        spacingLines = settings.paragraphSpacingLines,
+        LazyColumn(
+            state = listState ?: rememberLazyListState(),
+            modifier = modifier
+                .fillMaxSize()
+                .background(Color(palette.backgroundColor))
+                .then(gestureModifier),
+            contentPadding = PaddingValues(
+                start = settings.marginHorizontal.dp,
+                top = statusBarInset + settings.marginVertical.dp,
+                end = settings.marginHorizontal.dp,
+                bottom = settings.marginVertical.dp,
+            ),
+            verticalArrangement = Arrangement.spacedBy(paragraphSpacing),
+        ) {
+            items(count = blocks.size, key = { index ->
+                when (val block = blocks[index]) {
+                    is NovelComposeBlock.Image -> block.key
+                    is NovelComposeBlock.Text -> block.key
+                }
+            }) { index ->
+                when (val block = blocks[index]) {
+                    is NovelComposeBlock.Image -> NovelComposeImage(
+                        path = block.path,
+                        imageModel = imageModel,
+                        imageContext = imageContext,
+                        onClick = onImageClick,
                     )
-                    val translated = block.translation?.let {
-                        formatNovelParagraphText(
-                            text = it,
+
+                    is NovelComposeBlock.Text -> {
+                        val original = formatNovelParagraphText(
+                            text = block.original,
                             indentEnabled = settings.enableParagraphIndent,
                             spacingLines = settings.paragraphSpacingLines,
                         )
-                    }
-                    val style = MaterialTheme.typography.bodyLarge.copy(
-                        fontSize = settings.fontSizeSp.sp,
-                        lineHeight = (settings.fontSizeSp * settings.lineSpacing).sp,
-                        textDirection = direction,
-                        color = contentColor,
-                    )
-                    if (block.translation == null) {
-                        NovelTextWithImageBlocks(
-                            text = original,
-                            inlineImages = block.inlineImages,
-                            imageModel = imageModel,
-                            imageContext = imageContext,
-                            onImageClick = onImageClick,
-                            style = style,
-                            textAlign = alignment,
+                        val translated = block.translation?.let {
+                            formatNovelParagraphText(
+                                text = it,
+                                indentEnabled = settings.enableParagraphIndent,
+                                spacingLines = settings.paragraphSpacingLines,
+                            )
+                        }
+                        val style = MaterialTheme.typography.bodyLarge.copy(
+                            fontSize = settings.fontSizeSp.sp,
+                            lineHeight = (settings.fontSizeSp * settings.lineSpacing).sp,
+                            textDirection = direction,
+                            color = contentColor,
                         )
-                    } else if (block.displayMode == NovelTranslationDisplayMode.TRANSLATION_ONLY) {
-                        Text(
-                            text = translated.orEmpty(),
-                            style = style,
-                            textAlign = alignment,
-                        )
-                    } else {
-                        NovelTextWithImageBlocks(
-                            text = original,
-                            inlineImages = block.inlineImages,
-                            imageModel = imageModel,
-                            imageContext = imageContext,
-                            onImageClick = onImageClick,
-                            style = style.copy(fontSize = (settings.fontSizeSp * 0.86f).sp),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = alignment,
-                        )
-                        Text(
-                            text = translated.orEmpty(),
-                            style = style,
-                            textAlign = alignment,
-                            modifier = Modifier.padding(top = 4.dp),
-                        )
+                        if (block.translation == null) {
+                            if (block.inlineImages.isEmpty()) {
+                                Text(
+                                    text = highlightedNovelText(
+                                        text = original,
+                                        sourceRange = block.sourceRange,
+                                        highlightRange = null,
+                                        highlightColor = MaterialTheme.colorScheme.secondaryContainer,
+                                        markings = novelMarkings.filter { it.chapterId == chapterId },
+                                    ),
+                                    style = style,
+                                    textAlign = alignment,
+                                )
+                            } else NovelTextWithImageBlocks(
+                                text = original,
+                                inlineImages = block.inlineImages,
+                                imageModel = imageModel,
+                                imageContext = imageContext,
+                                onImageClick = onImageClick,
+                                style = style,
+                                textAlign = alignment,
+                            )
+                        } else if (block.displayMode == NovelTranslationDisplayMode.TRANSLATION_ONLY) {
+                            Text(
+                                text = translated.orEmpty(),
+                                style = style,
+                                textAlign = alignment,
+                            )
+                        } else {
+                            NovelTextWithImageBlocks(
+                                text = original,
+                                inlineImages = block.inlineImages,
+                                imageModel = imageModel,
+                                imageContext = imageContext,
+                                onImageClick = onImageClick,
+                                style = style.copy(fontSize = (settings.fontSizeSp * 0.86f).sp),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = alignment,
+                            )
+                            Text(
+                                text = translated.orEmpty(),
+                                style = style,
+                                textAlign = alignment,
+                                modifier = Modifier.padding(top = 4.dp),
+                            )
+                        }
                     }
                 }
             }
@@ -342,6 +396,8 @@ private fun ComposeNovelChapterWindow(
     onImageClick: ((String) -> Unit)?,
     onTap: ((x: Float, y: Float, viewport: IntSize) -> Unit)?,
     onLongPress: (() -> Unit)?,
+    onTextSelectionChanged: (NovelTextSelection?) -> Unit,
+    novelMarkings: List<NovelMarkingEntity>,
     listState: LazyListState,
     modifier: Modifier,
     onVisibleChapterChanged: (Int) -> Unit,
@@ -364,97 +420,123 @@ private fun ComposeNovelChapterWindow(
         .asPaddingValues()
         .calculateTopPadding()
     val gestureModifier = Modifier.novelReaderGestures(onTap, onLongPress)
-    LazyColumn(
-        state = listState,
-        modifier = modifier
-            .fillMaxSize()
-            .background(Color(palette.backgroundColor))
-            .then(gestureModifier),
-        contentPadding = PaddingValues(
-            start = settings.marginHorizontal.dp,
-            top = statusBarInset + settings.marginVertical.dp,
-            end = settings.marginHorizontal.dp,
-            bottom = settings.marginVertical.dp,
-        ),
-        verticalArrangement = Arrangement.spacedBy(paragraphSpacing),
-    ) {
-        items(
-            count = blocks.size,
-            key = { index ->
-                val item = blocks[index]
-                val blockKey = when (val block = item.block) {
-                    is NovelComposeBlock.Image -> block.key
-                    is NovelComposeBlock.Text -> block.key
-                }
-                "${item.chapter.chapterIndex}:$blockKey"
-            },
-        ) { index ->
-            val item = blocks[index]
-            when (val block = item.block) {
-                is NovelComposeBlock.Image -> NovelComposeImage(
-                    path = block.path,
-                    imageModel = imageModel,
-                    imageContext = item.chapter.imageContext,
-                    onClick = onImageClick,
-                )
-
-                is NovelComposeBlock.Text -> {
-                    val original = formatNovelParagraphText(
-                        text = block.original,
-                        indentEnabled = settings.enableParagraphIndent,
-                        spacingLines = settings.paragraphSpacingLines,
+    val reportWindowSelection: (NovelTextSelection?) -> Unit = { selection ->
+        if (selection == null) {
+            onTextSelectionChanged(null)
+        } else {
+            val matchedChapter = chapters.firstNotNullOfOrNull { chapter ->
+                findNovelTextRange(chapter.content, selection.text)?.let { chapter }
+            }
+            onTextSelectionChanged(
+                matchedChapter?.let {
+                    selection.copy(
+                        chapterId = it.chapterId,
+                        chapterIndex = it.chapterIndex,
+                        chapterText = it.content,
                     )
-                    val translated = block.translation?.let {
-                        formatNovelParagraphText(
-                            text = it,
+                } ?: selection,
+            )
+        }
+    }
+    NovelSelectionContainer(
+        chapterId = chapters.firstOrNull()?.chapterId ?: 0L,
+        chapterIndex = chapters.firstOrNull()?.chapterIndex ?: 0,
+        chapterText = chapters.firstOrNull()?.content.orEmpty(),
+        onSelectionChanged = reportWindowSelection,
+    ) {
+        LazyColumn(
+            state = listState,
+            modifier = modifier
+                .fillMaxSize()
+                .background(Color(palette.backgroundColor))
+                .then(gestureModifier),
+            contentPadding = PaddingValues(
+                start = settings.marginHorizontal.dp,
+                top = statusBarInset + settings.marginVertical.dp,
+                end = settings.marginHorizontal.dp,
+                bottom = settings.marginVertical.dp,
+            ),
+            verticalArrangement = Arrangement.spacedBy(paragraphSpacing),
+        ) {
+            items(
+                count = blocks.size,
+                key = { index ->
+                    val item = blocks[index]
+                    val blockKey = when (val block = item.block) {
+                        is NovelComposeBlock.Image -> block.key
+                        is NovelComposeBlock.Text -> block.key
+                    }
+                    "${item.chapter.chapterIndex}:$blockKey"
+                },
+            ) { index ->
+                val item = blocks[index]
+                when (val block = item.block) {
+                    is NovelComposeBlock.Image -> NovelComposeImage(
+                        path = block.path,
+                        imageModel = imageModel,
+                        imageContext = item.chapter.imageContext,
+                        onClick = onImageClick,
+                    )
+
+                    is NovelComposeBlock.Text -> {
+                        val original = formatNovelParagraphText(
+                            text = block.original,
                             indentEnabled = settings.enableParagraphIndent,
                             spacingLines = settings.paragraphSpacingLines,
                         )
-                    }
-                    val style = MaterialTheme.typography.bodyLarge.copy(
-                        fontSize = settings.fontSizeSp.sp,
-                        lineHeight = (settings.fontSizeSp * settings.lineSpacing).sp,
-                        textDirection = direction,
-                        color = contentColor,
-                    )
-                    if (block.translation == null) {
-                        if (block.inlineImages.isEmpty()) Text(
-                            text = highlightedNovelText(
+                        val translated = block.translation?.let {
+                            formatNovelParagraphText(
+                                text = it,
+                                indentEnabled = settings.enableParagraphIndent,
+                                spacingLines = settings.paragraphSpacingLines,
+                            )
+                        }
+                        val style = MaterialTheme.typography.bodyLarge.copy(
+                            fontSize = settings.fontSizeSp.sp,
+                            lineHeight = (settings.fontSizeSp * settings.lineSpacing).sp,
+                            textDirection = direction,
+                            color = contentColor,
+                        )
+                        if (block.translation == null) {
+                            if (block.inlineImages.isEmpty()) Text(
+                                text = highlightedNovelText(
+                                    text = original,
+                                    sourceRange = block.sourceRange,
+                                    highlightRange = ttsHighlightRange,
+                                    highlightColor = MaterialTheme.colorScheme.secondaryContainer,
+                                    markings = novelMarkings.filter { it.chapterId == item.chapter.chapterId },
+                                ),
+                                style = style,
+                                textAlign = alignment,
+                            ) else NovelTextWithImageBlocks(
                                 text = original,
-                                sourceRange = block.sourceRange,
-                                highlightRange = ttsHighlightRange,
-                                highlightColor = MaterialTheme.colorScheme.secondaryContainer,
-                            ),
-                            style = style,
-                            textAlign = alignment,
-                        ) else NovelTextWithImageBlocks(
-                            text = original,
-                            inlineImages = block.inlineImages,
-                            imageModel = imageModel,
-                            imageContext = item.chapter.imageContext,
-                            onImageClick = onImageClick,
-                            style = style,
-                            textAlign = alignment,
-                        )
-                    } else if (block.displayMode == NovelTranslationDisplayMode.TRANSLATION_ONLY) {
-                        Text(text = translated.orEmpty(), style = style, textAlign = alignment)
-                    } else {
-                        NovelTextWithImageBlocks(
-                            text = original,
-                            inlineImages = block.inlineImages,
-                            imageModel = imageModel,
-                            imageContext = item.chapter.imageContext,
-                            onImageClick = onImageClick,
-                            style = style.copy(fontSize = (settings.fontSizeSp * 0.86f).sp),
-                            textAlign = alignment,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Text(
-                            text = translated.orEmpty(),
-                            style = style,
-                            textAlign = alignment,
-                            modifier = Modifier.padding(top = 4.dp),
-                        )
+                                inlineImages = block.inlineImages,
+                                imageModel = imageModel,
+                                imageContext = item.chapter.imageContext,
+                                onImageClick = onImageClick,
+                                style = style,
+                                textAlign = alignment,
+                            )
+                        } else if (block.displayMode == NovelTranslationDisplayMode.TRANSLATION_ONLY) {
+                            Text(text = translated.orEmpty(), style = style, textAlign = alignment)
+                        } else {
+                            NovelTextWithImageBlocks(
+                                text = original,
+                                inlineImages = block.inlineImages,
+                                imageModel = imageModel,
+                                imageContext = item.chapter.imageContext,
+                                onImageClick = onImageClick,
+                                style = style.copy(fontSize = (settings.fontSizeSp * 0.86f).sp),
+                                textAlign = alignment,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Text(
+                                text = translated.orEmpty(),
+                                style = style,
+                                textAlign = alignment,
+                                modifier = Modifier.padding(top = 4.dp),
+                            )
+                        }
                     }
                 }
             }
@@ -493,6 +575,14 @@ fun ComposeNovelReaderRoute(
     animationsEnabled: Boolean = true,
     onSettingsChanged: (NovelReaderSettings) -> Unit = {},
     onToggleTranslation: () -> Unit = {},
+    onToggleReplaceRules: () -> Unit = {},
+    onShowReplaceRules: () -> Unit = {},
+    onDismissReplaceRules: () -> Unit = {},
+    onReplaceRuleToggle: (org.skepsun.kototoro.core.replace.ReplaceRule, Boolean) -> Unit = { _, _ -> },
+    onShowMarkings: () -> Unit = {},
+    onDismissMarkings: () -> Unit = {},
+    onEditMarkingNote: (NovelMarkingEntity) -> Unit = {},
+    onDeleteMarking: (NovelMarkingEntity) -> Unit = {},
     onBookmark: () -> Unit = {},
     onTts: () -> Unit = {},
     onClearTranslationCache: () -> Unit = {},
@@ -512,6 +602,8 @@ fun ComposeNovelReaderRoute(
     onImageClick: ((String) -> Unit)? = null,
     onTap: ((x: Float, y: Float, viewport: IntSize) -> Unit)? = null,
     onLongPress: (() -> Unit)? = null,
+    onTextSelectionChanged: (NovelTextSelection?) -> Unit = {},
+    onTextSelectionAction: (NovelTextSelection, NovelTextSelectionAction) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -527,6 +619,7 @@ fun ComposeNovelReaderRoute(
                 onImageClick = onImageClick,
                 onTap = onTap,
                 onLongPress = onLongPress,
+                onTextSelectionChanged = onTextSelectionChanged,
                 onBookmark = onBookmark,
                     onRequestPreviousChapter = onRequestPreviousChapter,
                     onRequestNextChapter = onRequestNextChapter,
@@ -619,6 +712,7 @@ fun ComposeNovelReaderRoute(
                     onImageClick = onImageClick,
                     onTap = onTap,
                     onLongPress = onLongPress,
+                    onTextSelectionChanged = onTextSelectionChanged,
                     listState = listState,
                     modifier = modifier,
                     onVisibleChapterChanged = {
@@ -629,6 +723,7 @@ fun ComposeNovelReaderRoute(
                     onRequestNextChapter = onRequestNextChapter,
                         onVisibleProgress = onVisibleProgress,
                     ttsHighlightRange = state.ttsHighlightRange,
+                    novelMarkings = state.novelMarkings,
                 )
             } else {
                 ComposeNovelChapter(
@@ -640,11 +735,29 @@ fun ComposeNovelReaderRoute(
                     onImageClick = onImageClick,
                     onTap = onTap,
                     onLongPress = onLongPress,
+                    chapterId = state.chapterId,
+                    chapterIndex = state.chapterIndex,
+                    onTextSelectionChanged = onTextSelectionChanged,
+                    novelMarkings = state.novelMarkings,
                     listState = listState,
                     modifier = modifier,
                 )
             }
         }
+        }
+    }
+    state.textSelection?.let { selection ->
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.BottomCenter,
+        ) {
+            NovelTextSelectionActions(
+                selection = selection,
+                onAction = onTextSelectionAction,
+                modifier = Modifier
+                    .navigationBarsPadding()
+                    .padding(bottom = if (state.controlsVisible) 76.dp else 0.dp),
+            )
         }
     }
     NovelReaderOverlay(
@@ -673,6 +786,10 @@ fun ComposeNovelReaderRoute(
                 onSettingsChanged(it)
             },
             onToggleTranslation = onToggleTranslation,
+            replaceRulesEnabled = state.replaceRulesEnabled,
+            onToggleReplaceRules = onToggleReplaceRules,
+            onShowReplaceRules = { viewModel.showReplaceRules(); onShowReplaceRules() },
+            onShowMarkings = { viewModel.showMarkings(); onShowMarkings() },
             onBookmark = onBookmark,
             onTts = onTts,
             onClearTranslationCache = onClearTranslationCache,
@@ -691,6 +808,32 @@ fun ComposeNovelReaderRoute(
                 onModalDismissed()
                 onChapterSelected(it)
             },
+        )
+    }
+    if (!state.chromeEnabled && state.replaceRulesSheetVisible) {
+        ComposeNovelReplaceRulesSheet(
+            rules = state.replaceRules,
+            disabledRuleIds = state.disabledReplaceRuleIds,
+            scopeName = state.workTitle,
+            origin = state.replaceRulesOrigin,
+            onDismiss = {
+                viewModel.dismissReplaceRules()
+                onDismissReplaceRules()
+                onModalDismissed()
+            },
+            onToggle = onReplaceRuleToggle,
+        )
+    }
+    if (!state.chromeEnabled && state.markingsSheetVisible) {
+        ComposeNovelMarkingsSheet(
+            markings = state.novelMarkings,
+            onDismiss = {
+                viewModel.dismissMarkings()
+                onDismissMarkings()
+                onModalDismissed()
+            },
+            onEditNote = onEditMarkingNote,
+            onDelete = onDeleteMarking,
         )
     }
 }
@@ -817,6 +960,7 @@ private fun ComposeNovelPagedChapter(
     onImageClick: ((String) -> Unit)?,
     onTap: ((x: Float, y: Float, viewport: IntSize) -> Unit)?,
     onLongPress: (() -> Unit)?,
+    onTextSelectionChanged: (NovelTextSelection?) -> Unit,
     onBookmark: () -> Unit,
     onRequestPreviousChapter: () -> Unit,
     onRequestNextChapter: () -> Unit,
@@ -1216,12 +1360,29 @@ private fun ComposeNovelPagedChapter(
                                     if (settings.showReadingStatus) NovelReadingStatusReservedHeight else 0.dp,
                             ),
                     ) {
-                        Text(
-                            text = page.value,
-                            style = style,
-                            textAlign = alignment,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
+                        NovelSelectionContainer(
+                            chapterId = page.chapterId,
+                            chapterIndex = page.chapterIndex,
+                            chapterText = chapters.firstOrNull {
+                                it.chapterId == page.chapterId && it.chapterIndex == page.chapterIndex
+                            }?.content.orEmpty(),
+                            onSelectionChanged = onTextSelectionChanged,
+                            renderedStart = page.charStart,
+                            renderedText = page.value.text,
+                        ) {
+                            Text(
+                                text = highlightedNovelText(
+                                    text = page.value.text,
+                                    sourceRange = page.charStart..page.charEnd,
+                                    highlightRange = null,
+                                    highlightColor = MaterialTheme.colorScheme.secondaryContainer,
+                                    markings = state.novelMarkings.filter { it.chapterId == page.chapterId },
+                                ),
+                                style = style,
+                                textAlign = alignment,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
                     }
                     is NovelComposePage.Image -> Box(
                         contentAlignment = Alignment.Center,
@@ -1513,18 +1674,49 @@ private fun highlightedNovelText(
     sourceRange: IntRange?,
     highlightRange: IntRange?,
     highlightColor: androidx.compose.ui.graphics.Color,
+    markings: List<NovelMarkingEntity> = emptyList(),
 ): androidx.compose.ui.text.AnnotatedString {
-    if (sourceRange == null || highlightRange == null) return androidx.compose.ui.text.AnnotatedString(text)
-    val start = maxOf(sourceRange.first, highlightRange.first)
-    val end = minOf(sourceRange.last, highlightRange.last)
-    if (start > end) return androidx.compose.ui.text.AnnotatedString(text)
     return buildAnnotatedString {
         append(text)
-        addStyle(
-            SpanStyle(background = highlightColor),
-            start = start - sourceRange.first,
-            end = end - sourceRange.first + 1,
-        )
+        if (sourceRange != null) {
+            if (highlightRange != null) {
+                val start = maxOf(sourceRange.first, highlightRange.first)
+                val end = minOf(sourceRange.last, highlightRange.last)
+                if (start <= end) {
+                    addStyle(
+                        SpanStyle(background = highlightColor),
+                        start = (start - sourceRange.first).coerceIn(0, text.length),
+                        end = (end - sourceRange.first + 1).coerceIn(0, text.length),
+                    )
+                }
+            }
+            markings.forEach { marking ->
+                val localMatch = text.indexOf(marking.selectedText)
+                if (localMatch >= 0) {
+                    addStyle(
+                        SpanStyle(
+                            background = highlightColor.copy(alpha = 0.72f),
+                            textDecoration = TextDecoration.Underline,
+                        ),
+                        start = localMatch,
+                        end = (localMatch + marking.selectedText.length).coerceAtMost(text.length),
+                    )
+                    return@forEach
+                }
+                val start = maxOf(sourceRange.first, marking.startOffset)
+                val end = minOf(sourceRange.last + 1, marking.endOffset)
+                if (start < end) {
+                    addStyle(
+                        SpanStyle(
+                            background = highlightColor.copy(alpha = 0.72f),
+                            textDecoration = TextDecoration.Underline,
+                        ),
+                        start = (start - sourceRange.first).coerceIn(0, text.length),
+                        end = (end - sourceRange.first).coerceIn(0, text.length),
+                    )
+                }
+            }
+        }
     }
 }
 

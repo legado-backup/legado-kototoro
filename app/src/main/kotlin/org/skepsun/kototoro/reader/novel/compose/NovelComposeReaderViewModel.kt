@@ -8,8 +8,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import org.skepsun.kototoro.reader.novel.NovelChapterTranslation
 import org.skepsun.kototoro.reader.novel.NovelReaderSettings
 import org.skepsun.kototoro.reader.novel.ReadingMode
+import org.skepsun.kototoro.core.replace.ReplaceRule
 import org.skepsun.kototoro.parsers.model.ContentChapter
 import org.skepsun.kototoro.reader.novel.tts.TtsState
+import org.skepsun.kototoro.reader.novel.annotation.NovelMarkingEntity
 import javax.inject.Inject
 
 data class NovelComposeReaderUiState(
@@ -20,12 +22,18 @@ data class NovelComposeReaderUiState(
     val chapterIndex: Int = 0,
     val chapterTitle: String = "",
     val content: String = "",
+    val replaceRulesEnabled: Boolean = true,
+    val replaceRules: List<ReplaceRule> = emptyList(),
+    val replaceRulesOrigin: String = "",
+    val disabledReplaceRuleIds: Set<Long> = emptySet(),
     val settings: NovelReaderSettings? = null,
     val translation: NovelChapterTranslation? = null,
     val position: NovelReadingPosition? = null,
     val scrollPosition: NovelComposeScrollPosition? = null,
     val imageContext: NovelComposeImageContext = NovelComposeImageContext(),
     val settingsSheetVisible: Boolean = false,
+    val replaceRulesSheetVisible: Boolean = false,
+    val markingsSheetVisible: Boolean = false,
     val chaptersSheetVisible: Boolean = false,
     val toolsSheetVisible: Boolean = false,
     val chapters: List<ContentChapter> = emptyList(),
@@ -45,6 +53,8 @@ data class NovelComposeReaderUiState(
     val pageRequest: NovelPageRequest? = null,
     val scrollRequest: NovelScrollRequest? = null,
     val continuousChapters: List<NovelComposeChapterContent> = emptyList(),
+    val novelMarkings: List<NovelMarkingEntity> = emptyList(),
+    val textSelection: NovelTextSelection? = null,
 )
 
 @Immutable
@@ -76,7 +86,7 @@ data class NovelComposeChapterContent(
 data class NovelReaderMessage(val id: Long, val text: String, val durationMillis: Long)
 
 val NovelComposeReaderUiState.hasOverlay: Boolean
-    get() = (!chromeEnabled && (settingsSheetVisible || chaptersSheetVisible || toolsSheetVisible)) ||
+    get() = (!chromeEnabled && (settingsSheetVisible || replaceRulesSheetVisible || markingsSheetVisible || chaptersSheetVisible || toolsSheetVisible)) ||
         loading ||
         message != null ||
         (!chromeEnabled && ttsControlsVisible)
@@ -321,6 +331,8 @@ class NovelComposeReaderViewModel @Inject constructor() : ViewModel() {
         _uiState.value = _uiState.value.copy(
             settings = settings,
             settingsSheetVisible = true,
+            replaceRulesSheetVisible = false,
+            markingsSheetVisible = false,
             chaptersSheetVisible = false,
             toolsSheetVisible = false,
         )
@@ -332,6 +344,56 @@ class NovelComposeReaderViewModel @Inject constructor() : ViewModel() {
 
     fun publishSettings(settings: NovelReaderSettings) {
         _uiState.value = _uiState.value.copy(settings = settings)
+    }
+
+    fun publishReplaceRulesEnabled(enabled: Boolean) {
+        _uiState.value = _uiState.value.copy(replaceRulesEnabled = enabled)
+    }
+
+    fun publishReplaceRules(
+        rules: List<ReplaceRule>,
+        origin: String = _uiState.value.replaceRulesOrigin,
+        disabledRuleIds: Set<Long> = _uiState.value.disabledReplaceRuleIds,
+    ) {
+        _uiState.value = _uiState.value.copy(
+            replaceRules = rules,
+            replaceRulesOrigin = origin,
+            disabledReplaceRuleIds = disabledRuleIds,
+        )
+    }
+
+    fun publishReplaceRuleEnabled(ruleId: Long, enabled: Boolean) {
+        val disabledRuleIds = _uiState.value.disabledReplaceRuleIds.toMutableSet()
+        if (enabled) disabledRuleIds.remove(ruleId) else disabledRuleIds.add(ruleId)
+        _uiState.value = _uiState.value.copy(disabledReplaceRuleIds = disabledRuleIds)
+    }
+
+    fun showReplaceRules() {
+        _uiState.value = _uiState.value.copy(
+            replaceRulesSheetVisible = true,
+            settingsSheetVisible = false,
+            markingsSheetVisible = false,
+            chaptersSheetVisible = false,
+            toolsSheetVisible = false,
+        )
+    }
+
+    fun dismissReplaceRules() {
+        _uiState.value = _uiState.value.copy(replaceRulesSheetVisible = false)
+    }
+
+    fun showMarkings() {
+        _uiState.value = _uiState.value.copy(
+            markingsSheetVisible = true,
+            settingsSheetVisible = false,
+            replaceRulesSheetVisible = false,
+            chaptersSheetVisible = false,
+            toolsSheetVisible = false,
+        )
+    }
+
+    fun dismissMarkings() {
+        _uiState.value = _uiState.value.copy(markingsSheetVisible = false)
     }
 
     /**
@@ -351,6 +413,8 @@ class NovelComposeReaderViewModel @Inject constructor() : ViewModel() {
         _uiState.value = _uiState.value.copy(
             chaptersSheetVisible = true,
             settingsSheetVisible = false,
+            replaceRulesSheetVisible = false,
+            markingsSheetVisible = false,
             toolsSheetVisible = false,
             chapters = chapters,
             currentChapterIndex = currentChapterIndex,
@@ -365,6 +429,8 @@ class NovelComposeReaderViewModel @Inject constructor() : ViewModel() {
         _uiState.value = _uiState.value.copy(
             toolsSheetVisible = true,
             settingsSheetVisible = false,
+            replaceRulesSheetVisible = false,
+            markingsSheetVisible = false,
             chaptersSheetVisible = false,
         )
     }
@@ -379,6 +445,8 @@ class NovelComposeReaderViewModel @Inject constructor() : ViewModel() {
     fun dismissControlPanels() {
         _uiState.value = _uiState.value.copy(
             settingsSheetVisible = false,
+            replaceRulesSheetVisible = false,
+            markingsSheetVisible = false,
             chaptersSheetVisible = false,
             toolsSheetVisible = false,
             ttsControlsVisible = false,
@@ -419,6 +487,14 @@ class NovelComposeReaderViewModel @Inject constructor() : ViewModel() {
 
     fun publishTtsHighlight(range: IntRange?) {
         _uiState.value = _uiState.value.copy(ttsHighlightRange = range)
+    }
+
+    fun publishNovelMarkings(markings: List<NovelMarkingEntity>) {
+        _uiState.value = _uiState.value.copy(novelMarkings = markings)
+    }
+
+    fun publishTextSelection(selection: NovelTextSelection?) {
+        _uiState.value = _uiState.value.copy(textSelection = selection)
     }
 }
 

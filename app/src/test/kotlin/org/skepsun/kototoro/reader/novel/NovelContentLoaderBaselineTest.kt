@@ -28,8 +28,7 @@ import org.skepsun.kototoro.parsers.model.NovelChapterContent
  * - 最小可测公开入口是 loadChapterContent()/loadChapterContentFlow()：通过 mock 的
  *   ContentRepository.getChapterContent() 返回 NovelChapterContent(html=…)，走真实生产路径。
  * - 其余依赖（LocalStorageCache / EpubStorageManager / MangaDatabase / EpubContentCache / Context）
- *   以 relaxed MockK mock 注入；ReplaceRuleRepository 懒加载自 Context.getSharedPreferences，
- *   在测试中无内容替换规则（空列表），因此 applyReplaceRules 为恒等变换，不干扰断言。
+ *   以 relaxed MockK mock 注入；文本处理器显式注入为恒等变换，不干扰断言。
  *
  * 注意：这些断言“如实”固定当前（可能不理想）的行为，而不是修正缺陷。
  */
@@ -65,6 +64,11 @@ class NovelContentLoaderBaselineTest {
             mangaDatabase = mockk<MangaDatabase>(relaxed = true),
             epubContentCache = mockk<EpubContentCache>(relaxed = true),
             appContext = context,
+            textProcessor = object : NovelTextProcessor {
+                override suspend fun process(text: String, context: NovelTextContext): ProcessedNovelText {
+                    return ProcessedNovelText(text = text, revision = "baseline")
+                }
+            },
         )
     }
 

@@ -18,20 +18,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import org.skepsun.kototoro.R
-import org.skepsun.kototoro.core.prefs.AppSettings
 import org.skepsun.kototoro.core.prefs.DownloadFormat
 import org.skepsun.kototoro.core.prefs.TriStateOption
 
 data class DownloadsSettingsUiState(
     val mangaDirectoriesSummary: String,
     val preferredDownloadFormat: DownloadFormat,
-    val isDownloadAlignedWithReader: Boolean,
-    val isDownloadAutoRetryOnNetworkError: Boolean,
-    val downloadThreads: Int,
-    val downloadMaxActiveSeries: Int,
-    val downloadRequestDelayMs: Int,
-    val downloadRetryCount: Int,
-    val downloadRetryDelayMs: Int,
+    val preferredVideoQuality: String,
+    val isNovelImagesEnabled: Boolean,
     val allowDownloadOnMeteredNetwork: TriStateOption,
     val isDozeIgnoreVisible: Boolean,
     val pagesDirectorySummary: String,
@@ -48,13 +42,8 @@ fun DownloadsSettingsScreen(
     meteredNetworkOptions: List<SettingsChoiceOption<TriStateOption>>,
     onMangaDirectoriesClick: () -> Unit,
     onPreferredDownloadFormatChange: (DownloadFormat) -> Unit,
-    onDownloadAlignReaderChange: (Boolean) -> Unit,
-    onDownloadAutoRetryChange: (Boolean) -> Unit,
-    onDownloadThreadsChange: (Int) -> Unit,
-    onDownloadMaxActiveSeriesChange: (Int) -> Unit,
-    onDownloadRequestDelayChange: (Int) -> Unit,
-    onDownloadRetryCountChange: (Int) -> Unit,
-    onDownloadRetryDelayChange: (Int) -> Unit,
+    onPreferredVideoQualityChange: (String) -> Unit,
+    onNovelImagesChange: (Boolean) -> Unit,
     onAllowMeteredNetworkChange: (TriStateOption) -> Unit,
     onIgnoreDozeClick: () -> Unit,
     onPagesDirectoryClick: () -> Unit,
@@ -81,7 +70,6 @@ fun DownloadsSettingsScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             item(key = "downloads") {
-                val uncappedText = stringResource(R.string.download_max_active_series_uncapped)
                 SettingsPreferenceGroup(title = downloadsTitle) {
                     item {
                         SettingsActionPreference(
@@ -101,83 +89,22 @@ fun DownloadsSettingsScreen(
                         )
                     }
                     item {
-                        SettingsSwitchPreference(
-                            title = stringResource(R.string.download_align_reader),
-                            iconRes = R.drawable.ic_reader_ltr,
-                            checked = state.isDownloadAlignedWithReader,
-                            summary = stringResource(R.string.download_align_reader_summary),
-                            onCheckedChange = onDownloadAlignReaderChange,
+                        SettingsTextInputPreference(
+                            title = stringResource(R.string.download_video_quality),
+                            iconRes = R.drawable.ic_content_video,
+                            value = state.preferredVideoQuality,
+                            summary = stringResource(R.string.download_video_quality_summary),
+                            placeholder = "1080p, 720p, 480p",
+                            onValueChange = onPreferredVideoQualityChange,
                         )
                     }
                     item {
                         SettingsSwitchPreference(
-                            title = stringResource(R.string.download_auto_retry),
-                            iconRes = R.drawable.ic_retry,
-                            checked = state.isDownloadAutoRetryOnNetworkError,
-                            summary = stringResource(R.string.download_auto_retry_summary),
-                            onCheckedChange = onDownloadAutoRetryChange,
-                        )
-                    }
-                    item {
-                        SettingsSliderPreference(
-                            title = stringResource(R.string.download_threads),
-                            iconRes = R.drawable.ic_network_cellular,
-                            value = state.downloadThreads,
-                            valueRange = 1..10,
-                            step = 1,
-                            summary = stringResource(R.string.download_threads_summary),
-                            valueText = { it.toString() },
-                            onValueChange = onDownloadThreadsChange,
-                        )
-                    }
-                    item {
-                        SettingsSliderPreference(
-                            title = stringResource(R.string.download_max_active_series),
-                            iconRes = R.drawable.ic_list_group,
-                            value = state.downloadMaxActiveSeries,
-                            valueRange = 1..AppSettings.UNLIMITED_SERIES,
-                            step = 1,
-                            summary = stringResource(R.string.download_max_active_series_summary),
-                            valueText = {
-                                if (it == AppSettings.UNLIMITED_SERIES) uncappedText else it.toString()
-                            },
-                            onValueChange = onDownloadMaxActiveSeriesChange,
-                        )
-                    }
-                    item {
-                        SettingsSliderPreference(
-                            title = stringResource(R.string.download_request_delay),
-                            iconRes = R.drawable.ic_schedule,
-                            value = state.downloadRequestDelayMs,
-                            valueRange = 0..5000,
-                            step = 100,
-                            summary = stringResource(R.string.download_request_delay_summary),
-                            valueText = { "${it} ms" },
-                            onValueChange = onDownloadRequestDelayChange,
-                        )
-                    }
-                    item {
-                        SettingsSliderPreference(
-                            title = stringResource(R.string.download_retry_count),
-                            iconRes = R.drawable.ic_retry,
-                            value = state.downloadRetryCount,
-                            valueRange = 1..10,
-                            step = 1,
-                            summary = stringResource(R.string.download_retry_count_summary),
-                            valueText = { it.toString() },
-                            onValueChange = onDownloadRetryCountChange,
-                        )
-                    }
-                    item {
-                        SettingsSliderPreference(
-                            title = stringResource(R.string.download_retry_delay),
-                            iconRes = R.drawable.ic_schedule,
-                            value = state.downloadRetryDelayMs,
-                            valueRange = 500..10_000,
-                            step = 500,
-                            summary = stringResource(R.string.download_retry_delay_summary),
-                            valueText = { "${it} ms" },
-                            onValueChange = onDownloadRetryDelayChange,
+                            title = stringResource(R.string.download_novel_images),
+                            iconRes = R.drawable.ic_images,
+                            checked = state.isNovelImagesEnabled,
+                            summary = stringResource(R.string.download_novel_images_summary),
+                            onCheckedChange = onNovelImagesChange,
                         )
                     }
                     item {

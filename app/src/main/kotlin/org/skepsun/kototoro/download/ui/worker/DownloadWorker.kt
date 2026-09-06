@@ -7,6 +7,7 @@ import android.content.pm.ServiceInfo
 import android.media.MediaScannerConnection
 import android.net.Uri
 import android.os.Build
+import android.os.SystemClock
 import android.util.Log
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
@@ -32,6 +33,9 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -41,7 +45,9 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.OkHttpClient
@@ -140,6 +146,7 @@ import java.util.UUID
 import java.util.Base64
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.ConcurrentHashMap
 import java.util.zip.ZipFile
 import javax.inject.Inject
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
@@ -338,7 +345,7 @@ class DownloadWorker @AssistedInject constructor(
                 e,
             )
             e.printStackTraceDebug()
-            if (settings.isDownloadAutoRetryOnNetworkError && e is IOException) {
+            if (DownloadPolicy.shouldRetry(e) && runAttemptCount < DownloadPolicy.MAX_WORK_RETRIES) {
                 Log.w("DownloadWorker", "Retrying work due to IOException: ${e.message}", e)
                 return@withContext Result.retry()
             }
@@ -458,7 +465,7 @@ class DownloadWorker @AssistedInject constructor(
                     }
                 }
                 if (isNovel && !hasEpubChapters) {
-                    downloadNovelChapters(executionDetails, task, repo, destination, output, chaptersToSkip)
+                    val isPartial = downloadNovelChapters(executionDetails, task, repo, destination, output, chaptersToSkip)
                     output.mergeWithExisting()
                     output.finish()
                     val localContent = LocalContentParser(output.rootFile, applicationContext.cacheDir).getContent(withDetails = true)
@@ -466,7 +473,15 @@ class DownloadWorker @AssistedInject constructor(
                     localContentRepository.findSavedContent(executionDetails)
                     android.util.Log.d("DownloadWorker", "Novel download completed, emitting localStorageChanges for ${output.rootFile}")
                     localStorageChanges.emit(localContent)
-                    publishState(currentState.copy(localContent = localContent, eta = -1L, isStuck = false, isCompleted = true))
+                    publishState(
+                        currentState.copy(
+                            localContent = localContent,
+                            eta = -1L,
+                            isStuck = false,
+                            isPartial = isPartial,
+                            isCompleted = true,
+                        ),
+                    )
                     return@withLock
                 }
                 processStandardChapters(executionDetails, task, repo, destination, chaptersToSkip, output)
@@ -767,6 +782,14 @@ class DownloadWorker @AssistedInject constructor(
         for ((chapterIndex, chapter) in chapters.withIndex()) {
             checkIsPaused()
 
+            // Do not fetch a page list for a chapter that is already complete. Apart from
+            // wasting a request, several sources rate-limit page-list calls more aggressively
+            // than image requests, making resume appear unnecessarily slow.
+            if (chaptersToSkip.remove(chapter.value.id)) {
+                publishState(currentState.copy(downloadedChapters = currentState.downloadedChapters + 1))
+                continue
+            }
+
             val fullChapters = mangaDetails.chapters ?: emptyList()
             val currentInFull = fullChapters.indexOfFirst { it.id == chapter.value.id }
             val nextChapterUrl = if (currentInFull != -1) fullChapters.getOrNull(currentInFull + 1)?.url else null
@@ -785,12 +808,6 @@ class DownloadWorker @AssistedInject constructor(
             }
 
             val isEpubChapter = pages.size == 1 && pages[0].preview == "EPUB"
-            if (!isEpubChapter && chaptersToSkip.remove(chapter.value.id)) {
-                println("DownloadWorker: Skipping already downloaded chapter")
-                publishState(currentState.copy(downloadedChapters = currentState.downloadedChapters + 1))
-                continue
-            }
-
             if (isEpubChapter) {
                 println("DownloadWorker: EPUB detected! Using NEW ARCHITECTURE")
                 android.util.Log.i("DownloadWorker", "EPUB chapter detected, using new LocalEpubSource architecture")
@@ -880,45 +897,49 @@ class DownloadWorker @AssistedInject constructor(
             val pageCounter = AtomicInteger(0)
             val successCounter = AtomicInteger(0)
             channelFlow {
-                val downloadThreads = if (settings.isDownloadAlignedWithReader) {
-                    settings.readerThreads
-                } else {
-                    settings.downloadThreads
-                }
-                val semaphore = Semaphore(downloadThreads)
+                val semaphore = Semaphore(DownloadPolicy.IMAGE_CONCURRENCY)
                 for ((pageIndex, page) in pages.withIndex()) {
                     checkIsPaused()
                     launch {
-                        semaphore.withPermit {
-                            val success = runFailsafe {
-                                val prefix = String.format("%04d.", pageIndex)
-                                val existingFile = tempDir.listFiles { _, name -> name.startsWith(prefix) }?.firstOrNull()
-                                val file = if (existingFile != null && existingFile.length() > 0) {
+                        val prefix = String.format("%04d.", pageIndex)
+                        val existingFile = tempDir.listFiles { _, name -> name.startsWith(prefix) }?.firstOrNull()
+                        val file = semaphore.withPermit {
+                            runFailsafe {
+                                if (existingFile != null && existingFile.length() > 0) {
                                     existingFile
                                 } else {
                                     val url = repo.getPageUrl(page)
-                                    val downloadedFile = cache[url]
-                                        ?: downloadFile(repo, url, destination, page = page)
-                                    val ext = downloadedFile.extension.takeIf { it != "tmp" } ?: "jpg"
-                                    val targetFile = File(tempDir, prefix + ext)
-                                    downloadedFile.copyTo(targetFile, overwrite = true)
-                                    if (downloadedFile.extension == "tmp") {
-                                        downloadedFile.deleteAwait()
-                                    }
+                                            val downloadedFile = cache[url]
+                                                ?: downloadFile(repo, url, destination, page = page)
+                                            val ext = downloadedFile.extension.takeIf { it != "tmp" } ?: "jpg"
+                                            val targetFile = File(tempDir, prefix + ext)
+                                            val moved = downloadedFile.extension == "tmp" &&
+                                                downloadedFile.parentFile == destination &&
+                                                downloadedFile.renameTo(targetFile)
+                                            if (!moved) {
+                                                downloadedFile.copyTo(targetFile, overwrite = true)
+                                            }
+                                            if (!moved && downloadedFile.extension == "tmp") {
+                                                downloadedFile.deleteAwait()
+                                            }
                                     targetFile
                                 }
-                                output.addPage(
-                                    chapter = chapter,
-                                    file = file,
-                                    pageNumber = pageIndex,
-                                    type = getMediaType(file.name, file),
-                                )
-                                true
-                            } ?: false
-                            if (success) {
-                                successCounter.incrementAndGet()
-                                send(pageIndex)
                             }
+                        }
+                        val success = file?.let { downloadedFile ->
+                            // Network permits cover URL resolution and response transfer only;
+                            // serialized SAF/ZIP writes must not block other page requests.
+                            output.addPage(
+                                chapter = chapter,
+                                file = downloadedFile,
+                                pageNumber = pageIndex,
+                                type = getMediaType(downloadedFile.name, downloadedFile),
+                            )
+                            true
+                        } ?: false
+                        if (success) {
+                            successCounter.incrementAndGet()
+                            send(pageIndex)
                         }
                     }
                 }
@@ -959,25 +980,23 @@ class DownloadWorker @AssistedInject constructor(
         block: suspend () -> R,
     ): R? {
         checkIsPaused()
-        val maxAttempts = settings.downloadRetryCount
+        val maxAttempts = DownloadPolicy.MAX_ATTEMPTS
         var countDown = maxAttempts
+        var attempt = 0
         failsafe@ while (true) {
             try {
                 return block()
             } catch (e: IOException) {
                 val retryDelay = if (e is TooManyRequestExceptions) {
-                    e.getRetryDelay()
+                    DownloadPolicy.retryDelayMs(attempt, e.getRetryDelay())
                 } else {
-                    settings.downloadRetryDelayMs.toLong()
+                    DownloadPolicy.retryDelayMs(attempt, -1L)
                 }
                 Log.w(
                     "DownloadWorker",
                     "runFailsafe failed: ${e.javaClass.simpleName} msg=${e.message} retryDelay=$retryDelay remaining=$countDown",
                     e,
                 )
-                if (settings.isDownloadAutoRetryOnNetworkError && e !is TooManyRequestExceptions && countDown <= 0) {
-                    throw e
-                }
                 if (countDown <= 0 || retryDelay < 0 || retryDelay > MAX_RETRY_DELAY) {
                     val pausingHandle = PausingHandle.current()
                     if (pausingHandle.skipAllErrors()) {
@@ -1004,6 +1023,7 @@ class DownloadWorker @AssistedInject constructor(
                     }
                 } else {
                     countDown--
+                    attempt++
                     delay(retryDelay)
                 }
             }
@@ -1021,7 +1041,7 @@ class DownloadWorker @AssistedInject constructor(
                     publishState(currentState.copy(isPaused = false))
                 }
             }
-            val limit = settings.downloadMaxActiveSeries
+            val limit = DownloadPolicy.MAX_ACTIVE_SERIES
             if (ActiveDownloadRegistry.isTurn(id, limit)) {
                 break
             }
@@ -1046,8 +1066,9 @@ class DownloadWorker @AssistedInject constructor(
         destination: File,
         output: LocalContentOutput,
         chaptersToSkip: MutableSet<Long>,
-    ) {
+    ): Boolean {
         val chapters = getChapters(manga, task)
+        var hasPartialFailures = false
         for ((chapterIndex, chapter) in chapters.withIndex()) {
             checkIsPaused()
             if (chaptersToSkip.remove(chapter.value.id)) {
@@ -1063,18 +1084,26 @@ class DownloadWorker @AssistedInject constructor(
                 ?: runFailsafe { decodeDataPage(repo.getPages(chapter.value, nextChapterUrl).firstOrNull()) }
                 ?: run {
                     android.util.Log.d("DownloadWorker", "downloadNovelChapters: skipping chapter without content")
+                    hasPartialFailures = true
                     continue
                 }
 
             // T4A.4：Jsoup Safelist 清洗（恶意标签/属性/javascript: 全部剔除），
             // 再基于 baseUrl 把相对 src 解析为绝对 URL 后提取图片
             val baseUrl = resolveNovelBaseUrl(content, chapter.value)
-            val safeHtml = NovelHtmlNormalizer.sanitize(content.html, baseUrl)
+            val normalizedHtml = NovelHtmlNormalizer.sanitize(content.html, baseUrl)
+            val safeHtml = if (task.includeNovelImages) {
+                normalizedHtml
+            } else {
+                removeNovelImages(normalizedHtml)
+            }
             val imageHeaderMap = LinkedHashMap<String, Map<String, String>>()
-            content.images.forEach { imageHeaderMap[it.url] = it.headers }
-            NovelHtmlImageResolver.extractImageUrls(safeHtml, baseUrl).forEach { url ->
-                if (!url.startsWith("data:", ignoreCase = true) && !url.startsWith("file:", ignoreCase = true)) {
-                    imageHeaderMap.putIfAbsent(url, emptyMap())
+            if (task.includeNovelImages) {
+                content.images.forEach { imageHeaderMap[it.url] = it.headers }
+                NovelHtmlImageResolver.extractImageUrls(safeHtml, baseUrl).forEach { url ->
+                    if (!url.startsWith("data:", ignoreCase = true) && !url.startsWith("file:", ignoreCase = true)) {
+                        imageHeaderMap.putIfAbsent(url, emptyMap())
+                    }
                 }
             }
 
@@ -1212,6 +1241,7 @@ class DownloadWorker @AssistedInject constructor(
             )
 
             if (finalFailed.isNotEmpty()) {
+                hasPartialFailures = true
                 NovelFailedImageStore.write(failedStoreFile, chapter.value.id, finalFailed)
             }
 
@@ -1235,6 +1265,7 @@ class DownloadWorker @AssistedInject constructor(
                 kotlinx.coroutines.delay(delaySeconds * 1000L)
             }
         }
+        return hasPartialFailures
     }
 
     private fun buildPageName(chapter: IndexedValue<ContentChapter>, pageNumber: Int, ext: String): String {
@@ -1261,6 +1292,14 @@ class DownloadWorker @AssistedInject constructor(
                 }
             }
             doc.outerHtml()
+        }.getOrDefault(html)
+    }
+
+    private fun removeNovelImages(html: String): String {
+        return runCatching {
+            Jsoup.parse(html).apply {
+                select("img, picture, source").remove()
+            }.outerHtml()
         }.getOrDefault(html)
     }
 
@@ -1445,16 +1484,29 @@ class DownloadWorker @AssistedInject constructor(
         headers.forEach { (k, v) -> requestBuilder.header(k, v) }
         val finalRequest = requestBuilder.build()
 
+        val requestStartedAt = SystemClock.elapsedRealtime()
         slowdownDispatcher.delay(repo.source)
-        val response = if (useProxy) {
-            imageProxyInterceptor.interceptPageRequest(finalRequest, okHttp)
+        val networkStartedAt = SystemClock.elapsedRealtime()
+        val imageClient = repo.getImageClient() ?: okHttp
+        val response = if (page != null) {
+            // Mihon/extension repositories may implement image loading with a custom client,
+            // token refresh, or a source-specific interceptor. Reuse that exact path first so
+            // downloads have the same semantics as the reader.
+            repo.fetchPageResponse(url, page) ?: if (useProxy) {
+                imageProxyInterceptor.interceptPageRequest(finalRequest, imageClient)
+            } else {
+                imageClient.newCall(finalRequest).await()
+            }
+        } else if (useProxy) {
+            imageProxyInterceptor.interceptPageRequest(finalRequest, imageClient)
         } else {
-            okHttp.newCall(finalRequest).await()
+            imageClient.newCall(finalRequest).await()
         }
         return response
             .ensureSuccess()
             .use { response ->
                 var file: File? = null
+                var bytesWritten = 0L
                 try {
                     val body = response.body ?: error("Response body is null")
                     body.use {
@@ -1462,7 +1514,7 @@ class DownloadWorker @AssistedInject constructor(
                             ext = MimeTypes.getExtension(body.contentType()?.toMimeType())
                         )
                         file.sink(append = false).buffer().use { sink ->
-                            sink.writeAllCancellable(body.source())
+                            bytesWritten = sink.writeAllCancellable(body.source())
                         }
                     }
                 } catch (e: Exception) {
@@ -1470,6 +1522,15 @@ class DownloadWorker @AssistedInject constructor(
                     throw e
                 }
                 checkNotNull(file) { "Temporary file was not created for $url" }
+                    .also {
+                        val elapsedMs = (SystemClock.elapsedRealtime() - networkStartedAt).coerceAtLeast(1L)
+                        Log.d(
+                            "DownloadWorker",
+                            "image transfer source=${repo.source.name} bytes=$bytesWritten " +
+                                "throttleMs=${networkStartedAt - requestStartedAt} networkMs=$elapsedMs " +
+                                "rateBytesPerSec=${bytesWritten * 1000L / elapsedMs}",
+                        )
+                    }
             }
     }
 
@@ -1795,8 +1856,11 @@ class DownloadWorker @AssistedInject constructor(
             }
             val fileName = buildVideoFileName(chapter, target.extension(torrentStream))
             val outputFile = mangaDir.findOrCreateFile(fileName)
+            val partialFile = mangaDir.findOrCreateFile("$fileName.part")
             try {
                 if (outputFile.exists() && outputFile.length() > 0L) {
+                    partialFile.delete()
+                    mangaDir.findFile("$fileName.part.state")?.delete()
                     videoDownloadIndex.put(manga.id, chapter.value.id, outputFile.uri.toString())
                     downloaded += 1
                     continue
@@ -1814,12 +1878,21 @@ class DownloadWorker @AssistedInject constructor(
                     )
                 }
                 if (torrentStream != null) {
-                    downloadDirectVideo(repo.source, torrentStream.streamUrl, null, outputFile, progress)
+                    downloadDirectVideo(repo.source, torrentStream.streamUrl, null, partialFile, progress)
                 } else if (target.isHls) {
-                    downloadHls(repo.source, target.url, target.headers, outputFile, progress)
+                    downloadHls(repo.source, target.url, target.headers, partialFile, progress)
                 } else {
-                    downloadDirectVideo(repo.source, target.url, target.headers, outputFile, progress)
+                    downloadDirectVideo(repo.source, target.url, target.headers, partialFile, progress)
                 }
+                check(partialFile.length() > 0L) { "Video download produced an empty file" }
+                outputFile.delete()
+                if (!partialFile.renameTo(fileName)) {
+                    partialFile.openInputStream().use { input ->
+                        outputFile.openOutputStream(false).use { output -> input.copyTo(output) }
+                    }
+                    partialFile.delete()
+                }
+                val publishedFile = mangaDir.findFile(fileName) ?: outputFile
 
                 // Download external tracks (subtitles, audio)
                 val baseName = fileName.substringBeforeLast('.')
@@ -1852,14 +1925,15 @@ class DownloadWorker @AssistedInject constructor(
                     }
                 }
 
-                videoDownloadIndex.put(manga.id, chapter.value.id, outputFile.uri.toString())
+                videoDownloadIndex.put(manga.id, chapter.value.id, publishedFile.uri.toString())
                 index.addChapter(chapter, fileName)
                 writeVideoIndex(mangaDir, index)
-                scanDownloadedFile(outputFile)
+                scanDownloadedFile(publishedFile)
                 downloaded += 1
                 publishState(currentState.copy(downloadedChapters = downloaded))
             } catch (e: Exception) {
-                outputFile.delete()
+                // Keep the .part file. A later retry can resume a server-supported Range
+                // request instead of starting a multi-hundred-megabyte video over.
                 throw e
             } finally {
                 torrentStream?.let { torrentStreamService.release(it.streamUrl) }
@@ -1877,7 +1951,10 @@ class DownloadWorker @AssistedInject constructor(
         if (candidates.isNotEmpty()) {
             var selected = selectVideoCandidate(candidates, task.preferredQuality)
             if (selected == null) {
-                val globalPrefs = settings.preferredVideoQuality.split(',').map { it.trim() }.filter { it.isNotEmpty() }
+                val globalPrefs = settings.preferredDownloadVideoQuality
+                    .split(',')
+                    .map { it.trim() }
+                    .filter { it.isNotEmpty() }
                 for (pref in globalPrefs) {
                     selected = selectVideoCandidate(candidates, pref)
                     if (selected != null) break
@@ -1921,18 +1998,44 @@ class DownloadWorker @AssistedInject constructor(
         outputFile: UniFile,
         onProgress: suspend (Int, Int) -> Unit,
     ) {
+        val resumeAt = outputFile.length().coerceAtLeast(0L)
         val request = PageLoader.createPageRequest(url, source, headers)
             .newBuilder()
+            .apply {
+                if (resumeAt > 0L) {
+                    header("Range", "bytes=$resumeAt-")
+                }
+            }
             .build()
-        val response = okHttp.newCall(request).await().ensureSuccess()
+        // A complete video can legitimately take longer than five minutes. Keep the normal
+        // connect/read timeouts (which still detect an idle connection), but remove the global
+        // whole-call deadline for this streaming operation.
+        val videoClient = okHttp.newBuilder()
+            .callTimeout(0, TimeUnit.MILLISECONDS)
+            .build()
+        val response = videoClient.newCall(request).await()
+        if (response.code == 416 && resumeAt > 0L) {
+            response.closeQuietly()
+            outputFile.openOutputStream(false).use { it.flush() }
+            return downloadDirectVideo(source, url, headers, outputFile, onProgress)
+        }
+        response.ensureSuccess()
         response.use { resp ->
             val body = resp.body ?: error("Response body is null")
-            val totalBytes = body.contentLength().takeIf { it > 0 } ?: -1L
+            val append = resumeAt > 0L && resp.code == 206
+            val totalBytes = body.contentLength().takeIf { it > 0 }?.let { length ->
+                if (append) length + resumeAt else length
+            } ?: -1L
             body.use {
-                outputFile.openOutputStream().sink().buffer().use { sink ->
+                if (resumeAt > 0L && !append) {
+                    // The server ignored Range (200) or returned a full representation. Do not
+                    // append a second copy to the partial file.
+                    outputFile.openOutputStream(false).use { it.flush() }
+                }
+                outputFile.openOutputStream(append).sink().buffer().use { sink ->
                     val sourceStream = body.source()
                     val buffer = okio.Buffer()
-                    var written = 0L
+                    var written = if (append) resumeAt else 0L
                     var lastNotify = 0L
                     while (true) {
                         val read = sourceStream.read(buffer, 64 * 1024)
@@ -2023,55 +2126,105 @@ class DownloadWorker @AssistedInject constructor(
             android.util.Log.d("DownloadWorker", "HLS first segment: url=${it.url} seq=${it.sequence}")
         }
         android.util.Log.i("DownloadWorker", "HLS output file: ${outputFile.uri}")
-        val keyCache = HashMap<String, ByteArray>()
-        var writtenTotal = 0L
-        outputFile.openOutputStream().sink().buffer().use { sink ->
+        val keyCache: MutableMap<String, ByteArray> = ConcurrentHashMap()
+        val stateFile = outputFile.getParentFile()?.findOrCreateFile("${outputFile.name}.state")
+        val savedState = stateFile?.takeIf { it.exists() && it.length() > 0L }?.let { file ->
+            runCatching {
+                file.openInputStream().bufferedReader().use { it.readLines() }
+            }.getOrNull()
+        }
+        val resumeIndex = savedState
+            ?.takeIf { it.firstOrNull() == mediaUrl }
+            ?.getOrNull(1)
+            ?.toIntOrNull()
+            ?.coerceIn(0, segments.size)
+            ?.takeIf { it == 0 || outputFile.length() > 0L }
+            ?: 0
+        if (resumeIndex == 0 && outputFile.length() > 0L) {
+            outputFile.openOutputStream(false).use { it.flush() }
+        }
+        var writtenTotal = if (resumeIndex > 0) outputFile.length().coerceAtLeast(0L) else 0L
+        outputFile.openOutputStream(resumeIndex > 0).sink().buffer().use { sink ->
             val total = segments.size.coerceAtLeast(1)
-            segments.forEachIndexed { index, segment ->
-                val req = PageLoader.createPageRequest(segment.url, source, headers)
-                    .newBuilder()
-                    .apply { segment.range?.let { header("Range", it) } }
-                    .build()
-                val response = okHttp.newCall(req).await().ensureSuccess()
-                response.use { resp ->
-                    val body = resp.body ?: error("Response body is null")
-                    body.use {
-                        val bytes = body.bytes()
-                        val decrypted = decryptIfNeeded(
-                            source = source,
-                            baseUrl = mediaUrl,
-                            key = segment.key,
-                            headers = headers,
-                            keyCache = keyCache,
-                            sequence = segment.sequence,
-                            data = bytes,
+            val remaining = segments.withIndex().drop(resumeIndex)
+            remaining.chunked(DownloadPolicy.HLS_SEGMENT_CONCURRENCY).forEach { batch ->
+                val downloaded = coroutineScope {
+                    batch.map { indexed ->
+                        async {
+                            runFailsafe {
+                                downloadHlsSegment(
+                                    source = source,
+                                    mediaUrl = mediaUrl,
+                                    segment = indexed.value,
+                                    headers = headers,
+                                    keyCache = keyCache,
+                                )
+                            }
+                        }
+                    }.awaitAll()
+                }
+                batch.zip(downloaded).forEach { (indexed, bytes) ->
+                    val decrypted = bytes ?: throw IOException("HLS segment ${indexed.index} failed")
+                    sink.write(decrypted)
+                    writtenTotal += decrypted.size.toLong()
+                    if (indexed.index < 3 || indexed.index == total - 1) {
+                        android.util.Log.d(
+                            "DownloadWorker",
+                            "HLS seg[${indexed.index}/$total] decrypted=${decrypted.size} out=${outputFile.length()}",
                         )
-                        sink.write(decrypted)
-                        writtenTotal += decrypted.size.toLong()
-                        if (index < 3 || index == total - 1) {
-                            android.util.Log.d(
-                                "DownloadWorker",
-                                "HLS seg[$index/$total] bytes=${bytes.size} decrypted=${decrypted.size} out=${outputFile.length()}",
-                            )
-                        }
-                        if (index % 5 == 0) {
-                            sink.flush()
-                        }
-                        if (index % 25 == 0) {
-                            android.util.Log.d(
-                                "DownloadWorker",
-                                "HLS progress[$index/$total] written=$writtenTotal out=${outputFile.length()}",
-                            )
-                        }
+                    }
+                    if (indexed.index % 5 == 0) {
+                        sink.flush()
+                    }
+                    if (indexed.index % 25 == 0) {
+                        android.util.Log.d(
+                            "DownloadWorker",
+                            "HLS progress[${indexed.index}/$total] written=$writtenTotal out=${outputFile.length()}",
+                        )
+                    }
+                    onProgress(indexed.index + 1, total)
+                    sink.flush()
+                    stateFile?.openOutputStream(false)?.bufferedWriter()?.use { state ->
+                        state.write(mediaUrl)
+                        state.newLine()
+                        state.write((indexed.index + 1).toString())
                     }
                 }
-                onProgress(index + 1, total)
             }
         }
+        stateFile?.delete()
         android.util.Log.i(
             "DownloadWorker",
             "HLS complete: written=$writtenTotal out=${outputFile.length()} segments=${segments.size}",
         )
+    }
+
+    private suspend fun downloadHlsSegment(
+        source: ContentSource,
+        mediaUrl: String,
+        segment: HlsSegment,
+        headers: Map<String, String>?,
+        keyCache: MutableMap<String, ByteArray>,
+    ): ByteArray {
+        val request = PageLoader.createPageRequest(segment.url, source, headers)
+            .newBuilder()
+            .apply { segment.range?.let { header("Range", it) } }
+            .build()
+        val response = okHttp.newCall(request).await().ensureSuccess()
+        return response.use { resp ->
+            val body = resp.body ?: error("Response body is null")
+            body.use {
+                decryptIfNeeded(
+                    source = source,
+                    baseUrl = mediaUrl,
+                    key = segment.key,
+                    headers = headers,
+                    keyCache = keyCache,
+                    sequence = segment.sequence,
+                    data = body.bytes(),
+                )
+            }
+        }
     }
 
     private suspend fun fetchText(source: ContentSource, url: String, headers: Map<String, String>?): String {
@@ -2483,6 +2636,7 @@ class DownloadWorker @AssistedInject constructor(
         private val mangaDataRepository: ContentDataRepository,
         private val workManager: WorkManager,
     ) {
+        private val scheduleMutex = Mutex()
 
         fun observeWorks(): Flow<List<WorkInfo>> = workManager
             .getWorkInfosByTagFlow(TAG)
@@ -2558,10 +2712,39 @@ class DownloadWorker @AssistedInject constructor(
         }
 
         suspend fun schedule(tasks: Collection<Pair<Content, DownloadTask>>) {
+            scheduleMutex.withLock {
+                scheduleInternal(tasks)
+            }
+        }
+
+        private suspend fun scheduleInternal(tasks: Collection<Pair<Content, DownloadTask>>) {
             if (tasks.isEmpty()) {
                 return
             }
-            val requests = tasks.map { (manga, task) ->
+            val activeTasks = buildList {
+                for (work in workManager.awaitWorkInfosByTag(TAG)) {
+                    if (work.state.isFinished) {
+                        continue
+                    }
+                    workManager.getWorkInputData(work.id)?.let { add(DownloadTask(it)) }
+                }
+            }
+            val pendingTasks = buildList<Pair<Content, DownloadTask>> {
+                for (entry in tasks) {
+                    val task = entry.second
+                    if (activeTasks.any { activeTask -> activeTask.hasSameRequestAs(task) }) {
+                        continue
+                    }
+                    if (any { existing -> existing.second.hasSameRequestAs(task) }) {
+                        continue
+                    }
+                    add(entry)
+                }
+            }
+            if (pendingTasks.isEmpty()) {
+                return
+            }
+            val requests = pendingTasks.map { (manga, task) ->
                 val storedManga = mangaDataRepository.storeContentAndReturn(manga, replaceExisting = true)
                 val currentManga = mangaDataRepository.findContentById(storedManga.id, withChapters = true) ?: storedManga
                 val displayManga = if (task.displayMangaId != null && task.displayMangaId != task.executionMangaId) {
@@ -2584,6 +2767,7 @@ class DownloadWorker @AssistedInject constructor(
                     executionChapterRefs = task.executionChapterRefs,
                     destination = task.destination,
                     format = task.format,
+                    includeNovelImages = task.includeNovelImages,
                     allowMeteredNetwork = task.allowMeteredNetwork,
                     preferredQuality = task.preferredQuality,
                     kind = task.kind,

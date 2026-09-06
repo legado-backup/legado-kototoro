@@ -47,6 +47,7 @@ import org.skepsun.kototoro.core.prefs.observeAsState
 import org.skepsun.kototoro.core.ui.compose.KototoroLoadingIndicator
 import org.skepsun.kototoro.core.ui.compose.KototoroPullToRefreshBox
 import org.skepsun.kototoro.core.ui.compose.ScrollToTopEffect
+import org.skepsun.kototoro.core.ui.compose.VerticalScrollbar
 import org.skepsun.kototoro.list.ui.RetainedPagingSnapshotHost
 import org.skepsun.kototoro.list.ui.compose.rememberRetainedPagingSnapshotState
 import org.skepsun.kototoro.list.domain.ListFilterOption
@@ -277,6 +278,7 @@ fun FeedScreen(
                 }
             }
         }
+        VerticalScrollbar(state = listState)
     }
 }
 

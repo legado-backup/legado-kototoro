@@ -88,6 +88,8 @@ import org.skepsun.kototoro.core.db.migrations.Migration74To75
 import org.skepsun.kototoro.core.db.migrations.Migration75To76
 import org.skepsun.kototoro.core.db.migrations.Migration76To77
 import org.skepsun.kototoro.core.db.migrations.Migration77To78
+import org.skepsun.kototoro.core.db.migrations.Migration78To79
+import org.skepsun.kototoro.core.db.migrations.Migration79To80
 import org.skepsun.kototoro.core.db.migrations.Migration1To2
 import org.skepsun.kototoro.core.db.migrations.Migration20To21
 import org.skepsun.kototoro.core.db.migrations.Migration21To22
@@ -156,8 +158,12 @@ import org.skepsun.kototoro.space.data.SpaceDefinitionEntity
 
 import org.skepsun.kototoro.explore.data.SourcePresetEntity
 import org.skepsun.kototoro.explore.data.SourcePresetsDao
+import org.skepsun.kototoro.core.replace.ReplaceRule
+import org.skepsun.kototoro.core.replace.ReplaceRuleDao
+import org.skepsun.kototoro.reader.novel.annotation.NovelMarkingDao
+import org.skepsun.kototoro.reader.novel.annotation.NovelMarkingEntity
 
-const val DATABASE_VERSION = 78
+const val DATABASE_VERSION = 80
 
 @Database(
     entities = [
@@ -173,6 +179,8 @@ const val DATABASE_VERSION = 78
         SpaceSessionEntity::class, SpaceNavigationEntryEntity::class, SpaceRoutePreferencesEntity::class,
         SpaceDefinitionEntity::class,
         SourceOriginEntity::class, SourceRefreshStateEntity::class,
+        ReplaceRule::class,
+        NovelMarkingEntity::class,
         // EpubChapterEntity::class,
     ],
     version = DATABASE_VERSION,
@@ -248,6 +256,10 @@ abstract class MangaDatabase : RoomDatabase() {
     abstract fun getSourceOriginsDao(): SourceOriginsDao
 
     abstract fun getSourceRefreshStateDao(): SourceRefreshStateDao
+
+    abstract fun getReplaceRuleDao(): ReplaceRuleDao
+
+    abstract fun getNovelMarkingDao(): NovelMarkingDao
 
     // abstract fun getEpubChapterDao(): EpubChapterDao
 }
@@ -331,6 +343,8 @@ fun getDatabaseMigrations(context: Context): Array<Migration> = arrayOf(
     Migration75To76(),
     Migration76To77(),
     Migration77To78(),
+    Migration78To79(),
+    Migration79To80(),
 )
 
 fun MangaDatabase(context: Context): MangaDatabase = Room

@@ -22,24 +22,21 @@ class DownloadSlowdownDispatcher @Inject constructor(
         if (!repo.isSlowdownEnabled()) {
             return
         }
-        val delayMs = if (settings.isDownloadAlignedWithReader) {
-            0L
-        } else {
-            settings.downloadRequestDelayMs.toLong()
-        }
+        // The old global delay is retained as a migration input, but a value below the
+        // safe floor can no longer disable source-level slowdown.
+        val delayMs = DownloadPolicy.sourceDelayMs(settings.downloadRequestDelayMs)
         if (delayMs <= 0L) {
             return
         }
-        val lastRequest = synchronized(timeMap) {
-            val res = timeMap.getOrDefault(source, 0L)
-            timeMap[source] = SystemClock.elapsedRealtime()
-            res
+        val waitMs = synchronized(timeMap) {
+            val now = SystemClock.elapsedRealtime()
+            val nextAllowed = timeMap.getOrDefault(source, 0L)
+            val scheduledAt = maxOf(now, nextAllowed)
+            timeMap[source] = scheduledAt + delayMs
+            scheduledAt - now
         }
-        if (lastRequest != 0L) {
-            val waitMs = lastRequest + delayMs - SystemClock.elapsedRealtime()
-            if (waitMs > 0L) {
-                delay(waitMs)
-            }
+        if (waitMs > 0L) {
+            delay(waitMs)
         }
     }
 }

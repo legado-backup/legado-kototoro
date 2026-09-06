@@ -147,6 +147,7 @@ import org.skepsun.kototoro.settings.sources.unified.UnifiedSourcesViewModel
 import org.skepsun.kototoro.settings.tracker.TrackerSettingsRoute
 import org.skepsun.kototoro.settings.tracker.TrackerSettingsViewModel
 import org.skepsun.kototoro.settings.userdata.BackupsSettingsRoute
+import org.skepsun.kototoro.settings.replace.ReplaceRulesSettingsRoute
 import org.skepsun.kototoro.settings.utils.RingtonePickContract
 import org.skepsun.kototoro.suggestions.ui.SuggestionsWorker
 import org.skepsun.kototoro.settings.users.TrackingUserAccountSummaryProvider
@@ -581,6 +582,9 @@ class SettingsActivity :
                 SettingsDestination.ReaderSettings -> {
                     outState.putString(STATE_COMPOSE_DESTINATION, COMPOSE_DESTINATION_READER_SETTINGS)
                 }
+                SettingsDestination.ReplaceRulesSettings -> {
+                    outState.putString(STATE_COMPOSE_DESTINATION, COMPOSE_DESTINATION_REPLACE_RULES_SETTINGS)
+                }
                 SettingsDestination.SourcesSettings -> {
                     outState.putString(STATE_COMPOSE_DESTINATION, COMPOSE_DESTINATION_SOURCES_SETTINGS)
                 }
@@ -730,6 +734,7 @@ class SettingsActivity :
             SettingsDestination.TtsSettings,
             SettingsDestination.PlaybackSettings,
             SettingsDestination.ReaderSettings,
+            SettingsDestination.ReplaceRulesSettings,
             SettingsDestination.SourcesSettings,
             SettingsDestination.SuggestionsSettings,
             SettingsDestination.SyncSettings,
@@ -897,6 +902,7 @@ class SettingsActivity :
             SettingsDestination.TtsSettings -> COMPOSE_DESTINATION_TTS_SETTINGS
             SettingsDestination.PlaybackSettings -> COMPOSE_DESTINATION_PLAYBACK_SETTINGS
             SettingsDestination.ReaderSettings -> COMPOSE_DESTINATION_READER_SETTINGS
+            SettingsDestination.ReplaceRulesSettings -> COMPOSE_DESTINATION_REPLACE_RULES_SETTINGS
             SettingsDestination.SourcesSettings -> COMPOSE_DESTINATION_SOURCES_SETTINGS
             SettingsDestination.SuggestionsSettings -> COMPOSE_DESTINATION_SUGGESTIONS_SETTINGS
             SettingsDestination.SyncSettings -> COMPOSE_DESTINATION_SYNC_SETTINGS
@@ -945,6 +951,7 @@ class SettingsActivity :
             SettingsDestination.TtsSettings -> getString(R.string.tts_settings_title)
             SettingsDestination.PlaybackSettings -> getString(R.string.playback_settings)
             SettingsDestination.ReaderSettings -> getString(R.string.reader_settings)
+            SettingsDestination.ReplaceRulesSettings -> getString(R.string.replace_rules)
             SettingsDestination.SourcesSettings -> getString(R.string.remote_sources)
             SettingsDestination.SuggestionsSettings -> getString(R.string.suggestions)
             SettingsDestination.SyncSettings -> getString(R.string.sync_settings)
@@ -1144,7 +1151,13 @@ class SettingsActivity :
                     onReaderAiSettingsEntryClick = {
                         openDestination(SettingsDestination.AISettings, null, false)
                     },
+                    onReplaceRulesClick = {
+                        openDestination(SettingsDestination.ReplaceRulesSettings, null, false)
+                    },
                 )
+            }
+            SettingsDestination.ReplaceRulesSettings -> RenderComposeSection(title = getString(R.string.replace_rules)) {
+                ReplaceRulesSettingsRoute()
             }
             SettingsDestination.StorageAndNetworkSettings -> RenderComposeSection(
                 title = getString(R.string.storage_and_network),
@@ -2160,6 +2173,7 @@ class SettingsActivity :
         private const val COMPOSE_DESTINATION_TTS_SETTINGS = "tts_settings"
         private const val COMPOSE_DESTINATION_PLAYBACK_SETTINGS = "playback_settings"
         private const val COMPOSE_DESTINATION_READER_SETTINGS = "reader_settings"
+        private const val COMPOSE_DESTINATION_REPLACE_RULES_SETTINGS = "replace_rules_settings"
         private const val COMPOSE_DESTINATION_SOURCES_SETTINGS = "sources_settings"
         private const val COMPOSE_DESTINATION_SUGGESTIONS_SETTINGS = "suggestions_settings"
         private const val COMPOSE_DESTINATION_SYNC_SETTINGS = "sync_settings"
@@ -2249,6 +2263,7 @@ class SettingsActivity :
             COMPOSE_DESTINATION_TTS_SETTINGS -> SettingsDestination.TtsSettings
             COMPOSE_DESTINATION_PLAYBACK_SETTINGS -> SettingsDestination.PlaybackSettings
             COMPOSE_DESTINATION_READER_SETTINGS -> SettingsDestination.ReaderSettings
+            COMPOSE_DESTINATION_REPLACE_RULES_SETTINGS -> SettingsDestination.ReplaceRulesSettings
             COMPOSE_DESTINATION_SOURCES_SETTINGS -> SettingsDestination.SourcesSettings
             COMPOSE_DESTINATION_SUGGESTIONS_SETTINGS -> SettingsDestination.SuggestionsSettings
             COMPOSE_DESTINATION_SYNC_SETTINGS -> SettingsDestination.SyncSettings

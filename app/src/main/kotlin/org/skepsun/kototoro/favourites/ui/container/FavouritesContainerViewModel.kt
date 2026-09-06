@@ -310,7 +310,9 @@ class FavouritesContainerViewModel @Inject constructor(
      * toast is shown instead.
      */
     internal fun checkForUpdates() {
-        launchLoadingJob(Dispatchers.Default) {
+        // The worker owns progress reporting through its notification. This background check
+        // must not drive the list route's loading indicator while it waits for completion.
+        launchJob(Dispatchers.Default) {
             when (val request = trackWorkerScheduler.requestCheckNow()) {
                 UpdateCheckRequest.Started -> {
                     onContentMessage.call(appContext.getString(R.string.checking_for_updates))
@@ -509,7 +511,7 @@ class FavouritesContainerViewModel @Inject constructor(
     private companion object {
 
         /**
-         * How long the pull-to-refresh spinner waits for the one-shot update check before
+         * How long the pull-to-refresh action waits for the one-shot update check before
          * giving up on a result toast. The worker keeps running in the background (and
          * reports via its own notification) if the check is simply slow.
          */

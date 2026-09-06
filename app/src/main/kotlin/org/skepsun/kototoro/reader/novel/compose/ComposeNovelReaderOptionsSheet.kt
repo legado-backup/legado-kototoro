@@ -68,6 +68,10 @@ internal fun ComposeNovelReaderOptionsSheet(
     onDismiss: () -> Unit,
     onSettingsChanged: (NovelReaderSettings) -> Unit,
     onToggleTranslation: () -> Unit,
+    replaceRulesEnabled: Boolean = true,
+    onToggleReplaceRules: () -> Unit = {},
+    onShowReplaceRules: () -> Unit = {},
+    onShowMarkings: () -> Unit = {},
     onBookmark: () -> Unit,
     onTts: () -> Unit,
     onClearTranslationCache: () -> Unit,
@@ -106,6 +110,10 @@ internal fun ComposeNovelReaderOptionsSheet(
                         onClearTranslationCache = onClearTranslationCache,
                     )
                     else -> NovelMiscOptionsPage(
+                        replaceRulesEnabled = replaceRulesEnabled,
+                        onToggleReplaceRules = { onToggleReplaceRules(); onDismiss() },
+                        onShowReplaceRules = { onShowReplaceRules(); onDismiss() },
+                        onShowMarkings = { onShowMarkings(); onDismiss() },
                         onBookmark = { onBookmark(); onDismiss() },
                         onTts = { onTts(); onDismiss() },
                         onReset = { onSettingsChanged(NovelReaderSettings()) },
@@ -231,14 +239,31 @@ private fun NovelTranslationOptionsPage(
 }
 
 @Composable
-private fun NovelMiscOptionsPage(onBookmark: () -> Unit, onTts: () -> Unit, onReset: () -> Unit) =
+private fun NovelMiscOptionsPage(
+    replaceRulesEnabled: Boolean,
+    onToggleReplaceRules: () -> Unit,
+    onShowReplaceRules: () -> Unit,
+    onShowMarkings: () -> Unit,
+    onBookmark: () -> Unit,
+    onTts: () -> Unit,
+    onReset: () -> Unit,
+) =
     NovelOptionsPageList {
         item {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Action(R.drawable.ic_bookmark, R.string.bookmark_add, onBookmark)
                 Action(R.drawable.ic_voice_input, R.string.tts_settings_title, onTts)
+                Action(R.drawable.ic_replace, R.string.replace_rule_effective_title, onShowReplaceRules)
+                Action(R.drawable.ic_select_range, R.string.novel_markings_title, onShowMarkings)
                 Action(R.drawable.ic_backup_restore, R.string.novel_reset, onReset)
             }
+        }
+        item {
+            ReaderOptionSwitchRow(
+                label = stringResource(R.string.replace_rule_book_toggle),
+                checked = replaceRulesEnabled,
+                onCheckedChange = { onToggleReplaceRules() },
+            )
         }
     }
 
@@ -344,6 +369,12 @@ private fun NovelSwitchRows(
         label = stringResource(R.string.novel_show_reading_status),
         checked = settings.showReadingStatus,
         onCheckedChange = { update { copy(showReadingStatus = it) } },
+    )
+    ReaderOptionDivider()
+    ReaderOptionSwitchRow(
+        label = stringResource(R.string.reader_chapter_title_at_bottom),
+        checked = settings.chapterTitleAtBottom,
+        onCheckedChange = { update { copy(chapterTitleAtBottom = it) } },
     )
     if (includeTransparentStatusBar) {
         ReaderOptionDivider()

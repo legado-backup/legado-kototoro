@@ -16,7 +16,9 @@ import java.util.zip.ZipOutputStream
 
 class ZipOutput(
     val file: File,
-    private val compressionLevel: Int = Deflater.DEFAULT_COMPRESSION,
+    // Downloaded pages are already JPEG/PNG/WebP in the common case. BEST_SPEED avoids
+    // spending CPU re-compressing them while retaining normal ZIP compatibility.
+    private val compressionLevel: Int = Deflater.BEST_SPEED,
 ) : Closeable {
 
     private val entryNames = ArraySet<String>()

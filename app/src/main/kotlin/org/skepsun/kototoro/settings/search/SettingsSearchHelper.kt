@@ -344,6 +344,7 @@ class SettingsSearchHelper @Inject constructor(
         }
 
         val readerBreadcrumbs = listOf(context.getString(R.string.reader_settings))
+        val novelReaderBreadcrumbs = readerBreadcrumbs + context.getString(R.string.novel)
         val readerKeys = listOf(
             "reader_mode" to R.string.default_mode,
             "reader_mode_detect" to R.string.detect_reader_mode,
@@ -376,7 +377,7 @@ class SettingsSearchHelper @Inject constructor(
             "reader_background" to R.string.background,
             "pages_numbers" to R.string.show_pages_numbers,
             "pages_preload" to R.string.preload_pages,
-            "reader_threads" to R.string.download_threads,
+            "reader_threads" to R.string.reader_threads,
             "reader_prefetch_limit" to R.string.prefetch_limit,
             "eink_mode" to R.string.eink_mode,
             "eink_refresh" to R.string.eink_refresh,
@@ -394,6 +395,14 @@ class SettingsSearchHelper @Inject constructor(
                 ),
             )
         }
+        result.add(
+            SettingsItem(
+                key = "replace_rules",
+                title = context.getString(R.string.replace_rules),
+                breadcrumbs = novelReaderBreadcrumbs,
+                destination = SettingsDestination.ReplaceRulesSettings,
+            ),
+        )
         val translationBreadcrumbs = listOf(context.getString(R.string.ai_settings), context.getString(R.string.translation_settings))
         val translationKeys = listOf(
             "reader_translation_source_lang" to R.string.reader_translation_source_lang,
@@ -568,13 +577,8 @@ class SettingsSearchHelper @Inject constructor(
         val downloadsBreadcrumbs = listOf(context.getString(R.string.downloads))
         val downloadsKeys = listOf(
             "downloads_format" to R.string.preferred_download_format,
-            "downloads_align_reader" to R.string.download_align_reader,
-            "downloads_auto_retry" to R.string.download_auto_retry,
-            "downloads_threads" to R.string.download_threads,
-            "downloads_max_active_series" to R.string.download_max_active_series,
-            "downloads_request_delay" to R.string.download_request_delay,
-            "downloads_retry_count" to R.string.download_retry_count,
-            "downloads_retry_delay" to R.string.download_retry_delay,
+            "downloads_video_quality" to R.string.download_video_quality,
+            "downloads_novel_images" to R.string.download_novel_images,
             "downloads_metered_network" to R.string.download_over_cellular,
             "pages_dir_ask" to R.string.ask_for_dest_dir_every_time
         )

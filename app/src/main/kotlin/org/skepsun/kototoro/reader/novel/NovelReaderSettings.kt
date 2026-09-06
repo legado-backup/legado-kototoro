@@ -23,6 +23,7 @@ data class NovelReaderSettings(
     val enableDualPage: Boolean = true,
     val enableFullscreen: Boolean = false,
     val showReadingStatus: Boolean = true,  // 显示阅读状态（之前是 showFooter）
+    val chapterTitleAtBottom: Boolean = false,
     val isReadingStatusTransparent: Boolean = true,
     val enableParagraphIndent: Boolean = true, // 段首缩进两个全角空格
     val isTranslationEnabled: Boolean = false,
@@ -81,6 +82,7 @@ data class NovelReaderSettings(
             putBoolean(KEY_DUAL_PAGE, normalized.enableDualPage)
             putBoolean(KEY_FULLSCREEN, normalized.enableFullscreen)
             putBoolean(KEY_SHOW_READING_STATUS, normalized.showReadingStatus)
+            putBoolean(KEY_CHAPTER_TITLE_AT_BOTTOM, normalized.chapterTitleAtBottom)
             putBoolean(KEY_READING_STATUS_TRANSPARENT, normalized.isReadingStatusTransparent)
             putBoolean(KEY_PARAGRAPH_INDENT, normalized.enableParagraphIndent)
             remove(KEY_TRANSLATION_ENABLED)
@@ -112,6 +114,7 @@ data class NovelReaderSettings(
         private const val KEY_DUAL_PAGE = "dual_page"
         private const val KEY_FULLSCREEN = "fullscreen"
         private const val KEY_SHOW_READING_STATUS = "show_reading_status"
+        private const val KEY_CHAPTER_TITLE_AT_BOTTOM = "chapter_title_at_bottom"
         private const val KEY_READING_STATUS_TRANSPARENT = "reading_status_transparent"
         private const val KEY_PARAGRAPH_INDENT = "paragraph_indent"
         private const val KEY_TRANSLATION_ENABLED = "translation_enabled"
@@ -148,6 +151,7 @@ data class NovelReaderSettings(
                 enableDualPage = prefs.getBoolean(KEY_DUAL_PAGE, true),
                 enableFullscreen = prefs.getBoolean(KEY_FULLSCREEN, false),
                 showReadingStatus = prefs.getBoolean(KEY_SHOW_READING_STATUS, true),
+                chapterTitleAtBottom = prefs.getBoolean(KEY_CHAPTER_TITLE_AT_BOTTOM, false),
                 isReadingStatusTransparent = prefs.getBoolean(KEY_READING_STATUS_TRANSPARENT, true),
                 enableParagraphIndent = prefs.getBoolean(KEY_PARAGRAPH_INDENT, true),
                 isTranslationEnabled = false,

@@ -298,6 +298,7 @@ class DownloadsViewModel @Inject constructor(
             isStuck = DownloadState.isStuck(workData),
             timestamp = DownloadState.getTimestamp(workData),
             chaptersDownloaded = DownloadState.getDownloadedChapters(workData),
+            isPartial = DownloadState.isPartial(workData),
             isExpanded = isExpanded,
             chapters = chapters,
         )
@@ -430,6 +431,7 @@ class DownloadsViewModel @Inject constructor(
             executionChapterRefs = task.executionChapterRefs,
             destination = task.destination,
             format = task.format,
+            includeNovelImages = task.includeNovelImages,
             allowMeteredNetwork = task.allowMeteredNetwork,
             preferredQuality = task.preferredQuality,
             kind = task.kind,

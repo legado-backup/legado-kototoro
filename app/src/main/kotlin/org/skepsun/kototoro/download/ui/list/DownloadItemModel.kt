@@ -33,6 +33,7 @@ data class DownloadItemModel(
     val isStuck: Boolean,
     val timestamp: Instant,
     val chaptersDownloaded: Int,
+    val isPartial: Boolean = false,
     val isExpanded: Boolean,
     val chapters: StateFlow<List<DownloadChapter>?>,
 ) : ListModel, Comparable<DownloadItemModel> {

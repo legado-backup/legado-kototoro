@@ -572,78 +572,91 @@ internal fun ComposeReaderActivityScaffold(
             ReaderComposeInfoBar(state.infoBar)
         }
 
-        AnimatedVisibility(
-            visible = state.controlsVisible && state.actions.sliderEnabled,
-            // Alpha transitions clip the rounded Backdrop shadow to a rectangular layer.
-            enter = slideInVertically { it }.whenReaderAnimationsEnabled(!state.eInkModeEnabled),
-            exit = slideOutVertically { it }.whenReaderAnimationsEnabled(!state.eInkModeEnabled),
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .navigationBarsPadding()
-                .padding(horizontal = 12.dp, vertical = 4.dp),
-        ) {
-            ReaderProgressDock(isIosStyle = isIosStyle) {
-                ReaderProgressControl(
-                    state = state.actions,
-                    callbacks = callbacks.actions,
-                    isIosStyle = isIosStyle,
-                )
-            }
-        }
-
-        // 底部标题药丸跟右侧悬浮按钮共用同一组基准（同高、同底距），
-        // 否则它会和最近的那颗悬浮按钮错位（issue #509 的反馈）。
-        AnimatedVisibility(
-            visible = state.controlsVisible && state.options.chapterTitleAtBottom,
-            enter = slideInVertically { it }.whenReaderAnimationsEnabled(!state.eInkModeEnabled),
-            exit = slideOutVertically { it }.whenReaderAnimationsEnabled(!state.eInkModeEnabled),
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .navigationBarsPadding()
-                .padding(horizontal = 12.dp)
-                .padding(bottom = ReaderFloatingControlInset),
-        ) {
-            ReaderChapterTitleChip(
-                state = state,
-                onChapters = callbacks.actions.onPages,
-                height = ReaderFloatingControlHeight,
-            )
-        }
-
         val floatingControls = resolveReaderFloatingControls(
             configured = state.actions.controls,
             translationAvailable = state.actions.translateRequestedVisible,
             translationContextualVisible = state.actions.translateContextualVisible,
         )
+        val progressAvailable = state.actions.sliderEnabled
+        val chapterTitleAtBottom = state.options.chapterTitleAtBottom
+        val bottomChromeVisibility = resolveReaderBottomChromeVisibility(
+            controlsVisible = state.controlsVisible,
+            progressAvailable = progressAvailable,
+            chapterTitleAtBottom = chapterTitleAtBottom,
+            floatingControlsAvailable = floatingControls.isNotEmpty(),
+        )
         val floatingControlExitOffset = with(LocalDensity.current) { 32.dp.roundToPx() }
         AnimatedVisibility(
-            visible = state.controlsVisible && !state.chaptersVisible && floatingControls.isNotEmpty(),
-            // Keep Backdrop shadows out of the alpha layer used by fade transitions.
-            enter = slideInHorizontally { it + floatingControlExitOffset }
-                .whenReaderAnimationsEnabled(!state.eInkModeEnabled),
-            exit = slideOutHorizontally { it + floatingControlExitOffset }
-                .whenReaderAnimationsEnabled(!state.eInkModeEnabled),
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .navigationBarsPadding()
-                .padding(end = 16.dp, bottom = ReaderFloatingControlInset),
+            visible = bottomChromeVisibility.visible,
+            enter = slideInVertically { it }.whenReaderAnimationsEnabled(!state.eInkModeEnabled),
+            exit = slideOutVertically { it }.whenReaderAnimationsEnabled(!state.eInkModeEnabled),
+            modifier = Modifier.align(Alignment.BottomCenter),
         ) {
-            Column(
-                horizontalAlignment = Alignment.End,
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = if (showFloatingControlLabels) {
-                    Modifier.width(IntrinsicSize.Max).widthIn(max = 200.dp)
-                } else {
-                    Modifier
-                },
-            ) {
-                floatingControls.forEach { control ->
-                    ReaderFloatingControlButton(
-                        control = control,
-                        state = state.actions,
-                        callbacks = callbacks.actions,
-                        showLabel = showFloatingControlLabels,
+            // 标题与进度条必须在同一个 AnimatedVisibility 中，避免两个独立
+            // transition 在隐藏控件时出现不同步的残留帧。
+            Box(modifier = Modifier.fillMaxWidth()) {
+                if (progressAvailable) {
+                    ReaderProgressDock(
+                        isIosStyle = isIosStyle,
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .navigationBarsPadding()
+                            .padding(horizontal = 12.dp, vertical = 4.dp),
+                    ) {
+                        ReaderProgressControl(
+                            state = state.actions,
+                            callbacks = callbacks.actions,
+                            isIosStyle = isIosStyle,
+                        )
+                    }
+                }
+                if (chapterTitleAtBottom) {
+                    // 底部标题药丸跟右侧悬浮按钮共用同一组基准（同高、同底距），
+                    // 否则它会和最近的那颗悬浮按钮错位（issue #509 的反馈）。
+                    ReaderChapterTitleChip(
+                        state = state,
+                        onChapters = callbacks.actions.onPages,
+                        height = ReaderFloatingControlHeight,
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .navigationBarsPadding()
+                            .padding(horizontal = 12.dp)
+                        .padding(bottom = ReaderFloatingControlInset),
                     )
+                }
+                if (floatingControls.isNotEmpty()) {
+                    // 阅读控件整体隐藏时由外层 AnimatedVisibility 统一带走；章节面板
+                    // 单独打开时仍保留悬浮列原有的水平退场，避免两类状态互相影响。
+                    AnimatedVisibility(
+                        visible = !state.chaptersVisible,
+                        enter = slideInHorizontally { it + floatingControlExitOffset }
+                            .whenReaderAnimationsEnabled(!state.eInkModeEnabled),
+                        exit = slideOutHorizontally { it + floatingControlExitOffset }
+                            .whenReaderAnimationsEnabled(!state.eInkModeEnabled),
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .navigationBarsPadding()
+                            .padding(end = 16.dp, bottom = ReaderFloatingControlInset),
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.End,
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = if (showFloatingControlLabels) {
+                                Modifier.width(IntrinsicSize.Max).widthIn(max = 200.dp)
+                            } else {
+                                Modifier
+                            },
+                        ) {
+                            floatingControls.forEach { control ->
+                                ReaderFloatingControlButton(
+                                    control = control,
+                                    state = state.actions,
+                                    callbacks = callbacks.actions,
+                                    showLabel = showFloatingControlLabels,
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }

@@ -151,10 +151,14 @@ class DownloadNotificationFactory @AssistedInject constructor(
         )
         when {
             state == null -> Unit
-            state.isCompleted || state.localContent != null -> {
+            state.isCompleted || state.isPartial || state.localContent != null -> {
                 builder.setProgress(0, 0, false)
                 builder.setSubText(context.getString(state.taskKind.actionTitleResId))
-                builder.setContentText(context.getString(state.taskKind.completedStatusResId))
+                builder.setContentText(
+                    context.getString(
+                        if (state.isPartial) R.string.download_partial else state.taskKind.completedStatusResId,
+                    ),
+                )
                 builder.setContentIntent(
                     createContentIntent(
                         displayManga = displayContent,

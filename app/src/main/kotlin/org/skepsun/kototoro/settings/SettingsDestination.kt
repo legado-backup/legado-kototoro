@@ -24,6 +24,7 @@ sealed interface SettingsDestination {
     data object TtsSettings : SettingsDestination
     data object PlaybackSettings : SettingsDestination
     data object ReaderSettings : SettingsDestination
+    data object ReplaceRulesSettings : SettingsDestination
     data object SourcesSettings : SettingsDestination
     data object SuggestionsSettings : SettingsDestination
     data object SyncSettings : SettingsDestination

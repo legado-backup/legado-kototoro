@@ -95,6 +95,7 @@ fun HistoryScreen(
         isRefreshing = isRefreshing ||
             (retainedState?.pagingIsRefreshing == true && retainedState.useRetainedPagingSnapshot == false),
         pullRefreshEnabled = pullRefreshEnabled,
+        showScrollbar = true,
         showRemoveOption = true,
         onRefresh = onRefresh,
         onLoadMore = onLoadMore,

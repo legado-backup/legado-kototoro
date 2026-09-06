@@ -137,6 +137,7 @@ class DownloadDialogViewModel @Inject constructor(
         destination: DirectoryModel?,
         allowMetered: Boolean,
         preferredQuality: String? = null,
+        includeNovelImages: Boolean = settings.isDownloadNovelImagesEnabled,
     ) {
         launchLoadingJob(Dispatchers.Default) {
             val tasks = mangaDetails.get().map { m ->
@@ -153,6 +154,7 @@ class DownloadDialogViewModel @Inject constructor(
                     executionChapterRefs = selectedChapterRefs,
                     destination = destination?.root?.uri,
                     format = format,
+                    includeNovelImages = includeNovelImages,
                     allowMeteredNetwork = allowMetered,
                     preferredQuality = preferredQuality,
                 )
@@ -183,47 +185,7 @@ class DownloadDialogViewModel @Inject constructor(
         )
     }
 
-    fun getChapterDownloadDelay(): Int = settings.downloadChapterDelay
-
-    fun setChapterDownloadDelay(seconds: Int) {
-        settings.downloadChapterDelay = seconds
-    }
-
-    fun isDownloadAlignedWithReader(): Boolean = settings.isDownloadAlignedWithReader
-
-    fun setDownloadAlignedWithReader(enabled: Boolean) {
-        settings.isDownloadAlignedWithReader = enabled
-    }
-
-    fun getDownloadThreads(): Int = settings.downloadThreads
-
-    fun setDownloadThreads(value: Int) {
-        settings.downloadThreads = value
-    }
-
-    fun getDownloadRequestDelayMs(): Int = settings.downloadRequestDelayMs
-
-    fun setDownloadRequestDelayMs(value: Int) {
-        settings.downloadRequestDelayMs = value
-    }
-
-    fun getDownloadRetryCount(): Int = settings.downloadRetryCount
-
-    fun setDownloadRetryCount(value: Int) {
-        settings.downloadRetryCount = value
-    }
-
-    fun getDownloadRetryDelayMs(): Int = settings.downloadRetryDelayMs
-
-    fun setDownloadRetryDelayMs(value: Int) {
-        settings.downloadRetryDelayMs = value
-    }
-
-    fun isDownloadAutoRetryEnabled(): Boolean = settings.isDownloadAutoRetryOnNetworkError
-
-    fun setDownloadAutoRetryEnabled(enabled: Boolean) {
-        settings.isDownloadAutoRetryOnNetworkError = enabled
-    }
+    fun isDownloadNovelImagesEnabled(): Boolean = settings.isDownloadNovelImagesEnabled
 
     private fun defaultDestination() = DirectoryModel(
         title = null,

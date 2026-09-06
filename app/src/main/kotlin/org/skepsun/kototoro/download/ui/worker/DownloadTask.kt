@@ -48,10 +48,27 @@ class DownloadTask(
     val chapterRefs: List<ExecutionChapterRef>? = null,
     val destination: Uri?,
     val format: DownloadFormat?,
+    val includeNovelImages: Boolean = true,
     val allowMeteredNetwork: Boolean,
     val preferredQuality: String? = null,
     val kind: DownloadTaskKind = DownloadTaskKind.DOWNLOAD,
 ) : Parcelable {
+
+    /**
+     * Exact request identity used to avoid adding the same download twice while it is active.
+     * It intentionally does not compare pause state: pressing download again should not create
+     * a second transfer just because the first one was queued instead of started.
+     */
+    fun hasSameRequestAs(other: DownloadTask): Boolean {
+        return executionMangaId == other.executionMangaId &&
+            kind == other.kind &&
+            destination == other.destination &&
+            format == other.format &&
+            includeNovelImages == other.includeNovelImages &&
+            allowMeteredNetwork == other.allowMeteredNetwork &&
+            preferredQuality == other.preferredQuality &&
+            executionChapterIds.contentEqualsNullable(other.executionChapterIds)
+    }
 
     val executionMangaId: Long
         get() = mangaId
@@ -74,6 +91,7 @@ class DownloadTask(
             value.toUri().takeIf { it.scheme != null } ?: java.io.File(value).toUri()
         },
         format = data.getString(FORMAT)?.let { DownloadFormat.entries.find(it) },
+        includeNovelImages = data.getBoolean(INCLUDE_NOVEL_IMAGES, true),
         allowMeteredNetwork = data.getBoolean(ALLOW_METERED, true),
         preferredQuality = data.getString(PREFERRED_QUALITY),
         kind = data.getString(KIND)?.let { DownloadTaskKind.entries.find(it) } ?: DownloadTaskKind.DOWNLOAD,
@@ -114,6 +132,7 @@ class DownloadTask(
             }
             .putString(DESTINATION, destination?.toString())
             .putString(FORMAT, format?.name)
+            .putBoolean(INCLUDE_NOVEL_IMAGES, includeNovelImages)
             .putBoolean(ALLOW_METERED, allowMeteredNetwork)
             .putString(PREFERRED_QUALITY, preferredQuality)
             .putString(KIND, kind.name)
@@ -133,6 +152,7 @@ class DownloadTask(
         if (chapterRefs != other.chapterRefs) return false
         if (destination != other.destination) return false
         if (format != other.format) return false
+        if (includeNovelImages != other.includeNovelImages) return false
         if (allowMeteredNetwork != other.allowMeteredNetwork) return false
         if (preferredQuality != other.preferredQuality) return false
         if (kind != other.kind) return false
@@ -149,10 +169,18 @@ class DownloadTask(
         result = 31 * result + (chapterRefs?.hashCode() ?: 0)
         result = 31 * result + (destination?.hashCode() ?: 0)
         result = 31 * result + (format?.hashCode() ?: 0)
+        result = 31 * result + includeNovelImages.hashCode()
         result = 31 * result + allowMeteredNetwork.hashCode()
         result = 31 * result + (preferredQuality?.hashCode() ?: 0)
         result = 31 * result + kind.hashCode()
         return result
+    }
+
+    private fun LongArray?.contentEqualsNullable(other: LongArray?): Boolean {
+        if (this == null || other == null) {
+            return this == null && other == null
+        }
+        return contentEquals(other)
     }
 
     companion object {
@@ -166,6 +194,7 @@ class DownloadTask(
             executionChapterRefs: List<ExecutionChapterRef>? = null,
             destination: Uri?,
             format: DownloadFormat?,
+            includeNovelImages: Boolean = true,
             allowMeteredNetwork: Boolean,
             preferredQuality: String? = null,
             kind: DownloadTaskKind = DownloadTaskKind.DOWNLOAD,
@@ -178,6 +207,7 @@ class DownloadTask(
             chapterRefs = executionChapterRefs,
             destination = destination,
             format = format,
+            includeNovelImages = includeNovelImages,
             allowMeteredNetwork = allowMeteredNetwork,
             preferredQuality = preferredQuality,
             kind = kind,
@@ -191,6 +221,7 @@ class DownloadTask(
         const val CHAPTER_REFS = "chapter_refs"
         const val DESTINATION = "dest"
         const val FORMAT = "format"
+        const val INCLUDE_NOVEL_IMAGES = "include_novel_images"
         const val ALLOW_METERED = "metered"
         const val PREFERRED_QUALITY = "preferred_quality"
         const val KIND = "kind"

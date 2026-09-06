@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Test
 import org.skepsun.kototoro.core.model.toChipModel
+import org.skepsun.kototoro.core.ui.widgets.ChipModel
 import org.skepsun.kototoro.list.domain.ListFilterOption
 import org.skepsun.kototoro.parsers.model.ContentSource
 import org.skepsun.kototoro.parsers.model.ContentState
@@ -14,7 +15,7 @@ import org.skepsun.kototoro.scrobbling.common.domain.model.ScrobblingStatus
 class FavoritesQuickFilterGroupsTest {
 
 	@Test
-	fun `fixed meta filters are grouped while auto filters stay independent`() {
+	fun `fixed meta filters and facets are grouped while independent filters stay independent`() {
 		val tagOption = ListFilterOption.Tag(
 			ContentTag(
 				title = "Action",
@@ -22,6 +23,7 @@ class FavoritesQuickFilterGroupsTest {
 				source = testSource,
 			),
 		)
+		val sourceOption = ListFilterOption.Source(testSource)
 		val options = listOf(
 			ListFilterOption.Downloaded,
 			ListFilterOption.Macro.NEW_CHAPTERS,
@@ -33,9 +35,18 @@ class FavoritesQuickFilterGroupsTest {
 			ListFilterOption.Macro.MULTI_PROJECTION,
 			ListFilterOption.Macro.BROKEN_PROJECTION,
 			tagOption,
+			sourceOption,
 		)
 
-		val filter = buildFavoritesQuickFilter(options.map { it.toChipModel(isChecked = false) })
+		val filter = buildFavoritesQuickFilter(
+			options.map { option ->
+				if (option === sourceOption) {
+					ChipModel(icon = option.iconResId, data = option)
+				} else {
+					option.toChipModel(isChecked = false)
+				}
+			},
+		)
 
 		assertEquals(
 			listOf(
@@ -43,12 +54,14 @@ class FavoritesQuickFilterGroupsTest {
 				"PUBLICATION_STATUS",
 				"CONTENT_RATING",
 				"WORK_RELATIONS",
+				"TAGS",
+				"SOURCES",
 			),
 			filter.groups.map { it.key },
 		)
-		assertEquals(listOf(6, 2, 2, 2), filter.groups.map { it.items.size })
-		assertEquals(3, filter.items.size)
-		assertSame(tagOption, filter.items.last().data)
+		assertEquals(listOf(6, 2, 2, 2, 1, 1), filter.groups.map { it.items.size })
+		assertEquals(2, filter.items.size)
+		assertSame(ListFilterOption.Downloaded, filter.items.first().data)
 	}
 
 	private val testSource = object : ContentSource {

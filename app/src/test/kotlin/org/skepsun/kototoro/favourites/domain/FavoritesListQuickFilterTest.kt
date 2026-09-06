@@ -113,10 +113,11 @@ class FavoritesListQuickFilterTest {
         )
         runCurrent()
         assertNotNull(result)
-        // The full chip set, not just the static macro options (groups carry the
-        // reading-state chips; items carry tags and sources).
-        val data = result!!.items.mapNotNull { it.data as? ListFilterOption }
-        // The full chip set, not just the static macro options.
+        // The full chip set, not just the static macro options: meta filters are
+        // folded into groups while plain chips stay in the flat item list.
+        val quickFilter = checkNotNull(result)
+        val data = (quickFilter.items + quickFilter.groups.flatMap { it.items })
+            .mapNotNull { it.data as? ListFilterOption }
         assertTrue(data.any { it is ListFilterOption.Tag })
         job.cancel()
     }
@@ -146,7 +147,8 @@ class FavoritesListQuickFilterTest {
 
         val result = filter.filterItem(emptySet())
         assertNotNull(result)
-        val data = result!!.items.mapNotNull { it.data as? ListFilterOption }
+        val data = (result!!.items + result.groups.flatMap { it.items })
+            .mapNotNull { it.data as? ListFilterOption }
         assertTrue(data.any { it is ListFilterOption.Tag })
     }
 }

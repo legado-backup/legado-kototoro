@@ -10,8 +10,6 @@ import okio.buffer
 import okio.source
 import org.skepsun.kototoro.core.db.MangaDatabase
 import org.skepsun.kototoro.core.parser.ContentRepository
-import org.skepsun.kototoro.core.replace.ReplaceRule
-import org.skepsun.kototoro.core.replace.ReplaceRuleRepository
 import org.skepsun.kototoro.local.data.LocalStorageCache
 import org.skepsun.kototoro.local.data.NovelCache
 import org.skepsun.kototoro.local.epub.parseEpubChapterReference
@@ -41,11 +39,8 @@ class NovelContentLoader @Inject constructor(
     private val mangaDatabase: MangaDatabase,
     private val epubContentCache: org.skepsun.kototoro.local.epub.EpubContentCache,
     @ApplicationContext private val appContext: Context,
+    private val textProcessor: NovelTextProcessor,
 ) {
-
-    private val replaceRuleRepo: ReplaceRuleRepository by lazy {
-        ReplaceRuleRepository(appContext)
-    }
 
     /**
      * 加载章节内容（带缓存）
@@ -57,8 +52,19 @@ class NovelContentLoader @Inject constructor(
         repository: ContentRepository,
         chapter: ContentChapter,
         pages: List<ContentPage>? = null,
+        scopeName: String = "",
+        replaceRulesEnabled: Boolean = true,
+        disabledReplaceRuleIds: Set<Long> = emptySet(),
     ): String = withContext(Dispatchers.IO) {
-        val flow = loadChapterContentFlow(repository, chapter, pages, forceRefresh = false)
+        val flow = loadChapterContentFlow(
+            repository,
+            chapter,
+            pages,
+            forceRefresh = false,
+            scopeName = scopeName,
+            replaceRulesEnabled = replaceRulesEnabled,
+            disabledReplaceRuleIds = disabledReplaceRuleIds,
+        )
         flow.toList().lastOrNull() ?: ""
     }
 
@@ -71,20 +77,23 @@ class NovelContentLoader @Inject constructor(
         prefetchedPages: List<ContentPage>? = null,
         forceRefresh: Boolean = false,
         priority: Int = org.skepsun.kototoro.core.parser.legado.RequestPriority.FOREGROUND,
-        nextChapterUrl: String? = null
+        nextChapterUrl: String? = null,
+        scopeName: String = "",
+        replaceRulesEnabled: Boolean = true,
+        disabledReplaceRuleIds: Set<Long> = emptySet(),
     ): Flow<String> = kotlinx.coroutines.flow.channelFlow {
         android.util.Log.d("NovelContentLoader", ">>> loadChapterContentFlow START: id=${chapter.id}, priority=$priority, nextChapterUrl=$nextChapterUrl")
 
         // 注入优先级到当前协程上下文，确保流的 upstream (repository.getPagesFlow) 能看到
         withContext(org.skepsun.kototoro.core.parser.legado.RequestPriority(priority)) {
             // 0. 本地/EPUB 逻辑（目前不支持增量，直接一次性返回）
-            loadLocalEpubChapter(chapter)?.let { content ->
+            loadLocalEpubChapter(chapter, scopeName, replaceRulesEnabled, disabledReplaceRuleIds)?.let { content ->
                 send(content)
                 return@withContext
             }
 
             if (org.skepsun.kototoro.local.epub.LocalEpubSource.isEpubUrl(chapter.url)) {
-                send(loadEpubChapterContent(chapter))
+                send(loadEpubChapterContent(chapter, scopeName, replaceRulesEnabled, disabledReplaceRuleIds))
                 return@withContext
             }
 
@@ -98,12 +107,12 @@ class NovelContentLoader @Inject constructor(
                     val uri = android.net.Uri.parse(chapter.url)
                     val pages = org.skepsun.kototoro.local.data.input.LocalContentParser(uri).getPages(chapter)
                     if (pages.isNotEmpty()) {
-                        htmlToPlainText(concatPagesHtml(pages))
+                        processChapterText(htmlToPlainText(concatPagesHtml(pages)), chapter, scopeName, replaceRulesEnabled, disabledReplaceRuleIds)
                     } else {
                         val javaUri = java.net.URI(chapter.url)
                         readLocalHtmlFromUri(javaUri)?.let { html ->
                             val rewritten = rewriteLocalImageSrc(html, javaUri)
-                            htmlToPlainText(rewritten)
+                            processChapterText(htmlToPlainText(rewritten), chapter, scopeName, replaceRulesEnabled, disabledReplaceRuleIds)
                         }
                     }
                 }.getOrNull()
@@ -119,10 +128,10 @@ class NovelContentLoader @Inject constructor(
             if (!forceRefresh) {
                 val cachedFile = cache.get(cacheKey)
                 if (cachedFile != null) {
-                    val content = readTextFromFile(cachedFile)
-                    if (!isErrorContent(content)) {
+                    val sourceText = readTextFromFile(cachedFile)
+                    if (!isErrorContent(sourceText)) {
                         android.util.Log.d("NovelContentLoader", "Cache HIT for $cacheKey")
-                        send(content)
+                        send(processChapterText(sourceText, chapter, scopeName, replaceRulesEnabled, disabledReplaceRuleIds))
                         return@withContext
                     } else {
                         android.util.Log.d("NovelContentLoader", "Cache EXPIRED/INVALID for $cacheKey")
@@ -135,34 +144,34 @@ class NovelContentLoader @Inject constructor(
             // 1. 网络抓取（支持 Flow）
             if (prefetchedPages != null) {
                 val html = concatPagesHtml(prefetchedPages)
-                val plainText = htmlToPlainText(html)
-                send(plainText)
-                if (plainText.isNotBlank() && !isErrorContent(plainText)) {
-                    saveToCache(cacheKey, plainText)
+                val sourceText = htmlToPlainText(html)
+                send(processChapterText(sourceText, chapter, scopeName, replaceRulesEnabled, disabledReplaceRuleIds))
+                if (sourceText.isNotBlank() && !isErrorContent(sourceText)) {
+                    saveToCache(cacheKey, sourceText)
                 }
             } else {
                 repository.getChapterContent(chapter, nextChapterUrl)?.let { raw ->
                     // T4A.3 在线安全边界：进入纯文本出口前先清洗（images 字段原值保留）
                     val chapterContent = raw.copy(html = NovelHtmlNormalizer.sanitize(raw.html))
-                    val plainText = htmlToPlainText(chapterContent.html)
-                    send(plainText)
-                    if (plainText.isNotBlank() && !isErrorContent(plainText)) {
-                        saveToCache(cacheKey, plainText)
+                    val sourceText = htmlToPlainText(chapterContent.html)
+                    send(processChapterText(sourceText, chapter, scopeName, replaceRulesEnabled, disabledReplaceRuleIds))
+                    if (sourceText.isNotBlank() && !isErrorContent(sourceText)) {
+                        saveToCache(cacheKey, sourceText)
                     }
                     return@withContext
                 }
                 var fullHtml = ""
                 repository.getPagesFlow(chapter, nextChapterUrl).collect { currentPages ->
                     val html = concatPagesHtml(currentPages)
-                    val plainText = htmlToPlainText(html)
-                    send(plainText)
+                    val sourceText = htmlToPlainText(html)
+                    send(processChapterText(sourceText, chapter, scopeName, replaceRulesEnabled, disabledReplaceRuleIds))
                     fullHtml = html
                 }
 
                 // 保存最终结果到缓存
-                val finalText = htmlToPlainText(fullHtml)
-                if (finalText.isNotBlank() && !isErrorContent(finalText)) {
-                    saveToCache(cacheKey, finalText)
+                val finalSourceText = htmlToPlainText(fullHtml)
+                if (finalSourceText.isNotBlank() && !isErrorContent(finalSourceText)) {
+                    saveToCache(cacheKey, finalSourceText)
                 }
             }
         }
@@ -188,11 +197,18 @@ class NovelContentLoader @Inject constructor(
         return sb.toString()
     }
 
-    private suspend fun loadLocalEpubChapter(chapter: ContentChapter): String? = withContext(Dispatchers.IO) {
+    private suspend fun loadLocalEpubChapter(
+        chapter: ContentChapter,
+        scopeName: String,
+        replaceRulesEnabled: Boolean,
+        disabledReplaceRuleIds: Set<Long>,
+    ): String? = withContext(Dispatchers.IO) {
         val reference = parseEpubChapterReference(chapter.url) ?: return@withContext null
         val epubFile = resolveEpubFile(appContext, reference.fileReference) ?: return@withContext null
         val parser = org.skepsun.kototoro.local.epub.LocalEpubParser(epubFile, epubContentCache)
-        parser.getChapterContent(reference.chapterIndex)?.let(::htmlToPlainText)
+        parser.getChapterContent(reference.chapterIndex)?.let { html ->
+            processChapterText(htmlToPlainText(html), chapter, scopeName, replaceRulesEnabled, disabledReplaceRuleIds)
+        }
     }
 
     /**
@@ -209,8 +225,19 @@ class NovelContentLoader @Inject constructor(
     suspend fun refreshChapterContent(
         repository: ContentRepository,
         chapter: ContentChapter,
+        scopeName: String = "",
+        replaceRulesEnabled: Boolean = true,
+        disabledReplaceRuleIds: Set<Long> = emptySet(),
     ): String = withContext(Dispatchers.IO) {
-        loadChapterContentInternal(repository, chapter, null, forceRefresh = true)
+        loadChapterContentInternal(
+            repository,
+            chapter,
+            null,
+            forceRefresh = true,
+            scopeName = scopeName,
+            replaceRulesEnabled = replaceRulesEnabled,
+            disabledReplaceRuleIds = disabledReplaceRuleIds,
+        )
     }
 
     private suspend fun loadChapterContentInternal(
@@ -218,18 +245,28 @@ class NovelContentLoader @Inject constructor(
         chapter: ContentChapter,
         prefetchedPages: List<ContentPage>?,
         forceRefresh: Boolean,
+        scopeName: String,
+        replaceRulesEnabled: Boolean,
+        disabledReplaceRuleIds: Set<Long>,
     ): String {
         android.util.Log.d("NovelContentLoader", ">>> loadChapterContentInternal START: id=${chapter.id}, prefetched=${prefetchedPages != null}, force=$forceRefresh")
 
-        loadLocalEpubChapter(chapter)?.let { return it }
+        loadLocalEpubChapter(chapter, scopeName, replaceRulesEnabled, disabledReplaceRuleIds)?.let { return it }
 
         if (org.skepsun.kototoro.local.epub.LocalEpubSource.isEpubUrl(chapter.url)) {
             android.util.Log.d("NovelContentLoader", ">>> loadChapterContentInternal: Loading EPUB chapter: ${chapter.url}")
-            return loadEpubChapterContent(chapter)
+            return loadEpubChapterContent(chapter, scopeName, replaceRulesEnabled, disabledReplaceRuleIds)
         }
 
         // 本地 CBZ/ZIP 小说章节：通过 pages 读取 HTML
-        val localHtml = loadLocalHtmlViaPages(repository, chapter, prefetchedPages)
+        val localHtml = loadLocalHtmlViaPages(
+            repository,
+            chapter,
+            prefetchedPages,
+            scopeName,
+            replaceRulesEnabled,
+            disabledReplaceRuleIds,
+        )
         if (localHtml != null) {
             android.util.Log.d("NovelContentLoader", ">>> loadChapterContentInternal: Loaded via local pages logic. Length=${localHtml.length}")
             return localHtml
@@ -239,8 +276,9 @@ class NovelContentLoader @Inject constructor(
         if (!forceRefresh) {
             // 1. 尝试从缓存读取
             cache.get(cacheKey)?.let { cachedFile ->
-                val content = readTextFromFile(cachedFile)
-                if (!isErrorContent(content)) {
+                val sourceText = readTextFromFile(cachedFile)
+                if (!isErrorContent(sourceText)) {
+                    val content = processChapterText(sourceText, chapter, scopeName, replaceRulesEnabled, disabledReplaceRuleIds)
                     android.util.Log.d("NovelContentLoader", ">>> loadChapterContentInternal: CACHE HIT for $cacheKey, length=${content.length}")
                     return content
                 } else {
@@ -259,10 +297,11 @@ class NovelContentLoader @Inject constructor(
             repository.getChapterContent(chapter)?.let { raw ->
                 // T4A.3 在线安全边界：进入纯文本出口前先清洗（images 字段原值保留）
                 val chapterContent = raw.copy(html = NovelHtmlNormalizer.sanitize(raw.html))
-                val plainText = htmlToPlainText(chapterContent.html)
+                val sourceText = htmlToPlainText(chapterContent.html)
+                val plainText = processChapterText(sourceText, chapter, scopeName, replaceRulesEnabled, disabledReplaceRuleIds)
                 android.util.Log.d("NovelContentLoader", ">>> loadChapterContentInternal: Loaded via getChapterContent. Length=${plainText.length}")
-                if (plainText.isNotBlank() && !isErrorContent(plainText)) {
-                    saveToCache(cacheKey, plainText)
+                if (sourceText.isNotBlank() && !isErrorContent(sourceText)) {
+                    saveToCache(cacheKey, sourceText)
                     android.util.Log.d("NovelContentLoader", ">>> loadChapterContentInternal: Saved to cache: $cacheKey")
                 }
                 return plainText
@@ -275,20 +314,26 @@ class NovelContentLoader @Inject constructor(
         android.util.Log.d("NovelContentLoader", ">>> loadChapterContentInternal: First page URL=${firstUrl?.take(100)}")
 
         val html = if (firstUrl != null) NovelHtmlNormalizer.sanitize(decodeChapterHtml(firstUrl)) else ""
-        val plainText = htmlToPlainText(html)
+        val sourceText = htmlToPlainText(html)
+        val plainText = processChapterText(sourceText, chapter, scopeName, replaceRulesEnabled, disabledReplaceRuleIds)
 
         android.util.Log.d("NovelContentLoader", ">>> loadChapterContentInternal: Content parsed from network. Length=${plainText.length}")
 
         // 3. 保存到缓存
-        if (plainText.isNotBlank() && !isErrorContent(plainText)) {
-            saveToCache(cacheKey, plainText)
+        if (sourceText.isNotBlank() && !isErrorContent(sourceText)) {
+            saveToCache(cacheKey, sourceText)
             android.util.Log.d("NovelContentLoader", ">>> loadChapterContentInternal: Saved to cache: $cacheKey")
         }
 
         return plainText
     }
 
-    private fun loadLocalHtmlChapter(chapter: ContentChapter): String {
+    private suspend fun loadLocalHtmlChapter(
+        chapter: ContentChapter,
+        scopeName: String,
+        replaceRulesEnabled: Boolean,
+        disabledReplaceRuleIds: Set<Long>,
+    ): String {
         return try {
             val uri = java.net.URI(chapter.url)
             val file = java.io.File(uri)
@@ -301,7 +346,7 @@ class NovelContentLoader @Inject constructor(
                 val rewritten = if (baseDir != null) {
                     rewriteLocalImageSrc(html, baseDir)
                 } else html
-                htmlToPlainText(rewritten)
+                processChapterText(htmlToPlainText(rewritten), chapter, scopeName, replaceRulesEnabled, disabledReplaceRuleIds)
             }
         } catch (e: Exception) {
             android.util.Log.e("NovelContentLoader", "Failed to load local chapter ${chapter.url}", e)
@@ -313,6 +358,9 @@ class NovelContentLoader @Inject constructor(
         repository: ContentRepository,
         chapter: ContentChapter,
         prefetchedPages: List<ContentPage>?,
+        scopeName: String,
+        replaceRulesEnabled: Boolean,
+        disabledReplaceRuleIds: Set<Long>,
     ): String? {
         return runCatching {
             val pages = prefetchedPages ?: repository.getPages(chapter)
@@ -332,10 +380,16 @@ class NovelContentLoader @Inject constructor(
                     "<img src=\"$entryName\">"
                 }
                 // 即使是合成HTML也经过转换，确保渲染器能正确处理占位符
-                return htmlToPlainText(syntheticHtml)
+                return processChapterText(htmlToPlainText(syntheticHtml), chapter, scopeName, replaceRulesEnabled, disabledReplaceRuleIds)
             }
 
-            htmlToPlainText(concatPagesHtml(pages))
+            processChapterText(
+                htmlToPlainText(concatPagesHtml(pages)),
+                chapter,
+                scopeName,
+                replaceRulesEnabled,
+                disabledReplaceRuleIds,
+            )
         }.getOrNull()
     }
 
@@ -588,7 +642,12 @@ class NovelContentLoader @Inject constructor(
      * Uses EpubChapterMappingDao to find the correct EPUB file path
      * (supports multiple EPUB files per manga, e.g., Z-Library)
      */
-    private suspend fun loadEpubChapterContent(chapter: ContentChapter): String = withContext(Dispatchers.IO) {
+    private suspend fun loadEpubChapterContent(
+        chapter: ContentChapter,
+        scopeName: String,
+        replaceRulesEnabled: Boolean,
+        disabledReplaceRuleIds: Set<Long>,
+    ): String = withContext(Dispatchers.IO) {
         try {
             // Parse epub:// URL
             val regex = Regex("epub://(-?\\d+)/chapter/(\\d+)")
@@ -632,7 +691,7 @@ class NovelContentLoader @Inject constructor(
 
             android.util.Log.d("NovelContentLoader", "Loaded EPUB chapter, content length: ${content.length}")
 
-            applyReplaceRules(content)
+            processChapterText(content, chapter, scopeName, replaceRulesEnabled, disabledReplaceRuleIds)
         } catch (e: Exception) {
             android.util.Log.e("NovelContentLoader", "Failed to load EPUB chapter", e)
             throw e
@@ -652,7 +711,7 @@ class NovelContentLoader @Inject constructor(
      */
     private fun generateCacheKey(chapter: ContentChapter): String {
         // 只使用章节ID作为key，确保稳定性
-        return "novel_chapter_${chapter.id}"
+        return "novel_chapter_source_v2_${chapter.id}"
     }
 
     /**
@@ -745,17 +804,33 @@ class NovelContentLoader @Inject constructor(
             .lines()
             .map { it.trimEnd() }
             .joinToString("\n")
-            .let { applyReplaceRules(it) }
     }
 
-    private fun applyReplaceRules(text: String): String {
-        val rules = kotlinx.coroutines.runBlocking { replaceRuleRepo.getContentRules() }
-        if (rules.isEmpty()) return text
-        var result = text
-        for (rule in rules) {
-            result = rule.apply(result)
+    private suspend fun processChapterText(
+        text: String,
+        chapter: ContentChapter,
+        scopeName: String,
+        replaceRulesEnabled: Boolean,
+        disabledReplaceRuleIds: Set<Long>,
+    ): String {
+        val processed = textProcessor.process(
+            text = text,
+            context = NovelTextContext(
+                sourceName = chapter.source.name,
+                scopeName = scopeName,
+                chapterId = chapter.id,
+                chapterTitle = chapter.title.orEmpty(),
+                replaceRulesEnabled = replaceRulesEnabled,
+                disabledReplaceRuleIds = disabledReplaceRuleIds,
+            ),
+        )
+        if (processed.failedRuleNames.isNotEmpty()) {
+            android.util.Log.w(
+                "NovelContentLoader",
+                "Text rules failed for chapter=${chapter.id}: ${processed.failedRuleNames.joinToString()}",
+            )
         }
-        return result
+        return processed.text
     }
 
     /**

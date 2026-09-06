@@ -54,7 +54,7 @@ import org.skepsun.kototoro.details.ui.model.DetailsOrigin
 fun AppDownloadsRoute(
     appRouter: AppRouter,
     contentPadding: PaddingValues,
-    viewModel: DownloadsViewModel = hiltViewModel()
+    viewModel: DownloadsViewModel = hiltViewModel(),
 ) {
     val items by viewModel.items.collectAsStateWithLifecycle(emptyList())
     val hasActiveWorks by viewModel.hasActiveWorks.collectAsStateWithLifecycle(false)
@@ -68,6 +68,10 @@ fun AppDownloadsRoute(
     val mainActivity = LocalContext.current as? MainActivity
 
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
+
+    androidx.activity.compose.BackHandler(enabled = inSelectionMode) {
+        selectionIds = emptySet()
+    }
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -352,7 +356,9 @@ fun DownloadItemRow(
                     val statusText = when (item.workState) {
                         WorkInfo.State.ENQUEUED, WorkInfo.State.BLOCKED -> stringResource(R.string.queued)
                         WorkInfo.State.RUNNING -> stringResource(if (item.isPaused) R.string.paused else item.taskKind.activeStatusResId)
-                        WorkInfo.State.SUCCEEDED -> stringResource(item.taskKind.completedStatusResId)
+                        WorkInfo.State.SUCCEEDED -> stringResource(
+                            if (item.isPartial) R.string.download_partial else item.taskKind.completedStatusResId,
+                        )
                         WorkInfo.State.FAILED -> stringResource(R.string.error_occurred)
                         WorkInfo.State.CANCELLED -> stringResource(R.string.canceled)
                     }
