@@ -286,6 +286,10 @@ class LNReaderContentRepository(
         }
     }
 
+    override fun invalidateFilterOptions() {
+        cachedFilterOptions = null
+    }
+
     override suspend fun getRelated(seed: Content): List<Content> {
         return RelatedContentSearchFallback.find(seed) { query ->
             getList(

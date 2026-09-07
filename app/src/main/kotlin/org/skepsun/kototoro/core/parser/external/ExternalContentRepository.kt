@@ -3,6 +3,8 @@ package org.skepsun.kototoro.core.parser.external
 import android.content.ContentResolver
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runInterruptible
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import org.skepsun.kototoro.core.cache.MemoryContentCache
 import org.skepsun.kototoro.core.parser.CachingContentRepository
 import org.skepsun.kototoro.core.util.ext.printStackTraceDebug
@@ -13,7 +15,6 @@ import org.skepsun.kototoro.parsers.model.ContentListFilterCapabilities
 import org.skepsun.kototoro.parsers.model.ContentListFilterOptions
 import org.skepsun.kototoro.parsers.model.ContentPage
 import org.skepsun.kototoro.parsers.model.SortOrder
-import org.skepsun.kototoro.parsers.util.suspendlazy.suspendLazy
 import java.util.EnumSet
 
 class ExternalContentRepository(
@@ -32,7 +33,9 @@ class ExternalContentRepository(
         }.getOrNull()
     }
 
-    private val filterOptions = suspendLazy(initializer = contentSource::getListFilterOptions)
+    @Volatile
+    private var filterOptionsCache: ContentListFilterOptions? = null
+    private val filterOptionsMutex = Mutex()
 
     override val sortOrders: Set<SortOrder>
         get() = capabilities?.availableSortOrders ?: EnumSet.of(SortOrder.POPULARITY)
@@ -44,7 +47,17 @@ class ExternalContentRepository(
         get() = capabilities?.availableSortOrders?.firstOrNull() ?: SortOrder.ALPHABETICAL
         set(value) = Unit
 
-    override suspend fun getFilterOptions(): ContentListFilterOptions = filterOptions.get()
+    override suspend fun getFilterOptions(): ContentListFilterOptions {
+        filterOptionsCache?.let { return it }
+        return filterOptionsMutex.withLock {
+            filterOptionsCache?.let { return it }
+            contentSource.getListFilterOptions().also { filterOptionsCache = it }
+        }
+    }
+
+    override fun invalidateFilterOptions() {
+        filterOptionsCache = null
+    }
 
     override suspend fun getList(offset: Int, order: SortOrder?, filter: ContentListFilter?): List<Content> =
         runInterruptible(Dispatchers.IO) {

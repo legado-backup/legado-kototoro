@@ -68,6 +68,11 @@ interface ContentRepository {
     suspend fun getFilterOptions(): ContentListFilterOptions
 
     /**
+     * 清空 [getFilterOptions] 的缓存（如果实现有缓存）。刷新过滤器面板前调用。
+     */
+    fun invalidateFilterOptions() = Unit
+
+    /**
      * 可选：返回小说章节的完整 HTML 与图片资源信息，用于离线下载。
      * 默认实现返回 null（未实现）。
      */

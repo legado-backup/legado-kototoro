@@ -314,6 +314,7 @@ class FilterCoordinator @Inject constructor(
     }
 
     fun refreshFilters() {
+        repository.invalidateFilterOptions()
         filterRefreshTrigger.value++
     }
 

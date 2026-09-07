@@ -1,6 +1,7 @@
 package org.skepsun.kototoro.core.parser
 
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import okhttp3.Interceptor
 import okhttp3.Response
 import org.skepsun.kototoro.core.cache.MemoryContentCache
@@ -26,7 +27,6 @@ import org.skepsun.kototoro.parsers.model.ContentPage
 import org.skepsun.kototoro.parsers.model.ContentSource
 import org.skepsun.kototoro.parsers.model.SortOrder
 import org.skepsun.kototoro.parsers.util.runCatchingCancellable
-import org.skepsun.kototoro.parsers.util.suspendlazy.suspendLazy
 
 class ParserContentRepository(
     private val parser: ContentParser,
@@ -34,11 +34,9 @@ class ParserContentRepository(
     cache: MemoryContentCache,
 ) : CachingContentRepository(cache), Interceptor {
 
-    private val filterOptionsLazy = suspendLazy(Dispatchers.Default) {
-        withMirrors {
-            parser.getFilterOptions()
-        }
-    }
+    @Volatile
+    private var filterOptionsCache: ContentListFilterOptions? = null
+    private val filterOptionsMutex = Mutex()
 
     override val source: ContentSource
         get() = parser.source
@@ -91,7 +89,19 @@ class ParserContentRepository(
         }.getOrNull()
     }
 
-    override suspend fun getFilterOptions(): ContentListFilterOptions = filterOptionsLazy.get()
+    override suspend fun getFilterOptions(): ContentListFilterOptions {
+        filterOptionsCache?.let { return it }
+        return filterOptionsMutex.withLock {
+            filterOptionsCache?.let { return it }
+            withMirrors {
+                parser.getFilterOptions()
+            }.also { filterOptionsCache = it }
+        }
+    }
+
+    override fun invalidateFilterOptions() {
+        filterOptionsCache = null
+    }
 
     suspend fun getFavicons(): Favicons = withMirrors {
         parser.getFavicons()

@@ -101,6 +101,7 @@
 	<string name="sort_order">Sorting order</string>
 	<string name="sort_and_language">Sorting and language</string>
     <string name="filter">Filter</string>
+    <string name="refresh_filters">Refresh filters</string>
     <string name="saved_filters">Saved filters</string>
     <string name="theme">Appearance mode</string>
     <string name="appearance_mode">Appearance mode</string>

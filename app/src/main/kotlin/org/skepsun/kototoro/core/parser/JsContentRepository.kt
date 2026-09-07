@@ -158,6 +158,10 @@ class JsContentRepository(
         return lastFilterOptions ?: ContentListFilterOptions()
     }
 
+    override fun invalidateFilterOptions() {
+        lastFilterOptions = null
+    }
+
     override suspend fun getRelated(seed: Content): List<Content> = emptyList()
 
     // 复用 ContentHttpClient（带通用 UA/Referer/Cloudflare/RateLimit 拦截器）

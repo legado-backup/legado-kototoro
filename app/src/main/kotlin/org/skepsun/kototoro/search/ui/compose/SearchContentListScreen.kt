@@ -816,6 +816,7 @@ fun AppSearchContentListRoute(
                                 selectedAuthor = authorsProperty.selectedItems.firstOrNull(),
                                 blacklistedTagCount = globalTagBlacklist.size,
                                 onOpenGlobalTagBlacklist = appRouter::openGlobalTagBlacklist,
+                                onRefreshFilters = viewModel.filterCoordinator::refreshFilters,
                                 onSortOrderChange = viewModel.filterCoordinator::setSortOrder,
                                 onToggleTag = { tag, selected, excludeMode ->
                                     if (excludeMode) {
@@ -965,6 +966,7 @@ fun AppSearchContentListRoute(
                             selectedAuthor = authorsProperty.selectedItems.firstOrNull(),
                             blacklistedTagCount = globalTagBlacklist.size,
                             onOpenGlobalTagBlacklist = appRouter::openGlobalTagBlacklist,
+                            onRefreshFilters = viewModel.filterCoordinator::refreshFilters,
                             onSortOrderChange = viewModel.filterCoordinator::setSortOrder,
                             onToggleTag = { tag, selected, excludeMode ->
                                 if (excludeMode) {

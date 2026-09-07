@@ -83,6 +83,7 @@ internal fun SearchFilterPanel(
     selectedAuthor: String?,
     blacklistedTagCount: Int,
     onOpenGlobalTagBlacklist: () -> Unit,
+    onRefreshFilters: () -> Unit,
     onSortOrderChange: (SortOrder) -> Unit,
     onToggleTag: (ContentTag, Boolean, Boolean) -> Unit,
     onToggleContentType: (ContentType, Boolean) -> Unit,
@@ -171,6 +172,15 @@ internal fun SearchFilterPanel(
                 horizontalArrangement = Arrangement.spacedBy(2.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                IconButton(
+                    onClick = onRefreshFilters,
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_sync),
+                        contentDescription = stringResource(R.string.refresh_filters),
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
                 IconButton(
                     onClick = { pendingSaveName = "" },
                     enabled = isSaveEnabled,
