@@ -22,6 +22,9 @@ import org.skepsun.kototoro.core.prefs.AppSettings
 import org.skepsun.kototoro.core.prefs.ReaderTranslationMode
 import org.skepsun.kototoro.core.util.ext.awaitCancellable
 import org.skepsun.kototoro.core.util.ext.printStackTraceDebug
+import org.skepsun.kototoro.core.dictionary.DictPair
+import org.skepsun.kototoro.core.dictionary.AiTranslationOutputParser
+import org.skepsun.kototoro.core.dictionary.TranslationDictionaryPolicy
 import org.skepsun.kototoro.reader.translate.data.ReaderTranslationTextCache
 
 internal class ReaderTranslationCoordinator(
@@ -41,29 +44,47 @@ internal class ReaderTranslationCoordinator(
     private val oneLine: (String, Int) -> String,
 ) {
 
+    private data class ApiBatchResult(
+        val translations: Map<String, String>,
+        val discoveredPairs: List<DictPair> = emptyList(),
+    )
+
+    private data class ApiTranslationResult(
+        val text: String,
+        val discoveredPairs: List<DictPair> = emptyList(),
+    )
+
     suspend fun translateBlocksCached(
         texts: List<String>,
         sourceLang: String,
         targetLang: String,
+        glossary: List<DictPair> = emptyList(),
+        onDiscoveredPairs: suspend (List<DictPair>) -> Unit = {},
     ): Map<String, String> {
         if (texts.isEmpty()) return emptyMap()
         val uniqueTexts = texts.distinct()
+        val glossarySignature = glossary
+            .map { "${it.original.trim()}=${it.translation.trim()}" }
+            .filter { it != "=" }
+            .joinToString(";")
+        fun cacheKey(text: String): String = buildTextCacheKey(text, sourceLang, targetLang) +
+            glossarySignature.takeIf { it.isNotBlank() }?.let { "|dict=$it" }.orEmpty()
         val translated = LinkedHashMap<String, String>(uniqueTexts.size)
         val misses = ArrayList<String>(uniqueTexts.size)
 
         for (text in uniqueTexts) {
-            val cacheKey = buildTextCacheKey(text, sourceLang, targetLang)
-            val cached = textCache[cacheKey]
+            val key = cacheKey(text)
+            val cached = textCache[key]
             if (!cached.isNullOrBlank()) {
                 val sanitized = sanitizeTranslation(cached)
                 if (sanitized.isNotBlank()) {
                     translated[text] = sanitized
                     if (sanitized != cached) {
-                        textCache[cacheKey] = sanitized
+                        textCache[key] = sanitized
                     }
                     log { "translate cache hit src=${oneLine(text, 140)} out=${oneLine(sanitized, 140)}" }
                 } else {
-                    textCache[cacheKey] = ""
+                    textCache[key] = ""
                     misses.add(text)
                     log { "translate cache rejected src=${oneLine(text, 140)} out=${oneLine(sanitized, 140)}" }
                 }
@@ -108,7 +129,7 @@ internal class ReaderTranslationCoordinator(
                         val sanitized = sanitizeTranslation(onnxText)
                         if (isAcceptableTranslation(text, sanitized, sourceLang, targetLang)) {
                             translated[text] = sanitized
-                            textCache[buildTextCacheKey(text, sourceLang, targetLang)] = sanitized
+                            textCache[cacheKey(text)] = sanitized
                             log { "translate onnx hit src=${oneLine(text, 140)} out=${oneLine(sanitized, 140)}" }
                             android.util.Log.d("ReaderTranslationCoordinator", "translateBlocksCached: ONNX accepted")
                         } else {
@@ -157,7 +178,7 @@ internal class ReaderTranslationCoordinator(
                         val sanitized = sanitizeTranslation(raw)
                         if (isAcceptableTranslation(text, sanitized, sourceLang, targetLang)) {
                             translated[text] = sanitized
-                            textCache[buildTextCacheKey(text, sourceLang, targetLang)] = sanitized
+                            textCache[cacheKey(text)] = sanitized
                             log { "translate local hit src=${oneLine(text, 140)} out=${oneLine(sanitized, 140)}" }
                         } else {
                             log { "translate local rejected src=${oneLine(text, 140)} out=${oneLine(sanitized, 140)}" }
@@ -180,14 +201,24 @@ internal class ReaderTranslationCoordinator(
         if (mode != ReaderTranslationMode.LOCAL_ONLY) {
             val needApi = misses.filter { translated[it].isNullOrBlank() }
             if (needApi.isNotEmpty()) {
-                val apiMap = translateBatchByApi(needApi, resolvedSourceLang, targetLang)
+                val apiResult = translateBatchByApi(
+                    texts = needApi,
+                    sourceLang = resolvedSourceLang,
+                    targetLang = targetLang,
+                    glossary = glossary,
+                    cacheSuffix = glossarySignature,
+                )
+                if (apiResult.discoveredPairs.isNotEmpty()) {
+                    onDiscoveredPairs(apiResult.discoveredPairs)
+                }
+                val apiMap = apiResult.translations
                 for (text in needApi) {
                     val apiText = apiMap[text]?.trim().orEmpty()
                     if (apiText.isNotBlank()) {
                         val sanitized = sanitizeTranslation(apiText)
                         if (sanitized.isNotBlank()) {
                             translated[text] = sanitized
-                            textCache[buildTextCacheKey(text, sourceLang, targetLang)] = sanitized
+                            textCache[cacheKey(text)] = sanitized
                             log { "translate api hit src=${oneLine(text, 140)} out=${oneLine(sanitized, 140)}" }
                         } else {
                             log { "translate api rejected src=${oneLine(text, 140)} out=${oneLine(sanitized, 140)}" }
@@ -203,24 +234,89 @@ internal class ReaderTranslationCoordinator(
         return translated
     }
 
+    suspend fun askBook(
+        bookTitle: String,
+        chapterTitle: String,
+        excerpt: String,
+        question: String,
+    ): String {
+        val endpoint = resolveTranslationApiEndpoint()
+        check(endpoint.isNotBlank()) { "translation API endpoint is not configured" }
+        val model = settings.readerTranslationApiModel.trim().ifBlank { defaultOpenAiModel }
+        val prompt = buildString {
+            appendLine("Book: $bookTitle")
+            if (chapterTitle.isNotBlank()) appendLine("Chapter: $chapterTitle")
+            appendLine("Excerpt:")
+            appendLine(excerpt)
+            appendLine()
+            appendLine("Question:")
+            append(question)
+        }
+        val payload = JSONObject().apply {
+            put("model", model)
+            put("temperature", 0.3)
+            if (isDeepSeekEndpoint(endpoint)) {
+                put("thinking", JSONObject().put("type", "disabled"))
+            }
+            put(
+                "messages",
+                JSONArray()
+                    .put(
+                        JSONObject()
+                            .put("role", "system")
+                            .put(
+                                "content",
+                                "You are a helpful reading companion. Answer in Simplified Chinese. " +
+                                    "Use the supplied excerpt as evidence, state uncertainty when needed, " +
+                                    "and do not invent facts outside the excerpt.",
+                            ),
+                    )
+                    .put(JSONObject().put("role", "user").put("content", prompt)),
+            )
+        }
+        return withContext(Dispatchers.IO) {
+            val requestBuilder = Request.Builder()
+                .url(endpoint)
+                .post(payload.toString().toRequestBody(jsonMediaType))
+                .header("Content-Type", "application/json")
+            TranslationApiProviderCatalog.applyAuthentication(
+                requestBuilder,
+                settings.readerTranslationApiProviderPreset,
+                settings.readerTranslationApiKey.trim(),
+            )
+            applyCustomHeaders(requestBuilder)
+            val response = okHttpClient.newCall(requestBuilder.build()).await()
+            response.use { resp ->
+                val rawBody = resp.body.readJsonTextUtf8()
+                check(resp.isSuccessful) { "HTTP ${resp.code}: ${resp.message}" }
+                val json = JSONObject(rawBody)
+                val content = extractOpenAiMessageContent(json).orEmpty().trim()
+                check(content.isNotBlank()) { "empty AI response" }
+                sanitizeTranslation(content).ifBlank { content }
+            }
+        }
+    }
+
     private suspend fun translateBatchByApi(
         texts: List<String>,
         sourceLang: String,
         targetLang: String,
-    ): Map<String, String> {
+        glossary: List<DictPair>,
+        cacheSuffix: String,
+    ): ApiBatchResult {
         val endpoint = resolveTranslationApiEndpoint()
         if (endpoint.isBlank() || texts.isEmpty()) {
-            return texts.associateWith { "" }
+            return ApiBatchResult(texts.associateWith { "" })
         }
 
         return if (isOpenAiCompatibleChatCompletionsEndpoint(endpoint)) {
-            translateBatchByOpenAi(texts, sourceLang, targetLang)
+            translateBatchByOpenAi(texts, sourceLang, targetLang, glossary)
         } else {
             val map = LinkedHashMap<String, String>(texts.size)
             for (text in texts) {
-                map[text] = translateByApi(text, sourceLang, targetLang)
+                map[text] = translateByApi(text, sourceLang, targetLang, cacheSuffix)
             }
-            map
+            ApiBatchResult(map)
         }
     }
 
@@ -228,37 +324,45 @@ internal class ReaderTranslationCoordinator(
         texts: List<String>,
         sourceLang: String,
         targetLang: String,
-    ): Map<String, String> {
-        if (texts.isEmpty()) return emptyMap()
+        glossary: List<DictPair>,
+    ): ApiBatchResult {
+        if (texts.isEmpty()) return ApiBatchResult(emptyMap())
         val mapped = LinkedHashMap<String, String>(texts.size)
+        val discoveredPairs = mutableListOf<DictPair>()
         val batches = buildOpenAiMicroBatches(texts)
         log { "openai batch requests count=${batches.size} texts=${texts.size}" }
         for (batch in batches) {
             if (batch.size == 1) {
                 val text = batch.first()
-                mapped[text] = requestOpenAiSingle(text, sourceLang, targetLang)
+                val result = requestOpenAiSingle(text, sourceLang, targetLang, glossary)
+                mapped[text] = result.text
+                discoveredPairs += result.discoveredPairs
                 continue
             }
-            val batchMap = requestOpenAiBatch(batch, sourceLang, targetLang)
-            if (batchMap.isEmpty()) {
+            val batchMap = requestOpenAiBatch(batch, sourceLang, targetLang, glossary)
+            if (batchMap.translations.isEmpty()) {
                 batch.forEach { text ->
-                    mapped[text] = requestOpenAiSingle(text, sourceLang, targetLang)
+                    val result = requestOpenAiSingle(text, sourceLang, targetLang, glossary)
+                    mapped[text] = result.text
+                    discoveredPairs += result.discoveredPairs
                 }
                 continue
             }
             for (text in batch) {
-                mapped[text] = batchMap[text].orEmpty()
+                mapped[text] = batchMap.translations[text].orEmpty()
             }
+            discoveredPairs += batchMap.discoveredPairs
         }
-        return mapped
+        return ApiBatchResult(mapped, discoveredPairs)
     }
 
     private suspend fun requestOpenAiBatch(
         texts: List<String>,
         sourceLang: String,
         targetLang: String,
-    ): Map<String, String> {
-        if (texts.isEmpty()) return emptyMap()
+        glossary: List<DictPair>,
+    ): ApiBatchResult {
+        if (texts.isEmpty()) return ApiBatchResult(emptyMap())
         val endpoint = resolveTranslationApiEndpoint()
         val apiKey = settings.readerTranslationApiKey.trim()
         val model = settings.readerTranslationApiModel.trim().ifBlank { defaultOpenAiModel }
@@ -268,6 +372,7 @@ internal class ReaderTranslationCoordinator(
             appendLine("Use this array format:")
             appendLine("""[{"id":1,"translation":"..."},{"id":2,"translation":"..."}]""")
             appendLine("Keep ids unchanged. If unreadable or uncertain, use empty translation.")
+            appendGlossary(glossary, texts)
             appendLine()
             appendLine("Texts:")
             texts.forEachIndexed { index, text ->
@@ -304,34 +409,38 @@ internal class ReaderTranslationCoordinator(
                     val rawBody = resp.body.readJsonTextUtf8()
                     if (!resp.isSuccessful) {
                         log { "openai batch request failed code=${resp.code} msg=${resp.message} body=${oneLine(rawBody, 300)}" }
-                        return@use emptyMap()
+                        return@use ApiBatchResult(emptyMap())
                     }
-                    if (rawBody.isBlank()) return@use emptyMap()
-                    val json = runCatching { JSONObject(rawBody) }.getOrNull() ?: return@use emptyMap()
+                    if (rawBody.isBlank()) return@use ApiBatchResult(emptyMap())
+                    val json = runCatching { JSONObject(rawBody) }.getOrNull() ?: return@use ApiBatchResult(emptyMap())
                     val content = extractOpenAiMessageContent(json).orEmpty()
-                    if (content.isBlank()) return@use emptyMap()
+                    if (content.isBlank()) return@use ApiBatchResult(emptyMap())
                     log { "openai batch raw reply=${oneLine(content, 400)}" }
                     val parsed = parseBatchTranslationJson(content, texts.size)
-                    if (parsed.isEmpty()) return@use emptyMap()
-                    LinkedHashMap<String, String>(texts.size).apply {
-                        texts.forEachIndexed { index, text ->
-                            put(text, sanitizeTranslation(parsed[index + 1].orEmpty()))
-                        }
+                    if (parsed.isEmpty()) return@use ApiBatchResult(emptyMap())
+                    val translations = LinkedHashMap<String, String>(texts.size)
+                    val discoveredPairs = mutableListOf<DictPair>()
+                    texts.forEachIndexed { index, text ->
+                        val parsedOutput = AiTranslationOutputParser.parse(parsed[index + 1].orEmpty(), glossary)
+                        translations[text] = sanitizeTranslation(parsedOutput.translatedText)
+                        discoveredPairs += parsedOutput.discoveredPairs
                     }
+                    ApiBatchResult(translations, discoveredPairs)
                 }
             }
         }.onFailure {
             if (it is kotlinx.coroutines.CancellationException) throw it
             log { "openai batch request failed size=${texts.size} err=${it.message.orEmpty()}" }
-        }.getOrDefault(emptyMap())
+        }.getOrDefault(ApiBatchResult(emptyMap()))
     }
 
     private suspend fun requestOpenAiSingle(
         text: String,
         sourceLang: String,
         targetLang: String,
-    ): String {
-        if (text.isBlank()) return ""
+        glossary: List<DictPair>,
+    ): ApiTranslationResult {
+        if (text.isBlank()) return ApiTranslationResult("")
         val endpoint = resolveTranslationApiEndpoint()
         val apiKey = settings.readerTranslationApiKey.trim()
         val model = settings.readerTranslationApiModel.trim().ifBlank { defaultOpenAiModel }
@@ -340,6 +449,8 @@ internal class ReaderTranslationCoordinator(
             appendLine("Only output the translation itself.")
             appendLine("If unreadable or uncertain, output nothing.")
             appendLine("Keep short screams natural.")
+            appendLine("You may optionally use [dictionary] with term -> translation lines, then [result] with the final translation.")
+            appendGlossary(glossary, listOf(text))
             append(text)
         }
         val payload = JSONObject().apply {
@@ -373,20 +484,21 @@ internal class ReaderTranslationCoordinator(
                     val rawBody = resp.body.readJsonTextUtf8()
                     if (!resp.isSuccessful) {
                         log { "openai request failed code=${resp.code} msg=${resp.message} body=${oneLine(rawBody, 300)}" }
-                        return@use ""
+                        return@use ApiTranslationResult("")
                     }
-                    if (rawBody.isBlank()) return@use ""
-                    val json = runCatching { JSONObject(rawBody) }.getOrNull() ?: return@use ""
+                    if (rawBody.isBlank()) return@use ApiTranslationResult("")
+                    val json = runCatching { JSONObject(rawBody) }.getOrNull() ?: return@use ApiTranslationResult("")
                     val content = extractOpenAiMessageContent(json).orEmpty()
-                    if (content.isBlank()) return@use ""
+                    if (content.isBlank()) return@use ApiTranslationResult("")
                     log { "openai raw reply=${oneLine(content, 400)}" }
-                    sanitizeTranslation(content)
+                    val parsed = AiTranslationOutputParser.parse(content, glossary)
+                    ApiTranslationResult(sanitizeTranslation(parsed.translatedText), parsed.discoveredPairs)
                 }
             }
         }.onFailure {
             if (it is kotlinx.coroutines.CancellationException) throw it
             log { "openai single request failed src=${oneLine(text, 140)} err=${it.message.orEmpty()}" }
-        }.getOrDefault("")
+        }.getOrDefault(ApiTranslationResult(""))
     }
 
     private suspend fun translateLocal(text: String, sourceLang: String, targetLang: String): String {
@@ -560,7 +672,12 @@ internal class ReaderTranslationCoordinator(
         }
     }
 
-    private suspend fun translateByApi(text: String, sourceLang: String, targetLang: String): String {
+    private suspend fun translateByApi(
+        text: String,
+        sourceLang: String,
+        targetLang: String,
+        cacheSuffix: String,
+    ): String {
         val endpoint = resolveTranslationApiEndpoint()
         if (endpoint.isBlank()) {
             return ""
@@ -592,7 +709,8 @@ internal class ReaderTranslationCoordinator(
             val sanitized = sanitizeTranslation(body)
             log { "api raw reply=${oneLine(body, 300)} sanitized=${oneLine(sanitized, 140)} src=${oneLine(text, 140)}" }
             if (sanitized.isNotBlank()) {
-                val cacheKey = buildTextCacheKey(text, sourceLang, targetLang)
+                val cacheKey = buildTextCacheKey(text, sourceLang, targetLang) +
+                    cacheSuffix.takeIf { it.isNotBlank() }?.let { "|dict=$it" }.orEmpty()
                 textCache[cacheKey] = sanitized
             }
             return sanitized
@@ -616,6 +734,16 @@ internal class ReaderTranslationCoordinator(
             }
             else -> null
         }
+    }
+
+    private fun StringBuilder.appendGlossary(glossary: List<DictPair>, texts: List<String>) {
+        val relevant = texts
+            .flatMap { text -> TranslationDictionaryPolicy.selectRelevant(text, glossary) }
+            .distinctBy { it.original.trim().lowercase() }
+        if (relevant.isEmpty()) return
+        appendLine()
+        appendLine("Terminology glossary. Keep these translations consistent when the term appears:")
+        relevant.forEach { pair -> appendLine("- ${pair.original} => ${pair.translation}") }
     }
 
     private fun parseBatchTranslationJson(content: String, expectedSize: Int): Map<Int, String> {

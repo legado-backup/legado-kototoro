@@ -171,6 +171,35 @@ class HistoryRepository @Inject constructor(
         }.distinctUntilChanged()
     }
 
+    fun observeRecentBySpace(
+        spaceId: SpaceId? = null,
+        limit: Int = 5,
+        excludeNsfw: Boolean = false,
+    ): Flow<List<Content>> {
+        val invalidations = db.invalidationTracker.createFlow(
+            tables = arrayOf(
+                TABLE_WORK_HISTORY,
+                TABLE_ENTITY_GRAPH_BINDING,
+                TABLE_ENTITY_PREFERENCES,
+                TABLE_MANGA,
+                TABLE_TAGS,
+                TABLE_MANGA_TAGS,
+            ),
+            emitInitialState = true,
+        )
+        val allowedSourceNames = spaceId?.let(spaceContentPolicy::observeAllowedSourceNames) ?: flowOf(null)
+        return combine(invalidations, allowedSourceNames) { _, sources -> sources }
+            .mapLatest { sources ->
+                findRecentContentsByWorkAnchor(
+                    offset = 0,
+                    limit = limit,
+                    spaceId = spaceId,
+                    allowedSourceNames = sources,
+                    excludeNsfw = excludeNsfw,
+                )
+            }.distinctUntilChanged()
+    }
+
     fun observeAll(): Flow<List<Content>> {
         return observeRecentContents(limit = null)
     }

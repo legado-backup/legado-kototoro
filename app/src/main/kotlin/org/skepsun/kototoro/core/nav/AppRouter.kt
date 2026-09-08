@@ -398,6 +398,10 @@ class AppRouter(
         anchor: View? = null,
         contentTypeOverride: ContentType? = null,
         state: ReaderState? = null,
+        markingId: Long? = null,
+        startOffset: Int? = null,
+        endOffset: Int? = null,
+        selectedText: String? = null,
     ) {
         val source = manga.source.unwrap()
         val contentType = contentTypeOverride ?: if (manga.looksLikeLocalVideoContent()) {
@@ -410,6 +414,10 @@ class AppRouter(
                 .putExtra(KEY_MANGA, ParcelableContent(manga))
                 .putExtra(KEY_ID, manga.id)
             state?.let { intent.putExtra(ReaderIntent.EXTRA_STATE, it) }
+            markingId?.let { intent.putExtra(NovelReaderActivity.EXTRA_MARKING_ID, it) }
+            startOffset?.let { intent.putExtra(NovelReaderActivity.EXTRA_START_OFFSET, it) }
+            endOffset?.let { intent.putExtra(NovelReaderActivity.EXTRA_END_OFFSET, it) }
+            selectedText?.let { intent.putExtra(NovelReaderActivity.EXTRA_SELECTED_TEXT, it) }
             startActivity(
                 prepareImmersiveIntent(intent),
                 anchor?.let { scaleUpActivityOptionsOf(it) },

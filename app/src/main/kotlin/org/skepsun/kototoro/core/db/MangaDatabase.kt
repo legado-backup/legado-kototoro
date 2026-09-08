@@ -90,6 +90,7 @@ import org.skepsun.kototoro.core.db.migrations.Migration76To77
 import org.skepsun.kototoro.core.db.migrations.Migration77To78
 import org.skepsun.kototoro.core.db.migrations.Migration78To79
 import org.skepsun.kototoro.core.db.migrations.Migration79To80
+import org.skepsun.kototoro.core.db.migrations.Migration80To81
 import org.skepsun.kototoro.core.db.migrations.Migration1To2
 import org.skepsun.kototoro.core.db.migrations.Migration20To21
 import org.skepsun.kototoro.core.db.migrations.Migration21To22
@@ -162,8 +163,12 @@ import org.skepsun.kototoro.core.replace.ReplaceRule
 import org.skepsun.kototoro.core.replace.ReplaceRuleDao
 import org.skepsun.kototoro.reader.novel.annotation.NovelMarkingDao
 import org.skepsun.kototoro.reader.novel.annotation.NovelMarkingEntity
+import org.skepsun.kototoro.core.dictionary.DictionaryRule
+import org.skepsun.kototoro.core.dictionary.DictionaryRuleDao
+import org.skepsun.kototoro.core.dictionary.TranslationDictionaryDao
+import org.skepsun.kototoro.core.dictionary.TranslationDictionaryEntity
 
-const val DATABASE_VERSION = 80
+const val DATABASE_VERSION = 81
 
 @Database(
     entities = [
@@ -181,6 +186,8 @@ const val DATABASE_VERSION = 80
         SourceOriginEntity::class, SourceRefreshStateEntity::class,
         ReplaceRule::class,
         NovelMarkingEntity::class,
+        DictionaryRule::class,
+        TranslationDictionaryEntity::class,
         // EpubChapterEntity::class,
     ],
     version = DATABASE_VERSION,
@@ -260,6 +267,10 @@ abstract class MangaDatabase : RoomDatabase() {
     abstract fun getReplaceRuleDao(): ReplaceRuleDao
 
     abstract fun getNovelMarkingDao(): NovelMarkingDao
+
+    abstract fun getDictionaryRuleDao(): DictionaryRuleDao
+
+    abstract fun getTranslationDictionaryDao(): TranslationDictionaryDao
 
     // abstract fun getEpubChapterDao(): EpubChapterDao
 }
@@ -345,6 +356,7 @@ fun getDatabaseMigrations(context: Context): Array<Migration> = arrayOf(
     Migration77To78(),
     Migration78To79(),
     Migration79To80(),
+    Migration80To81(),
 )
 
 fun MangaDatabase(context: Context): MangaDatabase = Room

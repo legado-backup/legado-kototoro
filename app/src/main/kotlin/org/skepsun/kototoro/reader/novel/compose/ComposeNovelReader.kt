@@ -17,7 +17,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsIgnoringVisibility
@@ -59,7 +59,9 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerInputScope
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -112,6 +114,7 @@ import org.skepsun.kototoro.reader.ui.compose.whenReaderAnimationsEnabled
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.abs
+import kotlin.math.roundToInt
 
 private val NovelReadingStatusReservedHeight = 28.dp
 
@@ -243,13 +246,38 @@ fun ComposeNovelChapter(
     onTap: ((x: Float, y: Float, viewport: IntSize) -> Unit)? = null,
     onLongPress: (() -> Unit)? = null,
     onTextSelectionChanged: (NovelTextSelection?) -> Unit = {},
+    onMarkingClick: (NovelMarkingEntity, androidx.compose.ui.geometry.Rect) -> Unit = { _, _ -> },
+    textSelectionActive: Boolean = false,
     listState: LazyListState? = null,
+    markingHighlightRange: IntRange? = null,
+    markingHighlightText: String? = null,
     modifier: Modifier = Modifier,
 ) {
+    val actualListState = listState ?: rememberLazyListState()
     val palette = novelReaderPalette(settings.themePreset, isSystemInDarkTheme())
     val contentColor = Color(palette.textColor)
     val blocks = androidx.compose.runtime.remember(content, translation) {
         buildNovelComposeDocument(content, translation)
+    }
+    LaunchedEffect(markingHighlightRange, markingHighlightText, blocks) {
+        val range = markingHighlightRange
+        val cleanText = markingHighlightText?.trim().orEmpty()
+        if (range == null && cleanText.isEmpty()) return@LaunchedEffect
+        val targetBlockIndex = blocks.indexOfFirst { item ->
+            when (item) {
+                is NovelComposeBlock.Text -> {
+                    val textMatch = cleanText.isNotEmpty() && item.original.contains(cleanText)
+                    val rangeMatch = range != null && item.sourceRange?.let {
+                        range.first in it || it.first in range
+                    } ?: false
+                    textMatch || rangeMatch
+                }
+                else -> false
+            }
+        }
+        if (targetBlockIndex >= 0) {
+            actualListState.animateScrollToItem(targetBlockIndex)
+        }
     }
     val direction = if (settings.textDirection == NovelTextDirection.RTL) TextDirection.Rtl else TextDirection.Ltr
     val alignment = if (direction == TextDirection.Rtl) TextAlign.Right else TextAlign.Start
@@ -259,7 +287,7 @@ fun ComposeNovelChapter(
     val statusBarInset = WindowInsets.statusBarsIgnoringVisibility
         .asPaddingValues()
         .calculateTopPadding()
-    val gestureModifier = Modifier.novelReaderGestures(onTap, onLongPress)
+    val gestureModifier = Modifier.novelReaderGestures(onTap, onLongPress, textSelectionActive)
     NovelSelectionContainer(
         chapterId = chapterId,
         chapterIndex = chapterIndex,
@@ -267,7 +295,7 @@ fun ComposeNovelChapter(
         onSelectionChanged = onTextSelectionChanged,
     ) {
         LazyColumn(
-            state = listState ?: rememberLazyListState(),
+            state = actualListState,
             modifier = modifier
                 .fillMaxSize()
                 .background(Color(palette.backgroundColor))
@@ -315,16 +343,22 @@ fun ComposeNovelChapter(
                         )
                         if (block.translation == null) {
                             if (block.inlineImages.isEmpty()) {
-                                Text(
+                                NovelMarkingText(
                                     text = highlightedNovelText(
                                         text = original,
                                         sourceRange = block.sourceRange,
                                         highlightRange = null,
                                         highlightColor = MaterialTheme.colorScheme.secondaryContainer,
                                         markings = novelMarkings.filter { it.chapterId == chapterId },
+                                        transientHighlightRange = markingHighlightRange,
+                                        transientHighlightText = markingHighlightText,
                                     ),
                                     style = style,
                                     textAlign = alignment,
+                                    sourceRange = block.sourceRange,
+                                    markings = novelMarkings.filter { it.chapterId == chapterId },
+                                    onMarkingClick = onMarkingClick,
+                                    textSelectionActive = textSelectionActive,
                                 )
                             } else NovelTextWithImageBlocks(
                                 text = original,
@@ -397,6 +431,8 @@ private fun ComposeNovelChapterWindow(
     onTap: ((x: Float, y: Float, viewport: IntSize) -> Unit)?,
     onLongPress: (() -> Unit)?,
     onTextSelectionChanged: (NovelTextSelection?) -> Unit,
+    onMarkingClick: (NovelMarkingEntity, androidx.compose.ui.geometry.Rect) -> Unit,
+    textSelectionActive: Boolean,
     novelMarkings: List<NovelMarkingEntity>,
     listState: LazyListState,
     modifier: Modifier,
@@ -405,11 +441,33 @@ private fun ComposeNovelChapterWindow(
     onRequestNextChapter: () -> Unit,
     onVisibleProgress: (chapterIndex: Int, blockIndex: Int, blockCount: Int) -> Unit,
     ttsHighlightRange: IntRange?,
+    markingHighlightRange: IntRange? = null,
+    markingHighlightText: String? = null,
+    activeChapterId: Long = 0L,
 ) {
     val palette = novelReaderPalette(settings.themePreset, isSystemInDarkTheme())
     val contentColor = Color(palette.textColor)
     val blocks = androidx.compose.runtime.remember(chapters) {
         buildNovelComposeWindowBlocks(chapters)
+    }
+    LaunchedEffect(markingHighlightRange, markingHighlightText, blocks) {
+        val range = markingHighlightRange
+        val cleanText = markingHighlightText?.trim().orEmpty()
+        if (range == null && cleanText.isEmpty()) return@LaunchedEffect
+        val targetBlockIndex = blocks.indexOfFirst { item ->
+            if (item.chapter.chapterId != activeChapterId) return@indexOfFirst false
+            val textBlock = item.block as? NovelComposeBlock.Text
+            if (textBlock != null) {
+                val textMatch = cleanText.isNotEmpty() && textBlock.original.contains(cleanText)
+                val rangeMatch = range != null && textBlock.sourceRange?.let {
+                    range.first in it || it.first in range
+                } ?: false
+                textMatch || rangeMatch
+            } else false
+        }
+        if (targetBlockIndex >= 0) {
+            listState.animateScrollToItem(targetBlockIndex)
+        }
     }
     val direction = if (settings.textDirection == NovelTextDirection.RTL) TextDirection.Rtl else TextDirection.Ltr
     val alignment = if (direction == TextDirection.Rtl) TextAlign.Right else TextAlign.Start
@@ -419,7 +477,7 @@ private fun ComposeNovelChapterWindow(
     val statusBarInset = WindowInsets.statusBarsIgnoringVisibility
         .asPaddingValues()
         .calculateTopPadding()
-    val gestureModifier = Modifier.novelReaderGestures(onTap, onLongPress)
+    val gestureModifier = Modifier.novelReaderGestures(onTap, onLongPress, textSelectionActive)
     val reportWindowSelection: (NovelTextSelection?) -> Unit = { selection ->
         if (selection == null) {
             onTextSelectionChanged(null)
@@ -498,16 +556,22 @@ private fun ComposeNovelChapterWindow(
                             color = contentColor,
                         )
                         if (block.translation == null) {
-                            if (block.inlineImages.isEmpty()) Text(
+                            if (block.inlineImages.isEmpty()) NovelMarkingText(
                                 text = highlightedNovelText(
                                     text = original,
                                     sourceRange = block.sourceRange,
                                     highlightRange = ttsHighlightRange,
                                     highlightColor = MaterialTheme.colorScheme.secondaryContainer,
                                     markings = novelMarkings.filter { it.chapterId == item.chapter.chapterId },
+                                    transientHighlightRange = if (item.chapter.chapterId == activeChapterId) markingHighlightRange else null,
+                                    transientHighlightText = if (item.chapter.chapterId == activeChapterId) markingHighlightText else null,
                                 ),
                                 style = style,
                                 textAlign = alignment,
+                                sourceRange = block.sourceRange,
+                                markings = novelMarkings.filter { it.chapterId == item.chapter.chapterId },
+                                onMarkingClick = onMarkingClick,
+                                textSelectionActive = textSelectionActive,
                             ) else NovelTextWithImageBlocks(
                                 text = original,
                                 inlineImages = block.inlineImages,
@@ -583,6 +647,8 @@ fun ComposeNovelReaderRoute(
     onDismissMarkings: () -> Unit = {},
     onEditMarkingNote: (NovelMarkingEntity) -> Unit = {},
     onDeleteMarking: (NovelMarkingEntity) -> Unit = {},
+    onDeleteBookmark: (org.skepsun.kototoro.bookmarks.domain.Bookmark) -> Unit = {},
+    onOpenBookmark: (org.skepsun.kototoro.bookmarks.domain.Bookmark) -> Unit = {},
     onBookmark: () -> Unit = {},
     onTts: () -> Unit = {},
     onClearTranslationCache: () -> Unit = {},
@@ -604,6 +670,14 @@ fun ComposeNovelReaderRoute(
     onLongPress: (() -> Unit)? = null,
     onTextSelectionChanged: (NovelTextSelection?) -> Unit = {},
     onTextSelectionAction: (NovelTextSelection, NovelTextSelectionAction) -> Unit = { _, _ -> },
+    onMarkingClick: (NovelMarkingEntity, androidx.compose.ui.geometry.Rect) -> Unit = { _, _ -> },
+    onMarkingAction: (NovelMarkingEntity, NovelTextSelectionAction) -> Unit = { _, _ -> },
+    onOpenMarkingDetail: (NovelMarkingEntity) -> Unit = {},
+    onJumpToMarking: (NovelMarkingEntity) -> Unit = {},
+    excerpt: NovelExcerptData? = null,
+    onDismissExcerpt: () -> Unit = {},
+    onSaveExcerpt: (NovelExcerptData, NovelExcerptConfiguration) -> Unit = { _, _ -> },
+    onShareExcerpt: (NovelExcerptData, NovelExcerptConfiguration) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -620,10 +694,13 @@ fun ComposeNovelReaderRoute(
                 onTap = onTap,
                 onLongPress = onLongPress,
                 onTextSelectionChanged = onTextSelectionChanged,
+                onMarkingClick = onMarkingClick,
+                textSelectionActive = state.textSelection != null || state.selectedMarking != null,
                 onBookmark = onBookmark,
                     onRequestPreviousChapter = onRequestPreviousChapter,
                     onRequestNextChapter = onRequestNextChapter,
                     onPageRequestConsumed = viewModel::consumePageRequest,
+                    onMarkingJumpResolved = viewModel::onMarkingJumpResolved,
                     onPositionChanged = { chapterId, chapterIndex, page, pageCount, charStart, charEnd, text ->
                     viewModel.focusContinuousChapter(chapterIndex)
                     onVisibleChapterChanged(chapterIndex)
@@ -713,6 +790,8 @@ fun ComposeNovelReaderRoute(
                     onTap = onTap,
                     onLongPress = onLongPress,
                     onTextSelectionChanged = onTextSelectionChanged,
+                    onMarkingClick = onMarkingClick,
+                    textSelectionActive = state.textSelection != null || state.selectedMarking != null,
                     listState = listState,
                     modifier = modifier,
                     onVisibleChapterChanged = {
@@ -724,6 +803,9 @@ fun ComposeNovelReaderRoute(
                         onVisibleProgress = onVisibleProgress,
                     ttsHighlightRange = state.ttsHighlightRange,
                     novelMarkings = state.novelMarkings,
+                    markingHighlightRange = state.markingHighlightRange,
+                    markingHighlightText = state.markingHighlightText,
+                    activeChapterId = state.chapterId,
                 )
             } else {
                 ComposeNovelChapter(
@@ -738,8 +820,12 @@ fun ComposeNovelReaderRoute(
                     chapterId = state.chapterId,
                     chapterIndex = state.chapterIndex,
                     onTextSelectionChanged = onTextSelectionChanged,
+                    onMarkingClick = onMarkingClick,
+                    textSelectionActive = state.textSelection != null,
                     novelMarkings = state.novelMarkings,
                     listState = listState,
+                    markingHighlightRange = state.markingHighlightRange,
+                    markingHighlightText = state.markingHighlightText,
                     modifier = modifier,
                 )
             }
@@ -747,16 +833,44 @@ fun ComposeNovelReaderRoute(
         }
     }
     state.textSelection?.let { selection ->
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.BottomCenter,
-        ) {
+        NovelSelectionActionsOverlay(
+            anchorRect = selection.anchorRect,
+            fallbackAnchor = selection.selectionAnchor,
+            onDismiss = {
+                selection.clear()
+                viewModel.publishTextSelection(null)
+            },
+        ) { isAbove ->
             NovelTextSelectionActions(
                 selection = selection,
                 onAction = onTextSelectionAction,
-                modifier = Modifier
-                    .navigationBarsPadding()
-                    .padding(bottom = if (state.controlsVisible) 76.dp else 0.dp),
+                isAbove = isAbove,
+            )
+        }
+    }
+    state.selectedMarking?.let { marking ->
+        NovelSelectionActionsOverlay(
+            anchorRect = state.selectedMarkingRect,
+            fallbackAnchor = state.selectedMarkingAnchor,
+            onDismiss = { viewModel.publishSelectedMarking(null) },
+        ) { isAbove ->
+            NovelTextSelectionActions(
+                selection = NovelTextSelection(
+                    text = marking.selectedText,
+                    chapterId = marking.chapterId,
+                    chapterIndex = marking.chapterIndex,
+                    chapterText = "",
+                    selectionAnchor = state.selectedMarkingAnchor,
+                    anchorRect = state.selectedMarkingRect,
+                    activeMarkingId = marking.id,
+                    clear = { viewModel.publishSelectedMarking(null) },
+                ),
+                isMarking = true,
+                note = marking.note,
+                updatedAt = marking.updatedAt,
+                onAction = { _, action -> onMarkingAction(marking, action) },
+                onExpandNote = { onOpenMarkingDetail(marking) },
+                isAbove = isAbove,
             )
         }
     }
@@ -799,6 +913,9 @@ fun ComposeNovelReaderRoute(
         ComposeNovelChaptersSheet(
             chapters = state.chapters,
             currentIndex = state.currentChapterIndex,
+            markings = state.novelMarkings,
+            bookmarks = state.novelBookmarks,
+            initialTab = state.chaptersSheetInitialTab,
             onDismiss = {
                 viewModel.dismissChapters()
                 onModalDismissed()
@@ -808,6 +925,19 @@ fun ComposeNovelReaderRoute(
                 onModalDismissed()
                 onChapterSelected(it)
             },
+            onJumpToMarking = {
+                viewModel.dismissChapters()
+                onModalDismissed()
+                onJumpToMarking(it)
+            },
+            onOpenBookmark = {
+                viewModel.dismissChapters()
+                onModalDismissed()
+                onOpenBookmark(it)
+            },
+            onEditMarkingNote = onEditMarkingNote,
+            onDeleteMarking = onDeleteMarking,
+            onDeleteBookmark = onDeleteBookmark,
         )
     }
     if (!state.chromeEnabled && state.replaceRulesSheetVisible) {
@@ -826,7 +956,9 @@ fun ComposeNovelReaderRoute(
     }
     if (!state.chromeEnabled && state.markingsSheetVisible) {
         ComposeNovelMarkingsSheet(
+            bookmarks = state.novelBookmarks,
             markings = state.novelMarkings,
+            chapters = state.chapters,
             onDismiss = {
                 viewModel.dismissMarkings()
                 onDismissMarkings()
@@ -834,11 +966,173 @@ fun ComposeNovelReaderRoute(
             },
             onEditNote = onEditMarkingNote,
             onDelete = onDeleteMarking,
+            onDeleteBookmark = onDeleteBookmark,
+            onOpenBookmark = onOpenBookmark,
+            onJumpToMarking = onJumpToMarking,
+        )
+    }
+    excerpt?.let { data ->
+        NovelExcerptSheet(
+            data = data,
+            onDismiss = onDismissExcerpt,
+            onSave = { onSaveExcerpt(data, it) },
+            onShare = { onShareExcerpt(data, it) },
         )
     }
 }
 
-private sealed interface NovelComposePage {
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun NovelSelectionActionsOverlay(
+    anchorRect: androidx.compose.ui.geometry.Rect?,
+    fallbackAnchor: Offset? = null,
+    onDismiss: () -> Unit,
+    content: @Composable (isAbove: Boolean) -> Unit,
+) {
+    if (anchorRect == null && fallbackAnchor == null) return
+
+    val density = LocalDensity.current
+    val statusBarTop = WindowInsets.statusBarsIgnoringVisibility
+        .asPaddingValues()
+        .calculateTopPadding()
+    val topSafeInsetPx = with(density) { statusBarTop.roundToPx() }
+    val spacingPx = with(density) { 6.dp.roundToPx() }
+    val horizontalMarginPx = with(density) { 16.dp.roundToPx() }
+
+    var rootSize by remember { mutableStateOf(IntSize.Zero) }
+    var toolbarSize by remember { mutableStateOf(IntSize.Zero) }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .onSizeChanged { rootSize = it },
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .pointerInput(onDismiss) {
+                    detectNovelSelectionDismissTap(onDismiss)
+                },
+        )
+        val placement = if (rootSize != IntSize.Zero && toolbarSize != IntSize.Zero) {
+            calculateNovelSelectionToolbarPlacement(
+                anchorRect = anchorRect,
+                fallbackAnchor = fallbackAnchor,
+                toolbarSize = toolbarSize,
+                rootSize = rootSize,
+                horizontalMargin = horizontalMarginPx,
+                spacing = spacingPx,
+                topSafeInset = topSafeInsetPx,
+            )
+        } else {
+            null
+        }
+
+        Box(
+            modifier = Modifier
+                .onSizeChanged { toolbarSize = it }
+                .then(
+                    if (placement != null) {
+                        Modifier.offset { placement.offset }
+                    } else {
+                        Modifier.graphicsLayer { alpha = 0f }
+                    },
+                ),
+        ) {
+            content(placement?.isAbove ?: true)
+        }
+    }
+}
+
+internal data class NovelToolbarPlacement(
+    val offset: IntOffset,
+    val isAbove: Boolean,
+)
+
+internal fun calculateNovelSelectionToolbarPlacement(
+    anchorRect: androidx.compose.ui.geometry.Rect?,
+    fallbackAnchor: Offset?,
+    toolbarSize: IntSize,
+    rootSize: IntSize,
+    horizontalMargin: Int = 16,
+    spacing: Int = 6,
+    topSafeInset: Int = 0,
+): NovelToolbarPlacement? {
+    if (rootSize == IntSize.Zero || toolbarSize == IntSize.Zero) return null
+    if (anchorRect == null && fallbackAnchor == null) return null
+
+    val anchorCenterX = anchorRect?.let { it.left + it.width / 2f } ?: fallbackAnchor!!.x
+    val anchorTop = anchorRect?.top ?: fallbackAnchor!!.y
+    val anchorBottom = anchorRect?.bottom ?: fallbackAnchor!!.y
+
+    val minX = horizontalMargin
+    val maxX = (rootSize.width - toolbarSize.width - horizontalMargin).coerceAtLeast(minX)
+    val x = (anchorCenterX - toolbarSize.width / 2f)
+        .roundToInt()
+        .coerceIn(minX, maxX)
+
+    val aboveY = (anchorTop - toolbarSize.height - spacing).roundToInt()
+    val belowY = (anchorBottom + spacing).roundToInt()
+    val minY = (topSafeInset + horizontalMargin).coerceAtLeast(horizontalMargin)
+    val maxY = (rootSize.height - toolbarSize.height - horizontalMargin).coerceAtLeast(minY)
+
+    val isAbove = aboveY >= minY || belowY > maxY
+    val y = if (isAbove) {
+        aboveY.coerceIn(minY, maxY)
+    } else {
+        belowY.coerceIn(minY, maxY)
+    }
+
+    return NovelToolbarPlacement(IntOffset(x, y), isAbove)
+}
+
+internal fun calculateNovelSelectionToolbarOffset(
+    anchorRect: androidx.compose.ui.geometry.Rect?,
+    fallbackAnchor: Offset?,
+    toolbarSize: IntSize,
+    rootSize: IntSize,
+    horizontalMargin: Int = 16,
+    spacing: Int = 6,
+    topSafeInset: Int = 0,
+): IntOffset? = calculateNovelSelectionToolbarPlacement(
+    anchorRect = anchorRect,
+    fallbackAnchor = fallbackAnchor,
+    toolbarSize = toolbarSize,
+    rootSize = rootSize,
+    horizontalMargin = horizontalMargin,
+    spacing = spacing,
+    topSafeInset = topSafeInset,
+)?.offset
+
+private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.detectNovelSelectionDismissTap(
+    onDismiss: () -> Unit,
+) {
+    awaitEachGesture {
+        val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Main)
+        var moved = false
+        var up: Offset? = null
+        do {
+            val event = awaitPointerEvent(PointerEventPass.Main)
+            val change = event.changes.firstOrNull { it.id == down.id } ?: break
+            if (change.pressed) {
+                if (abs(change.position.x - down.position.x) > viewConfiguration.touchSlop ||
+                    abs(change.position.y - down.position.y) > viewConfiguration.touchSlop
+                ) {
+                    moved = true
+                }
+            } else {
+                up = change.position
+                change.consume()
+            }
+        } while (event.changes.any { it.pressed })
+        if (!moved && up != null) {
+            down.consume()
+            onDismiss()
+        }
+    }
+}
+
+internal sealed interface NovelComposePage {
     val chapterId: Long
     val chapterIndex: Int
     val charStart: Int
@@ -928,6 +1222,57 @@ internal fun resolveNovelPageRequest(
     return (chapterStart + request.page).coerceIn(chapterStart, chapterEnd)
 }
 
+internal fun findNovelPageForMarking(
+    pages: List<NovelComposePage>,
+    target: NovelMarkingTarget,
+): Int {
+    val candidatePages = pages.mapIndexedNotNull { index, page ->
+        if (page.chapterId != target.chapterId) return@mapIndexedNotNull null
+        if (page !is NovelComposePage.Text) return@mapIndexedNotNull null
+        index to page
+    }
+    if (candidatePages.isEmpty()) return -1
+
+    val cleanSelected = target.selectedText.trim()
+    if (cleanSelected.isNotEmpty()) {
+        // 1. Full text match
+        val fullMatches = candidatePages.filter { (_, page) ->
+            page.value.text.contains(cleanSelected)
+        }
+        if (fullMatches.isNotEmpty()) {
+            return fullMatches.minByOrNull { (_, page) ->
+                kotlin.math.abs(page.charStart - target.startOffset)
+            }?.first ?: fullMatches.first().first
+        }
+        // 2. Prefix match (in case of page break across pages)
+        if (cleanSelected.length > 8) {
+            val prefix = cleanSelected.take(12.coerceAtMost(cleanSelected.length))
+            val prefixMatches = candidatePages.filter { (_, page) ->
+                page.value.text.contains(prefix)
+            }
+            if (prefixMatches.isNotEmpty()) {
+                return prefixMatches.minByOrNull { (_, page) ->
+                    kotlin.math.abs(page.charStart - target.startOffset)
+                }?.first ?: prefixMatches.first().first
+            }
+        }
+    }
+
+    // 3. Offset range match
+    val offsetMatch = candidatePages.firstOrNull { (_, page) ->
+        target.startOffset in page.charStart..page.charEnd ||
+            page.charStart in target.startOffset..target.endOffset
+    }
+    if (offsetMatch != null) {
+        return offsetMatch.first
+    }
+
+    // 4. Closest page by charStart
+    return candidatePages.minByOrNull { (_, page) ->
+        kotlin.math.abs(page.charStart - target.startOffset)
+    }?.first ?: candidatePages.first().first
+}
+
 internal fun splitNovelPageLineRanges(
     lineCount: Int,
     pageHeightPx: Int,
@@ -961,10 +1306,13 @@ private fun ComposeNovelPagedChapter(
     onTap: ((x: Float, y: Float, viewport: IntSize) -> Unit)?,
     onLongPress: (() -> Unit)?,
     onTextSelectionChanged: (NovelTextSelection?) -> Unit,
+    onMarkingClick: (NovelMarkingEntity, androidx.compose.ui.geometry.Rect) -> Unit,
+    textSelectionActive: Boolean,
     onBookmark: () -> Unit,
     onRequestPreviousChapter: () -> Unit,
     onRequestNextChapter: () -> Unit,
     onPageRequestConsumed: (Long) -> Unit,
+    onMarkingJumpResolved: () -> Unit = {},
     onPositionChanged: (Long, Int, Int, Int, Int, Int, String) -> Unit,
     modifier: Modifier,
 ) {
@@ -999,8 +1347,13 @@ private fun ComposeNovelPagedChapter(
             }
         }
     }
-    val pullToBookmarkModifier = Modifier.pointerInput(state.chapterId, bookmarkThresholdPx) {
+    val pullToBookmarkModifier = Modifier.pointerInput(
+        state.chapterId,
+        bookmarkThresholdPx,
+        textSelectionActive,
+    ) {
         detectDownwardPullGestures(
+            suppressPull = textSelectionActive,
             onPull = { dragAmount ->
                 pullOffsetPx = (pullOffsetPx + dragAmount).coerceIn(0f, maximumPullPx)
             },
@@ -1008,7 +1361,7 @@ private fun ComposeNovelPagedChapter(
             onCancel = { settlePull(toggleBookmark = false) },
         )
     }
-    val gestureModifier = Modifier.novelReaderGestures(onTap, onLongPress)
+    val gestureModifier = Modifier.novelReaderGestures(onTap, onLongPress, textSelectionActive)
     BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
@@ -1117,7 +1470,14 @@ private fun ComposeNovelPagedChapter(
         // 首次创建分页器（冷启动或从滚动模式切回）时，用当前章节的归一化进度定位，
         // 避免进度被重置回章节第一页。rememberPagerState 只读取一次 initialPage，
         // 后续由 settledPageKey / pageRequest 机制接管。
-        val initialPage = remember(displayedResult, state.chapterId, state.position) {
+        val initialPage = remember(displayedResult, state.chapterId, state.position, state.pendingMarkingTarget) {
+            val pendingTarget = state.pendingMarkingTarget
+            if (pendingTarget != null) {
+                val targetPageIndex = findNovelPageForMarking(pages, pendingTarget)
+                if (targetPageIndex >= 0) {
+                    return@remember targetPageIndex
+                }
+            }
             val chapterStart = pages.indexOfFirst {
                 it.chapterId == state.chapterId && it.chapterIndex == state.chapterIndex
             }
@@ -1155,6 +1515,42 @@ private fun ComposeNovelPagedChapter(
                 }
             }
             readyGeneration = displayedGeneration
+        }
+        LaunchedEffect(state.pendingMarkingTarget, displayedResult) {
+            val target = state.pendingMarkingTarget ?: return@LaunchedEffect
+            val pagesList = displayedResult?.pages ?: return@LaunchedEffect
+            if (pagesList.isEmpty()) return@LaunchedEffect
+            if (pagesList.none { it.chapterId == target.chapterId }) return@LaunchedEffect
+            val targetPageIndex = findNovelPageForMarking(pagesList, target)
+            if (targetPageIndex >= 0) {
+                if (targetPageIndex != pagerState.currentPage) {
+                    pagerState.scrollToPage(targetPageIndex)
+                }
+                onMarkingJumpResolved()
+            }
+        }
+        LaunchedEffect(state.markingHighlightRange, state.markingHighlightText, displayedResult) {
+            val range = state.markingHighlightRange ?: return@LaunchedEffect
+            val pagesList = displayedResult?.pages ?: return@LaunchedEffect
+            val target = state.markingHighlightText?.let {
+                NovelMarkingTarget(
+                    chapterId = state.chapterId,
+                    chapterIndex = state.chapterIndex,
+                    startOffset = range.first,
+                    endOffset = range.last + 1,
+                    selectedText = it,
+                )
+            }
+            val targetPageIndex = if (target != null) {
+                findNovelPageForMarking(pagesList, target)
+            } else {
+                pagesList.indexOfFirst {
+                    it.chapterId == state.chapterId && range.first in it.charStart..it.charEnd
+                }
+            }
+            if (targetPageIndex >= 0 && targetPageIndex != pagerState.currentPage) {
+                pagerState.scrollToPage(targetPageIndex)
+            }
         }
         val boundarySwipeThresholdPx = with(density) { 48.dp.toPx() }
         val boundarySwipeConnection = androidx.compose.runtime.remember(
@@ -1370,16 +1766,22 @@ private fun ComposeNovelPagedChapter(
                             renderedStart = page.charStart,
                             renderedText = page.value.text,
                         ) {
-                            Text(
+                            NovelMarkingText(
                                 text = highlightedNovelText(
                                     text = page.value.text,
                                     sourceRange = page.charStart..page.charEnd,
                                     highlightRange = null,
                                     highlightColor = MaterialTheme.colorScheme.secondaryContainer,
                                     markings = state.novelMarkings.filter { it.chapterId == page.chapterId },
+                                    transientHighlightRange = if (page.chapterId == state.chapterId) state.markingHighlightRange else null,
+                                    transientHighlightText = if (page.chapterId == state.chapterId) state.markingHighlightText else null,
                                 ),
                                 style = style,
                                 textAlign = alignment,
+                                sourceRange = page.charStart..page.charEnd,
+                                markings = state.novelMarkings.filter { it.chapterId == page.chapterId },
+                                onMarkingClick = onMarkingClick,
+                                textSelectionActive = textSelectionActive,
                                 modifier = Modifier.fillMaxWidth(),
                             )
                         }
@@ -1675,6 +2077,9 @@ private fun highlightedNovelText(
     highlightRange: IntRange?,
     highlightColor: androidx.compose.ui.graphics.Color,
     markings: List<NovelMarkingEntity> = emptyList(),
+    transientHighlightRange: IntRange? = null,
+    transientHighlightText: String? = null,
+    transientHighlightColor: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color(0xFFFFB74D).copy(alpha = 0.55f),
 ): androidx.compose.ui.text.AnnotatedString {
     return buildAnnotatedString {
         append(text)
@@ -1685,6 +2090,37 @@ private fun highlightedNovelText(
                 if (start <= end) {
                     addStyle(
                         SpanStyle(background = highlightColor),
+                        start = (start - sourceRange.first).coerceIn(0, text.length),
+                        end = (end - sourceRange.first + 1).coerceIn(0, text.length),
+                    )
+                }
+            }
+            if (!transientHighlightText.isNullOrBlank()) {
+                val clean = transientHighlightText.trim()
+                val matchIdx = text.indexOf(clean)
+                if (matchIdx >= 0) {
+                    addStyle(
+                        SpanStyle(background = transientHighlightColor),
+                        start = matchIdx,
+                        end = (matchIdx + clean.length).coerceAtMost(text.length),
+                    )
+                } else if (clean.length > 8) {
+                    val prefix = clean.take(12.coerceAtMost(clean.length))
+                    val prefixIdx = text.indexOf(prefix)
+                    if (prefixIdx >= 0) {
+                        addStyle(
+                            SpanStyle(background = transientHighlightColor),
+                            start = prefixIdx,
+                            end = (prefixIdx + clean.length).coerceAtMost(text.length),
+                        )
+                    }
+                }
+            } else if (transientHighlightRange != null) {
+                val start = maxOf(sourceRange.first, transientHighlightRange.first)
+                val end = minOf(sourceRange.last, transientHighlightRange.last)
+                if (start <= end) {
+                    addStyle(
+                        SpanStyle(background = transientHighlightColor),
                         start = (start - sourceRange.first).coerceIn(0, text.length),
                         end = (end - sourceRange.first + 1).coerceIn(0, text.length),
                     )
@@ -1816,13 +2252,15 @@ private fun NovelComposeImage(
 private fun Modifier.novelReaderGestures(
     onTap: ((x: Float, y: Float, viewport: IntSize) -> Unit)?,
     onLongPress: (() -> Unit)?,
+    textSelectionActive: Boolean,
 ): Modifier = if (onTap == null && onLongPress == null) {
     this
 } else {
-    pointerInput(onTap, onLongPress) {
+    pointerInput(onTap, onLongPress, textSelectionActive) {
         detectUnconsumedNovelReaderGestures(
             onTap = { offset -> onTap?.invoke(offset.x, offset.y, size) },
             onLongPress = { onLongPress?.invoke() },
+            textSelectionActive = textSelectionActive,
         )
     }
 }
@@ -1830,10 +2268,19 @@ private fun Modifier.novelReaderGestures(
 private suspend fun PointerInputScope.detectUnconsumedNovelReaderGestures(
     onTap: (Offset) -> Unit,
     onLongPress: () -> Unit,
+    textSelectionActive: Boolean,
 ) = kotlinx.coroutines.coroutineScope {
     awaitEachGesture {
         val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Final)
         if (down.isConsumed) return@awaitEachGesture
+
+        if (textSelectionActive) {
+            do {
+                val event = awaitPointerEvent(PointerEventPass.Final)
+                if (event.changes.none { it.pressed }) break
+            } while (true)
+            return@awaitEachGesture
+        }
 
         var moved = false
         var cancelled = false
@@ -1870,24 +2317,39 @@ private suspend fun PointerInputScope.detectUnconsumedNovelReaderGestures(
         } while (change.pressed)
 
         longPressJob.cancel()
-        if (!moved && !cancelled && !longPressDispatched) {
+        if (shouldDispatchNovelReaderTap(textSelectionActive, moved, cancelled, longPressDispatched)) {
             upPosition?.let(onTap)
         }
     }
 }
 
+internal fun shouldDispatchNovelReaderTap(
+    textSelectionActive: Boolean,
+    moved: Boolean,
+    cancelled: Boolean,
+    longPressDispatched: Boolean,
+): Boolean = !textSelectionActive && !moved && !cancelled && !longPressDispatched
+
 private suspend fun PointerInputScope.detectDownwardPullGestures(
+    suppressPull: Boolean,
     onPull: (Float) -> Unit,
     onRelease: () -> Unit,
     onCancel: () -> Unit,
 ) {
     awaitEachGesture {
-        val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+        val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Final)
+        if (suppressPull) {
+            do {
+                val event = awaitPointerEvent(PointerEventPass.Final)
+                if (event.changes.none { it.pressed }) break
+            } while (true)
+            return@awaitEachGesture
+        }
         var pullLocked = false
         var released = false
         var previousY = down.position.y
         do {
-            val event = awaitPointerEvent(PointerEventPass.Initial)
+            val event = awaitPointerEvent(PointerEventPass.Final)
             val change = event.changes.firstOrNull { it.id == down.id } ?: break
             if (!change.pressed) {
                 if (pullLocked) {
@@ -1901,6 +2363,7 @@ private suspend fun PointerInputScope.detectDownwardPullGestures(
                 if (pullLocked) event.changes.forEach { it.consume() }
                 break
             }
+            if (change.isConsumed && !pullLocked) break
             if (pullLocked) {
                 val dragAmount = change.position.y - previousY
                 previousY = change.position.y
@@ -1911,7 +2374,14 @@ private suspend fun PointerInputScope.detectDownwardPullGestures(
 
             val totalX = change.position.x - down.position.x
             val totalY = change.position.y - down.position.y
-            if (abs(totalX) <= viewConfiguration.touchSlop && abs(totalY) <= viewConfiguration.touchSlop) {
+            if (!shouldStartNovelBookmarkPull(
+                    textSelectionActive = suppressPull,
+                    pointerConsumed = change.isConsumed,
+                    totalX = totalX,
+                    totalY = totalY,
+                    touchSlop = viewConfiguration.touchSlop,
+                )
+            ) {
                 continue
             }
             if (totalY > viewConfiguration.touchSlop && totalY > abs(totalX)) {
@@ -1926,6 +2396,17 @@ private suspend fun PointerInputScope.detectDownwardPullGestures(
         if (pullLocked && !released) onCancel()
     }
 }
+
+internal fun shouldStartNovelBookmarkPull(
+    textSelectionActive: Boolean,
+    pointerConsumed: Boolean,
+    totalX: Float,
+    totalY: Float,
+    touchSlop: Float,
+): Boolean = !textSelectionActive &&
+    !pointerConsumed &&
+    abs(totalX) <= touchSlop &&
+    abs(totalY) > touchSlop
 
 private suspend fun PointerInputScope.detectImageLongPress(onLongPress: () -> Unit) {
     awaitEachGesture {

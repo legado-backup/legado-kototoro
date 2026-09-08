@@ -470,6 +470,7 @@
     <string name="bookmark_add">添加书签</string>
     <string name="bookmark_remove">删除书签</string>
     <string name="bookmarks">书签</string>
+    <string name="notes">笔记</string>
     <string name="bookmark_removed">书签已删除</string>
     <string name="bookmark_added">书签已添加</string>
     <string name="undo">撤销</string>

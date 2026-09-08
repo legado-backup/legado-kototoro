@@ -8,6 +8,7 @@ import okhttp3.OkHttpClient
 import org.skepsun.kototoro.core.network.ContentHttpClient
 import org.skepsun.kototoro.core.prefs.AppSettings
 import org.skepsun.kototoro.core.util.ext.printStackTraceDebug
+import org.skepsun.kototoro.core.dictionary.TranslationDictionaryRepository
 import org.skepsun.kototoro.reader.translate.data.ReaderTranslationTextCache
 import org.skepsun.kototoro.reader.translate.domain.OnnxReaderTranslationEngine
 import org.skepsun.kototoro.reader.translate.domain.ReaderTranslationCoordinator
@@ -30,6 +31,7 @@ class NovelTranslationProcessor @Inject constructor(
     private val textCache: ReaderTranslationTextCache,
     @ContentHttpClient private val okHttpClient: OkHttpClient,
     private val onnxTranslationEngine: OnnxReaderTranslationEngine,
+    private val translationDictionaryRepository: TranslationDictionaryRepository,
 ) {
 
     private val translationCoordinator by lazy(LazyThreadSafetyMode.NONE) {
@@ -58,6 +60,13 @@ class NovelTranslationProcessor @Inject constructor(
         textCache.clear()
     }
 
+    suspend fun askBook(
+        bookTitle: String,
+        chapterTitle: String,
+        excerpt: String,
+        question: String,
+    ): String = translationCoordinator.askBook(bookTitle, chapterTitle, excerpt, question)
+
     /**
      * 翻译一章内容，返回进度 Flow。
      * 每完成一批段落翻译，emit 一次 NovelChapterTranslation（isComplete=false）。
@@ -69,6 +78,7 @@ class NovelTranslationProcessor @Inject constructor(
         sourceLang: String,
         targetLang: String,
         displayMode: NovelTranslationDisplayMode,
+        bookKey: String? = null,
     ): Flow<NovelChapterTranslation> = flow {
         Log.d(LOG_TAG, "translateChapterFlow start: chapter=$chapterIndex, contentLength=${content.length}, source=$sourceLang, target=$targetLang")
         val paragraphs = NovelParagraphSplitter.split(content)
@@ -79,6 +89,7 @@ class NovelTranslationProcessor @Inject constructor(
             it.type == NovelParagraphType.TEXT && it.originalText.isNotBlank()
         }
         Log.d(LOG_TAG, "Filtered to ${textParagraphs.size} text paragraphs")
+        val glossary = bookKey?.let { translationDictionaryRepository.get(it).pairs }.orEmpty()
 
         val accumulated = mutableMapOf<Int, String>()
 
@@ -89,7 +100,17 @@ class NovelTranslationProcessor @Inject constructor(
             val texts = batch.map { it.originalText }
             Log.d(LOG_TAG, "Translating batch: ${texts.size} texts")
             val results = runCatching {
-                translationCoordinator.translateBlocksCached(texts, sourceLang, targetLang)
+                translationCoordinator.translateBlocksCached(
+                    texts = texts,
+                    sourceLang = sourceLang,
+                    targetLang = targetLang,
+                    glossary = glossary,
+                    onDiscoveredPairs = { pairs ->
+                        if (bookKey != null && pairs.isNotEmpty()) {
+                            translationDictionaryRepository.mergeDiscoveredPairs(bookKey, pairs)
+                        }
+                    },
+                )
             }.onFailure {
                 // 只记录非取消异常
                 if (it !is kotlinx.coroutines.CancellationException) {

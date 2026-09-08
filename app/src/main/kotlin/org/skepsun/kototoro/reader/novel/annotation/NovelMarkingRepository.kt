@@ -10,6 +10,8 @@ class NovelMarkingRepository @Inject constructor(
 
     fun observe(mangaId: Long): Flow<List<NovelMarkingEntity>> = database.getNovelMarkingDao().observe(mangaId)
 
+    fun observeAll(): Flow<List<NovelMarkingEntity>> = database.getNovelMarkingDao().observeAll()
+
     suspend fun delete(marking: NovelMarkingEntity) {
         database.getNovelMarkingDao().deleteById(marking.id)
     }

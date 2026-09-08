@@ -121,6 +121,22 @@ class OnlineFontLoader @Inject constructor(
         }
     }
 
+    fun getCachedFontFile(preset: OnlineFontPreset): File? {
+        val target = File(cacheDirectory, "${preset.cacheName}.${preset.extension}")
+        return if (target.isValidFont(preset)) target else null
+    }
+
+    fun getTypeface(preset: OnlineFontPreset): android.graphics.Typeface? {
+        val file = getCachedFontFile(preset) ?: return null
+        return runCatching { android.graphics.Typeface.createFromFile(file) }.getOrNull()
+    }
+
+    suspend fun downloadFont(preset: OnlineFontPreset): File? = downloadLocks.getValue(preset).withLock {
+        withContext(Dispatchers.IO) {
+            getOrDownload(preset)
+        }
+    }
+
     /**
      * Builds a [FontFamily] from a variable-weight font file by pinning each requested
      * [FontWeight] to its [androidx.compose.ui.text.font.FontVariation] wght axis value.
@@ -253,11 +269,22 @@ class OnlineFontLoader @Inject constructor(
         }
     }
 
-    private companion object {
+    companion object {
         const val TAG = "OnlineFontLoader"
         const val CHANNEL_ID = "font_downloads"
         const val NOTIFICATION_ID = 18041
         const val MIN_FONT_SIZE = 64L * 1024L
         const val MAX_FONT_SIZE = 32L * 1024L * 1024L
+
+        fun getCachedFontFile(context: Context, preset: OnlineFontPreset): File? {
+            val cacheDir = File(context.filesDir, "fonts")
+            val target = File(cacheDir, "${preset.cacheName}.${preset.extension}")
+            return if (target.isFile && target.length() in MIN_FONT_SIZE..MAX_FONT_SIZE) target else null
+        }
+
+        fun getCachedTypeface(context: Context, preset: OnlineFontPreset): android.graphics.Typeface? {
+            val file = getCachedFontFile(context, preset) ?: return null
+            return runCatching { android.graphics.Typeface.createFromFile(file) }.getOrNull()
+        }
     }
 }

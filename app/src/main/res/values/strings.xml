@@ -149,6 +149,8 @@
     <string name="reader_settings">Reader settings</string>
     <string name="replace_rules">Text replacement rules</string>
     <string name="replace_rules_summary">Clean novel text with ordered, source-compatible rules</string>
+    <string name="dictionary_rules">Dictionary rules</string>
+    <string name="dictionary_rules_summary">Manage online dictionaries used by text selection lookup</string>
     <string name="replace_rules_actions">Rule management</string>
     <string name="replace_rule_add">Add rule</string>
     <string name="replace_rule_add_summary">Create a replacement or filtering rule</string>
@@ -832,6 +834,7 @@
     <string name="bookmark_add">Add bookmark</string>
     <string name="bookmark_remove">Remove bookmark</string>
     <string name="bookmarks">Bookmarks</string>
+    <string name="notes">Notes</string>
     <string name="bookmark_removed">Bookmark removed</string>
     <string name="bookmark_added">Bookmark added</string>
     <string name="undo">Undo</string>
@@ -3867,6 +3870,18 @@
     <string name="novel_selection_dictionary">Look up</string>
     <string name="novel_selection_highlight">Highlight</string>
     <string name="novel_selection_note">Note</string>
+    <string name="novel_selection_write_idea">Write idea</string>
+    <string name="novel_selection_excerpt">Book excerpt</string>
+    <string name="novel_selection_ask_ai">Ask AI</string>
+    <string name="novel_selection_listen">Listen</string>
+    <string name="novel_excerpt_saved">Saved to gallery</string>
+    <string name="novel_excerpt_share_failed">Could not create the excerpt image</string>
+    <string name="novel_ai_ask_title">Ask AI about this book</string>
+    <string name="novel_ai_ask_hint">What do you want to ask?</string>
+    <string name="novel_ai_ask_send">Ask</string>
+    <string name="novel_ai_ask_loading">Thinking…</string>
+    <string name="novel_ai_ask_not_configured">Configure an AI translation API first in AI settings</string>
+    <string name="novel_ai_ask_failed">AI request failed: %s</string>
     <string name="novel_selection_highlight_added">Highlight added</string>
     <string name="novel_selection_highlight_removed">Highlight removed</string>
     <string name="novel_selection_position_unavailable">This selection cannot be located in the chapter</string>

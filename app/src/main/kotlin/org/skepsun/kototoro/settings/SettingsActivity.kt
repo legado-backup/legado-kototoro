@@ -148,6 +148,7 @@ import org.skepsun.kototoro.settings.tracker.TrackerSettingsRoute
 import org.skepsun.kototoro.settings.tracker.TrackerSettingsViewModel
 import org.skepsun.kototoro.settings.userdata.BackupsSettingsRoute
 import org.skepsun.kototoro.settings.replace.ReplaceRulesSettingsRoute
+import org.skepsun.kototoro.dictionary.DictionaryRulesActivity
 import org.skepsun.kototoro.settings.utils.RingtonePickContract
 import org.skepsun.kototoro.suggestions.ui.SuggestionsWorker
 import org.skepsun.kototoro.settings.users.TrackingUserAccountSummaryProvider
@@ -1153,6 +1154,9 @@ class SettingsActivity :
                     },
                     onReplaceRulesClick = {
                         openDestination(SettingsDestination.ReplaceRulesSettings, null, false)
+                    },
+                    onDictionaryRulesClick = {
+                        startActivity(Intent(this, DictionaryRulesActivity::class.java))
                     },
                 )
             }

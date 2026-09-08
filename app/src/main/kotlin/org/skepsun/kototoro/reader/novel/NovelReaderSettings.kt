@@ -4,6 +4,8 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.graphics.Color
 import androidx.core.content.edit
+import androidx.preference.PreferenceManager
+import org.skepsun.kototoro.core.prefs.AppSettings
 import org.skepsun.kototoro.core.util.ext.getSafeFloat
 import kotlin.math.roundToInt
 
@@ -88,6 +90,9 @@ data class NovelReaderSettings(
             remove(KEY_TRANSLATION_ENABLED)
             putString(KEY_TRANSLATION_DISPLAY_MODE, normalized.translationDisplayMode.name)
         }
+        PreferenceManager.getDefaultSharedPreferences(context).edit {
+            putBoolean(AppSettings.KEY_READER_CHAPTER_TITLE_BOTTOM, normalized.chapterTitleAtBottom)
+        }
     }
 
     companion object {
@@ -122,6 +127,11 @@ data class NovelReaderSettings(
 
         fun load(context: Context): NovelReaderSettings {
             val prefs = getPrefs(context)
+            val commonPrefs = PreferenceManager.getDefaultSharedPreferences(context)
+            val commonChapterTitleAtBottom = commonPrefs
+                .takeIf { it.contains(AppSettings.KEY_READER_CHAPTER_TITLE_BOTTOM) }
+                ?.getBoolean(AppSettings.KEY_READER_CHAPTER_TITLE_BOTTOM, false)
+            val legacyChapterTitleAtBottom = prefs.getBoolean(KEY_CHAPTER_TITLE_AT_BOTTOM, false)
             return NovelReaderSettings(
                 fontSizeSp = prefs.getSafeFloat(KEY_FONT_SIZE, 17f),
                 lineSpacing = prefs.getSafeFloat(KEY_LINE_SPACING, 1.6f),
@@ -151,7 +161,10 @@ data class NovelReaderSettings(
                 enableDualPage = prefs.getBoolean(KEY_DUAL_PAGE, true),
                 enableFullscreen = prefs.getBoolean(KEY_FULLSCREEN, false),
                 showReadingStatus = prefs.getBoolean(KEY_SHOW_READING_STATUS, true),
-                chapterTitleAtBottom = prefs.getBoolean(KEY_CHAPTER_TITLE_AT_BOTTOM, false),
+                chapterTitleAtBottom = resolveNovelChapterTitleAtBottom(
+                    commonValue = commonChapterTitleAtBottom,
+                    legacyValue = legacyChapterTitleAtBottom,
+                ),
                 isReadingStatusTransparent = prefs.getBoolean(KEY_READING_STATUS_TRANSPARENT, true),
                 enableParagraphIndent = prefs.getBoolean(KEY_PARAGRAPH_INDENT, true),
                 isTranslationEnabled = false,
@@ -191,6 +204,11 @@ data class NovelReaderSettings(
         }
     }
 }
+
+internal fun resolveNovelChapterTitleAtBottom(
+    commonValue: Boolean?,
+    legacyValue: Boolean,
+): Boolean = commonValue ?: legacyValue
 
 enum class NovelReaderThemePreset {
     PAPER,

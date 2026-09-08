@@ -16,6 +16,12 @@ abstract class HistoryDao {
     @Query("SELECT * FROM history ORDER BY updated_at DESC")
     abstract suspend fun findAllEntriesIncludingDeleted(): List<HistoryEntity>
 
+    @Query("SELECT * FROM history WHERE manga_id = :mangaId AND deleted_at = 0 LIMIT 1")
+    abstract suspend fun find(mangaId: Long): HistoryEntity?
+
+    @Query("SELECT * FROM history WHERE manga_id IN (:mangaIds) AND deleted_at = 0")
+    abstract suspend fun findAllByMangaIds(mangaIds: Collection<Long>): List<HistoryEntity>
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     protected abstract suspend fun insert(entity: HistoryEntity): Long
 

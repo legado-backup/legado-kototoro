@@ -69,6 +69,7 @@ fun ReaderSettingsScreen(
     onReaderTapActionsClick: () -> Unit,
     onReaderAiSettingsEntryClick: () -> Unit,
     onReplaceRulesClick: () -> Unit,
+    onDictionaryRulesClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val prefs = settings.prefs
@@ -97,6 +98,9 @@ fun ReaderSettingsScreen(
     val pagesPreloadNames = listOf("1", "2", "0")
     val eInkModeEnabled = settings.observeAsState(AppSettings.KEY_EINK_MODE) { isEInkModeEnabled }.value
     val eInkRefreshEnabled = settings.observeAsState(AppSettings.KEY_EINK_REFRESH) { isEInkRefreshEnabled }.value
+    val chapterTitleAtBottom = settings.observeAsState(AppSettings.KEY_READER_CHAPTER_TITLE_BOTTOM) {
+        isReaderChapterTitleAtBottom
+    }.value
     val readerControlOptions = listOf(
         SettingsChoiceOption(ReaderControl.SCREEN_ROTATION, stringResource(R.string.screen_orientation)),
         SettingsChoiceOption(ReaderControl.SAVE_PAGE, stringResource(R.string.save_page)),
@@ -178,6 +182,15 @@ fun ReaderSettingsScreen(
                                         summary = stringResource(R.string.replace_rules_summary),
                                         iconRes = R.drawable.ic_filter_menu,
                                         onClick = onReplaceRulesClick,
+                                    )
+                                }
+
+                                item {
+                                    SettingsActionPreference(
+                                        title = stringResource(R.string.dictionary_rules),
+                                        summary = stringResource(R.string.dictionary_rules_summary),
+                                        iconRes = R.drawable.ic_book_page,
+                                        onClick = onDictionaryRulesClick,
                                     )
                                 }
 
@@ -375,7 +388,7 @@ fun ReaderSettingsScreen(
                                         title = stringResource(R.string.reader_chapter_title_at_bottom),
                                         summary = stringResource(R.string.reader_chapter_title_at_bottom_summary),
                                         iconRes = R.drawable.ic_format_size,
-                                        checked = novelSettings.chapterTitleAtBottom,
+                                        checked = chapterTitleAtBottom,
                                         onCheckedChange = { enabled ->
                                             updateNovelSettings { copy(chapterTitleAtBottom = enabled) }
                                         },

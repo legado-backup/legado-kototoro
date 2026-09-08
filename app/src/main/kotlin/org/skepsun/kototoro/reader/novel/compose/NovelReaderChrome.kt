@@ -102,6 +102,9 @@ internal data class NovelReaderChromeCallbacks(
     val onDismissMarkings: () -> Unit = {},
     val onEditMarkingNote: (NovelMarkingEntity) -> Unit = {},
     val onDeleteMarking: (NovelMarkingEntity) -> Unit = {},
+    val onJumpToMarking: (NovelMarkingEntity) -> Unit = {},
+    val onOpenBookmark: (org.skepsun.kototoro.bookmarks.domain.Bookmark) -> Unit = {},
+    val onDeleteBookmark: (org.skepsun.kototoro.bookmarks.domain.Bookmark) -> Unit = {},
     val onToggleTranslation: () -> Unit = {},
     val onToggleReplaceRules: () -> Unit = {},
     val onDismissReplaceRules: () -> Unit = {},
@@ -260,11 +263,16 @@ internal fun NovelReaderTopChrome(
                         )
                     }
                 }
-                NovelChapterTitleControl(
-                    state = state,
-                    onClick = callbacks.onShowChapters,
-                    modifier = Modifier.align(Alignment.Center),
-                )
+                if (shouldShowNovelTopChapterTitle(
+                        controlsVisible = state.controlsVisible,
+                        chapterTitleAtBottom = state.settings?.chapterTitleAtBottom == true,
+                    )) {
+                    NovelChapterTitleControl(
+                        state = state,
+                        onClick = callbacks.onShowChapters,
+                        modifier = Modifier.align(Alignment.Center),
+                    )
+                }
                 NovelTopControlSurface(
                     shape = Capsule(),
                     modifier = Modifier.align(Alignment.CenterEnd).size(48.dp),
@@ -281,6 +289,11 @@ internal fun NovelReaderTopChrome(
         }
     }
 }
+
+internal fun shouldShowNovelTopChapterTitle(
+    controlsVisible: Boolean,
+    chapterTitleAtBottom: Boolean,
+): Boolean = controlsVisible && !chapterTitleAtBottom
 
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -463,8 +476,16 @@ internal fun NovelReaderBottomChrome(
         ComposeNovelChaptersSheet(
             chapters = state.chapters,
             currentIndex = state.currentChapterIndex,
+            markings = state.novelMarkings,
+            bookmarks = state.novelBookmarks,
+            initialTab = state.chaptersSheetInitialTab,
             onDismiss = callbacks.onDismissChapters,
             onChapterSelected = callbacks.onChapterSelected,
+            onJumpToMarking = callbacks.onJumpToMarking,
+            onOpenBookmark = callbacks.onOpenBookmark,
+            onEditMarkingNote = callbacks.onEditMarkingNote,
+            onDeleteMarking = callbacks.onDeleteMarking,
+            onDeleteBookmark = callbacks.onDeleteBookmark,
         )
     }
     if (state.replaceRulesSheetVisible) {
@@ -479,10 +500,15 @@ internal fun NovelReaderBottomChrome(
     }
     if (state.markingsSheetVisible) {
         ComposeNovelMarkingsSheet(
+            bookmarks = state.novelBookmarks,
             markings = state.novelMarkings,
+            chapters = state.chapters,
             onDismiss = callbacks.onDismissMarkings,
             onEditNote = callbacks.onEditMarkingNote,
             onDelete = callbacks.onDeleteMarking,
+            onDeleteBookmark = callbacks.onDeleteBookmark,
+            onOpenBookmark = callbacks.onOpenBookmark,
+            onJumpToMarking = callbacks.onJumpToMarking,
         )
     }
     state.settings?.let { settings ->

@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.skepsun.kototoro.parsers.model.ContentChapter
 import org.skepsun.kototoro.reader.novel.NovelChapterTranslation
 import org.skepsun.kototoro.reader.novel.NovelParagraph
 import org.skepsun.kototoro.reader.novel.NovelParagraphType
@@ -227,5 +228,57 @@ class NovelComposeReaderViewModelTest {
 		viewModel.consumePageRequest(handledRequestId)
 
 		assertNull(viewModel.uiState.value.pageRequest)
+	}
+
+	@Test
+	fun `showChapters opens chapters sheet with default CHAPTERS tab`() {
+		val viewModel = NovelComposeReaderViewModel()
+		val chapter = ContentChapter(
+			id = 1L,
+			title = "Chapter 1",
+			volume = 0,
+			number = 1f,
+			url = "ch1",
+			scanlator = null,
+			uploadDate = 0,
+			branch = null,
+			source = org.skepsun.kototoro.core.model.UnknownContentSource,
+		)
+		viewModel.showChapters(listOf(chapter), 0)
+
+		val state = viewModel.uiState.value
+		assertTrue(state.chaptersSheetVisible)
+		assertEquals(NovelChaptersSheetTab.CHAPTERS, state.chaptersSheetInitialTab)
+	}
+
+	@Test
+	fun `showChapters with NOTES tab sets initialTab to NOTES`() {
+		val viewModel = NovelComposeReaderViewModel()
+		val chapter = ContentChapter(
+			id = 1L,
+			title = "Chapter 1",
+			volume = 0,
+			number = 1f,
+			url = "ch1",
+			scanlator = null,
+			uploadDate = 0,
+			branch = null,
+			source = org.skepsun.kototoro.core.model.UnknownContentSource,
+		)
+		viewModel.showChapters(listOf(chapter), 0, initialTab = NovelChaptersSheetTab.NOTES)
+
+		val state = viewModel.uiState.value
+		assertTrue(state.chaptersSheetVisible)
+		assertEquals(NovelChaptersSheetTab.NOTES, state.chaptersSheetInitialTab)
+	}
+
+	@Test
+	fun `showMarkings opens chapters sheet with NOTES tab`() {
+		val viewModel = NovelComposeReaderViewModel()
+		viewModel.showMarkings()
+
+		val state = viewModel.uiState.value
+		assertTrue(state.chaptersSheetVisible)
+		assertEquals(NovelChaptersSheetTab.NOTES, state.chaptersSheetInitialTab)
 	}
 }

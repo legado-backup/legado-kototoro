@@ -12,6 +12,9 @@ interface NovelMarkingDao {
     @Query("SELECT * FROM novel_markings WHERE manga_id = :mangaId ORDER BY chapter_index, start_offset, created_at")
     fun observe(mangaId: Long): Flow<List<NovelMarkingEntity>>
 
+    @Query("SELECT * FROM novel_markings ORDER BY updated_at DESC")
+    fun observeAll(): Flow<List<NovelMarkingEntity>>
+
     @Query(
         "SELECT * FROM novel_markings " +
             "WHERE manga_id = :mangaId AND chapter_id = :chapterId " +

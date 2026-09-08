@@ -1,10 +1,15 @@
 package org.skepsun.kototoro.reader.novel.compose
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import androidx.compose.runtime.Immutable
+import androidx.compose.ui.geometry.Offset
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import org.skepsun.kototoro.reader.novel.NovelChapterTranslation
 import org.skepsun.kototoro.reader.novel.NovelReaderSettings
 import org.skepsun.kototoro.reader.novel.ReadingMode
@@ -12,7 +17,13 @@ import org.skepsun.kototoro.core.replace.ReplaceRule
 import org.skepsun.kototoro.parsers.model.ContentChapter
 import org.skepsun.kototoro.reader.novel.tts.TtsState
 import org.skepsun.kototoro.reader.novel.annotation.NovelMarkingEntity
+import org.skepsun.kototoro.bookmarks.domain.Bookmark
 import javax.inject.Inject
+
+enum class NovelChaptersSheetTab {
+    CHAPTERS,
+    NOTES,
+}
 
 data class NovelComposeReaderUiState(
     val chromeEnabled: Boolean = false,
@@ -35,6 +46,7 @@ data class NovelComposeReaderUiState(
     val replaceRulesSheetVisible: Boolean = false,
     val markingsSheetVisible: Boolean = false,
     val chaptersSheetVisible: Boolean = false,
+    val chaptersSheetInitialTab: NovelChaptersSheetTab = NovelChaptersSheetTab.CHAPTERS,
     val toolsSheetVisible: Boolean = false,
     val chapters: List<ContentChapter> = emptyList(),
     val currentChapterIndex: Int = 0,
@@ -54,7 +66,24 @@ data class NovelComposeReaderUiState(
     val scrollRequest: NovelScrollRequest? = null,
     val continuousChapters: List<NovelComposeChapterContent> = emptyList(),
     val novelMarkings: List<NovelMarkingEntity> = emptyList(),
+    val novelBookmarks: List<Bookmark> = emptyList(),
     val textSelection: NovelTextSelection? = null,
+    val selectedMarking: NovelMarkingEntity? = null,
+    val selectedMarkingAnchor: Offset? = null,
+    val selectedMarkingRect: androidx.compose.ui.geometry.Rect? = null,
+    val pendingMarkingTarget: NovelMarkingTarget? = null,
+    val markingHighlightRange: IntRange? = null,
+    val markingHighlightText: String? = null,
+)
+
+@Immutable
+data class NovelMarkingTarget(
+    val markingId: Long = 0L,
+    val chapterId: Long = 0L,
+    val chapterIndex: Int = 0,
+    val startOffset: Int = 0,
+    val endOffset: Int = 0,
+    val selectedText: String = "",
 )
 
 @Immutable
@@ -176,6 +205,12 @@ class NovelComposeReaderViewModel @Inject constructor() : ViewModel() {
             currentPageEnd = previous.currentPageEnd.takeIf { sameChapter } ?: 0,
             scrollPosition = previous.scrollPosition.takeIf { previous.chapterIndex == chapterIndex },
             imageContext = previous.imageContext.takeIf { sameChapter } ?: NovelComposeImageContext(),
+            textSelection = null,
+            selectedMarking = null,
+            selectedMarkingAnchor = null,
+            pendingMarkingTarget = previous.pendingMarkingTarget,
+            markingHighlightRange = previous.markingHighlightRange,
+            markingHighlightText = previous.markingHighlightText,
                 continuousChapters = if (settings.readingMode == ReadingMode.PAGED) {
                     listOf(chapter)
                 } else {
@@ -281,8 +316,11 @@ class NovelComposeReaderViewModel @Inject constructor() : ViewModel() {
 
     fun focusContinuousChapter(chapterIndex: Int) {
         val state = _uiState.value
-        val chapter = state.continuousChapters.firstOrNull { it.chapterIndex == chapterIndex } ?: return
-        if (state.chapterIndex == chapterIndex) return
+        val chapter = state.continuousChapters.firstOrNull { it.chapterIndex == chapterIndex }
+        val chapterTitle = chapter?.chapterTitle
+            ?: state.chapters.getOrNull(chapterIndex)?.title
+            ?: state.chapterTitle
+        if (state.chapterIndex == chapterIndex && state.chapterTitle == chapterTitle && chapterTitle.isNotBlank()) return
         val chapterWindow = if (state.settings?.readingMode == ReadingMode.PAGED) {
             state.continuousChapters.filter {
                 it.chapterIndex in (chapterIndex - 1)..(chapterIndex + 1)
@@ -291,14 +329,14 @@ class NovelComposeReaderViewModel @Inject constructor() : ViewModel() {
             state.continuousChapters
         }
         _uiState.value = state.copy(
-            chapterId = chapter.chapterId,
-            chapterIndex = chapter.chapterIndex,
-            currentChapterIndex = chapter.chapterIndex,
-            chapterTitle = chapter.chapterTitle,
-            content = chapter.content,
-            translation = chapter.translation,
-            scrollPosition = chapter.scrollPosition,
-            imageContext = chapter.imageContext,
+            chapterId = chapter?.chapterId ?: state.chapterId,
+            chapterIndex = chapterIndex,
+            currentChapterIndex = chapterIndex,
+            chapterTitle = chapterTitle,
+            content = chapter?.content ?: state.content,
+            translation = chapter?.translation ?: state.translation,
+            scrollPosition = chapter?.scrollPosition ?: state.scrollPosition,
+            imageContext = chapter?.imageContext ?: state.imageContext,
             continuousChapters = chapterWindow,
         )
     }
@@ -384,10 +422,11 @@ class NovelComposeReaderViewModel @Inject constructor() : ViewModel() {
 
     fun showMarkings() {
         _uiState.value = _uiState.value.copy(
+            chaptersSheetVisible = true,
+            chaptersSheetInitialTab = NovelChaptersSheetTab.NOTES,
             markingsSheetVisible = true,
             settingsSheetVisible = false,
             replaceRulesSheetVisible = false,
-            chaptersSheetVisible = false,
             toolsSheetVisible = false,
         )
     }
@@ -409,9 +448,14 @@ class NovelComposeReaderViewModel @Inject constructor() : ViewModel() {
         )
     }
 
-    fun showChapters(chapters: List<ContentChapter>, currentChapterIndex: Int) {
+    fun showChapters(
+        chapters: List<ContentChapter>,
+        currentChapterIndex: Int,
+        initialTab: NovelChaptersSheetTab = NovelChaptersSheetTab.CHAPTERS,
+    ) {
         _uiState.value = _uiState.value.copy(
             chaptersSheetVisible = true,
+            chaptersSheetInitialTab = initialTab,
             settingsSheetVisible = false,
             replaceRulesSheetVisible = false,
             markingsSheetVisible = false,
@@ -493,8 +537,103 @@ class NovelComposeReaderViewModel @Inject constructor() : ViewModel() {
         _uiState.value = _uiState.value.copy(novelMarkings = markings)
     }
 
+    fun publishNovelBookmarks(bookmarks: List<Bookmark>) {
+        _uiState.value = _uiState.value.copy(novelBookmarks = bookmarks)
+    }
+
+    private var activeSelectionOwnerId: String? = null
+
     fun publishTextSelection(selection: NovelTextSelection?) {
-        _uiState.value = _uiState.value.copy(textSelection = selection)
+        if (selection == null) {
+            activeSelectionOwnerId = null
+            _uiState.value = _uiState.value.copy(
+                textSelection = null,
+                selectedMarking = null,
+                selectedMarkingAnchor = null,
+                selectedMarkingRect = null,
+            )
+            return
+        }
+        activeSelectionOwnerId = selection.ownerId
+        _uiState.value = _uiState.value.copy(
+            textSelection = selection,
+            selectedMarking = null,
+            selectedMarkingAnchor = null,
+            selectedMarkingRect = null,
+        )
+    }
+
+    fun clearTextSelection(ownerId: String? = null) {
+        if (ownerId == null || activeSelectionOwnerId == ownerId) {
+            publishTextSelection(null)
+        }
+    }
+
+    fun publishSelectedMarking(
+        marking: NovelMarkingEntity?,
+        rect: androidx.compose.ui.geometry.Rect? = null,
+        anchor: Offset? = null,
+    ) {
+        activeSelectionOwnerId = null
+        val resolvedAnchor = anchor ?: rect?.let { Offset(it.left + it.width / 2f, it.top) }
+        _uiState.value = _uiState.value.copy(
+            selectedMarking = marking,
+            textSelection = null,
+            selectedMarkingAnchor = resolvedAnchor,
+            selectedMarkingRect = rect,
+        )
+    }
+
+    fun publishMarkingHighlight(range: IntRange?) {
+        _uiState.value = _uiState.value.copy(markingHighlightRange = range)
+    }
+
+    fun jumpToMarking(target: NovelMarkingTarget) {
+        highlightJob?.cancel()
+        _uiState.value = _uiState.value.copy(
+            pendingMarkingTarget = target,
+            markingHighlightRange = target.startOffset until target.endOffset,
+            markingHighlightText = target.selectedText,
+        )
+        highlightJob = viewModelScope.launch {
+            delay(2500L)
+            if (_uiState.value.markingHighlightText == target.selectedText) {
+                _uiState.value = _uiState.value.copy(
+                    markingHighlightRange = null,
+                    markingHighlightText = null,
+                )
+            }
+        }
+    }
+
+    fun onMarkingJumpResolved() {
+        _uiState.value = _uiState.value.copy(pendingMarkingTarget = null)
+    }
+
+    private var highlightJob: Job? = null
+
+    fun triggerTransientHighlight(range: IntRange?, text: String? = null, durationMs: Long = 1500L) {
+        highlightJob?.cancel()
+        if (range == null && text == null) {
+            _uiState.value = _uiState.value.copy(
+                markingHighlightRange = null,
+                markingHighlightText = null,
+            )
+            return
+        }
+        highlightJob = viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(
+                markingHighlightRange = range,
+                markingHighlightText = text,
+            )
+            delay(durationMs)
+            if (_uiState.value.markingHighlightRange == range && _uiState.value.markingHighlightText == text) {
+                _uiState.value = _uiState.value.copy(
+                    markingHighlightRange = null,
+                    markingHighlightText = null,
+                )
+            }
+        }
     }
 }
 

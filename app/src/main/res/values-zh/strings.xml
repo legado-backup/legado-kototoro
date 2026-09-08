@@ -503,6 +503,7 @@
     <string name="bookmark_remove">删除书签</string>
     <string name="bookmark_removed">书签已删除</string>
     <string name="bookmarks">书签</string>
+    <string name="notes">笔记</string>
     <string name="bookmarks_removed">书签已删除</string>
     <string name="breadcrumbs_separator"><![CDATA[" > "]]></string>
     <string name="brightness">亮度</string>

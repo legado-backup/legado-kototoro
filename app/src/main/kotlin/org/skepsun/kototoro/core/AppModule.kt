@@ -75,6 +75,8 @@ import org.skepsun.kototoro.search.ui.ContentSuggestionsProvider
 import org.skepsun.kototoro.sync.domain.SyncController
 import org.skepsun.kototoro.widget.WidgetUpdater
 import org.skepsun.kototoro.core.replace.ReplaceRuleDao
+import org.skepsun.kototoro.core.dictionary.DictionaryRuleDao
+import org.skepsun.kototoro.core.dictionary.TranslationDictionaryDao
 import org.skepsun.kototoro.core.replace.ReplaceRuleSource
 import org.skepsun.kototoro.reader.novel.DefaultNovelTextProcessor
 import org.skepsun.kototoro.reader.novel.NovelTextProcessor
@@ -128,6 +130,18 @@ interface AppModule {
         @Singleton
         fun provideReplaceRuleDao(database: MangaDatabase): ReplaceRuleDao {
             return database.getReplaceRuleDao()
+        }
+
+        @Provides
+        @Singleton
+        fun provideDictionaryRuleDao(database: MangaDatabase): DictionaryRuleDao {
+            return database.getDictionaryRuleDao()
+        }
+
+        @Provides
+        @Singleton
+        fun provideTranslationDictionaryDao(database: MangaDatabase): TranslationDictionaryDao {
+            return database.getTranslationDictionaryDao()
         }
 
         @Provides

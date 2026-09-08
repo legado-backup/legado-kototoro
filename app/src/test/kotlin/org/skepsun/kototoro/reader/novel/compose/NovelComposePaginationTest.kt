@@ -130,4 +130,121 @@ class NovelComposePaginationTest {
 		assertEquals(false, novelDualPageCurlOnEnd(horizontalDragFraction = 0.1f, isReversed = false))
 		assertEquals(false, novelDualPageCurlOnEnd(horizontalDragFraction = -0.1f, isReversed = true))
 	}
+
+	@Test
+	fun `findNovelPageForMarking locates page by exact text match`() {
+		val pages = listOf(
+			NovelComposePage.Text(
+				value = androidx.compose.ui.text.AnnotatedString("赵客缦胡缨，吴钩霜雪明。银鞍照白马，飒沓如流星。"),
+				chapterId = 100L,
+				chapterIndex = 0,
+				charStart = 0,
+				charEnd = 50,
+			),
+			NovelComposePage.Text(
+				value = androidx.compose.ui.text.AnnotatedString("十步杀一人，千里不留行。事了拂衣去，深藏身与名。"),
+				chapterId = 100L,
+				chapterIndex = 0,
+				charStart = 51,
+				charEnd = 100,
+			),
+			NovelComposePage.Text(
+				value = androidx.compose.ui.text.AnnotatedString("闲过临淄市，脱剑膝前横。将炙啖朱亥，持觞劝侯嬴。"),
+				chapterId = 100L,
+				chapterIndex = 0,
+				charStart = 101,
+				charEnd = 150,
+			),
+		)
+
+		val target = NovelMarkingTarget(
+			markingId = 1L,
+			chapterId = 100L,
+			chapterIndex = 0,
+			startOffset = 60,
+			endOffset = 70,
+			selectedText = "十步杀一人",
+		)
+
+		val pageIndex = findNovelPageForMarking(pages, target)
+		assertEquals(1, pageIndex, "Should jump directly to page 1 which contains '十步杀一人'")
+	}
+
+	@Test
+	fun `findNovelPageForMarking disambiguates duplicate text by proximity to startOffset`() {
+		val pages = listOf(
+			NovelComposePage.Text(
+				value = androidx.compose.ui.text.AnnotatedString("天地玄黄，宇宙洪荒。他说了一声你好。"),
+				chapterId = 100L,
+				chapterIndex = 0,
+				charStart = 0,
+				charEnd = 100,
+			),
+			NovelComposePage.Text(
+				value = androidx.compose.ui.text.AnnotatedString("日月盈昃，辰宿列张。寒来暑往，秋收冬藏。"),
+				chapterId = 100L,
+				chapterIndex = 0,
+				charStart = 101,
+				charEnd = 200,
+			),
+			NovelComposePage.Text(
+				value = androidx.compose.ui.text.AnnotatedString("闰余成岁，律吕调阳。他又说了一声你好。"),
+				chapterId = 100L,
+				chapterIndex = 0,
+				charStart = 201,
+				charEnd = 300,
+			),
+		)
+
+		val target = NovelMarkingTarget(
+			markingId = 2L,
+			chapterId = 100L,
+			chapterIndex = 0,
+			startOffset = 250,
+			endOffset = 252,
+			selectedText = "你好",
+		)
+
+		val pageIndex = findNovelPageForMarking(pages, target)
+		assertEquals(2, pageIndex, "Should disambiguate and select page 2 closest to offset 250")
+	}
+
+	@Test
+	fun `findNovelPageForMarking ignores pages from other chapters`() {
+		val pages = listOf(
+			NovelComposePage.Text(
+				value = androidx.compose.ui.text.AnnotatedString("第一章的文本，包含关键字天地玄黄"),
+				chapterId = 99L,
+				chapterIndex = 0,
+				charStart = 0,
+				charEnd = 50,
+			),
+			NovelComposePage.Text(
+				value = androidx.compose.ui.text.AnnotatedString("第二章的开头"),
+				chapterId = 100L,
+				chapterIndex = 1,
+				charStart = 0,
+				charEnd = 50,
+			),
+			NovelComposePage.Text(
+				value = androidx.compose.ui.text.AnnotatedString("第二章的文本，也包含关键字天地玄黄"),
+				chapterId = 100L,
+				chapterIndex = 1,
+				charStart = 51,
+				charEnd = 100,
+			),
+		)
+
+		val target = NovelMarkingTarget(
+			markingId = 3L,
+			chapterId = 100L,
+			chapterIndex = 1,
+			startOffset = 70,
+			endOffset = 74,
+			selectedText = "天地玄黄",
+		)
+
+		val pageIndex = findNovelPageForMarking(pages, target)
+		assertEquals(2, pageIndex, "Should match page 2 in chapter 100 and ignore chapter 99")
+	}
 }

@@ -1,7 +1,11 @@
 package org.skepsun.kototoro.reader.novel.compose
 
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.unit.IntSize
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 class NovelTextSelectionTest {
@@ -19,5 +23,40 @@ class NovelTextSelectionTest {
     @Test
     fun `returns null for missing selection`() {
         assertNull(findNovelTextRange("只有正文", "不存在"))
+    }
+
+    @Test
+    fun `places toolbar above when sufficient space exists`() {
+        val placement = calculateNovelSelectionToolbarPlacement(
+            anchorRect = Rect(left = 100f, top = 500f, right = 300f, bottom = 540f),
+            fallbackAnchor = null,
+            toolbarSize = IntSize(width = 200, height = 80),
+            rootSize = IntSize(width = 1080, height = 1920),
+            horizontalMargin = 16,
+            spacing = 6,
+            topSafeInset = 48,
+        )
+
+        requireNotNull(placement)
+        assertTrue(placement.isAbove)
+        assertEquals(414, placement.offset.y)
+        assertEquals(100, placement.offset.x)
+    }
+
+    @Test
+    fun `places toolbar below when near top edge`() {
+        val placement = calculateNovelSelectionToolbarPlacement(
+            anchorRect = Rect(left = 100f, top = 60f, right = 300f, bottom = 90f),
+            fallbackAnchor = null,
+            toolbarSize = IntSize(width = 200, height = 80),
+            rootSize = IntSize(width = 1080, height = 1920),
+            horizontalMargin = 16,
+            spacing = 6,
+            topSafeInset = 48,
+        )
+
+        requireNotNull(placement)
+        assertFalse(placement.isAbove)
+        assertEquals(96, placement.offset.y)
     }
 }

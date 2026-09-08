@@ -177,6 +177,12 @@
 			android:windowSoftInputMode="adjustResize"
 			android:label="@string/content_type_novel" />
 		<activity
+			android:name="org.skepsun.kototoro.dictionary.DictionaryActivity"
+			android:exported="false" />
+		<activity
+			android:name="org.skepsun.kototoro.dictionary.DictionaryRulesActivity"
+			android:exported="false" />
+		<activity
 			android:name="org.skepsun.kototoro.settings.sources.jsonsource.edit.JsonSourceEditActivity"
 			android:exported="false"
 			android:label="@string/edit_source" />

@@ -14,11 +14,13 @@ fun ReaderSettingsRoute(
     onReaderTapActionsClick: () -> Unit,
     onReaderAiSettingsEntryClick: () -> Unit,
     onReplaceRulesClick: () -> Unit,
+    onDictionaryRulesClick: () -> Unit,
 ) {
     ReaderSettingsScreen(
         settings = settings,
         onReaderTapActionsClick = onReaderTapActionsClick,
         onReaderAiSettingsEntryClick = onReaderAiSettingsEntryClick,
         onReplaceRulesClick = onReplaceRulesClick,
+        onDictionaryRulesClick = onDictionaryRulesClick,
     )
 }

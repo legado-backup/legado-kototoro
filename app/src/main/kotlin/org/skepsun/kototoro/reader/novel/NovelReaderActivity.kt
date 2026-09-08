@@ -1,17 +1,22 @@
 package org.skepsun.kototoro.reader.novel
 
 import android.content.Intent
+import android.content.ContentValues
 import android.content.res.Configuration
+import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Bundle
 import android.os.SystemClock
-import android.app.SearchManager
+import android.provider.MediaStore
 import android.util.Base64
 import android.view.KeyEvent
 import android.view.View
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.compose.foundation.ComposeFoundationFlags
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
@@ -36,7 +41,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.core.graphics.ColorUtils
+import androidx.core.content.FileProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kyant.backdrop.backdrops.layerBackdrop
@@ -52,6 +60,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.skepsun.kototoro.R
+import org.skepsun.kototoro.BuildConfig
 import org.skepsun.kototoro.core.model.isLocal
 import org.skepsun.kototoro.core.model.parcelable.ParcelableContent
 import org.skepsun.kototoro.core.nav.AppRouter
@@ -63,6 +72,7 @@ import org.skepsun.kototoro.core.prefs.observeAsFlow
 import org.skepsun.kototoro.core.prefs.observeAsState
 import org.skepsun.kototoro.core.replace.ReplaceRule
 import org.skepsun.kototoro.core.replace.ReplaceRuleRepository
+import org.skepsun.kototoro.dictionary.DictionaryActivity
 import org.skepsun.kototoro.core.ui.BaseComposeFullscreenActivity
 import org.skepsun.kototoro.core.ui.compose.LocalLiquidGlassBackdrop
 import org.skepsun.kototoro.core.ui.compose.LocalLiquidGlassLayerBackdrop
@@ -95,9 +105,15 @@ import org.skepsun.kototoro.reader.novel.compose.NovelReaderChromeCallbacks
 import org.skepsun.kototoro.reader.novel.compose.NovelReaderTopChrome
 import org.skepsun.kototoro.reader.novel.compose.NovelTextSelection
 import org.skepsun.kototoro.reader.novel.compose.NovelTextSelectionAction
+import org.skepsun.kototoro.reader.novel.compose.NovelExcerptCardRenderer
+import org.skepsun.kototoro.reader.novel.compose.NovelExcerptConfiguration
+import org.skepsun.kototoro.reader.novel.compose.NovelExcerptData
 import org.skepsun.kototoro.reader.novel.annotation.NovelMarkingEntity
 import org.skepsun.kototoro.reader.novel.annotation.NovelMarkingRepository
 import org.skepsun.kototoro.reader.novel.compose.findNovelTextRange
+import org.skepsun.kototoro.reader.novel.compose.NovelNoteEditorSheet
+import org.skepsun.kototoro.reader.novel.compose.NovelNoteDetailSheet
+import org.skepsun.kototoro.reader.translate.domain.TranslationApiProviderCatalog
 import org.skepsun.kototoro.reader.novel.compose.NovelTtsVoiceDialog
 import org.skepsun.kototoro.reader.novel.compose.NovelTtsVoiceDialogState
 import org.skepsun.kototoro.core.ui.theme.KototoroTheme
@@ -107,11 +123,13 @@ import org.skepsun.kototoro.space.domain.SpaceSwitchOrigin
 import org.skepsun.kototoro.space.ui.SpaceSwitcherDelegate
 import org.skepsun.kototoro.space.domain.awaitCompletion
 import javax.inject.Inject
+import java.io.File
 
 /**
  * 小说阅读器 Activity。正文、阅读控件与 Space FAB 均由单一 Compose 根节点渲染。
  */
 @AndroidEntryPoint
+@OptIn(ExperimentalFoundationApi::class)
 class NovelReaderActivity :
     BaseComposeFullscreenActivity(),
     ReaderControlDelegate.OnInteractionListener {
@@ -120,6 +138,21 @@ class NovelReaderActivity :
     private val snackbarHostState = SnackbarHostState()
     private val contentRoot: View
         get() = window.decorView
+    private var composeNewContextMenuEnabledBeforeReader: Boolean? = null
+
+    private fun disableNovelSystemTextToolbar() {
+        if (composeNewContextMenuEnabledBeforeReader == null) {
+            composeNewContextMenuEnabledBeforeReader = ComposeFoundationFlags.isNewContextMenuEnabled
+        }
+        ComposeFoundationFlags.isNewContextMenuEnabled = false
+    }
+
+    private fun restoreNovelSystemTextToolbar() {
+        composeNewContextMenuEnabledBeforeReader?.let { wasEnabled ->
+            ComposeFoundationFlags.isNewContextMenuEnabled = wasEnabled
+            composeNewContextMenuEnabledBeforeReader = null
+        }
+    }
 
     @Inject
     lateinit var mangaRepositoryFactory: ContentRepository.Factory
@@ -226,9 +259,17 @@ class NovelReaderActivity :
     private var isEInkModeEnabled by mutableStateOf(false)
     private var nextEInkRefreshId = 0L
     private var novelMarkingObservationJob: Job? = null
+    private var novelBookmarkObservationJob: Job? = null
     private var noteSelection: NovelTextSelection? by mutableStateOf(null)
     private var noteMarking: NovelMarkingEntity? by mutableStateOf(null)
     private var noteDraft by mutableStateOf("")
+    private var noteDetailMarking: NovelMarkingEntity? by mutableStateOf(null)
+    private var novelExcerpt: NovelExcerptData? by mutableStateOf(null)
+    private var novelAiJob: Job? = null
+    private var novelAiQuestion by mutableStateOf("")
+    private var novelAiAnswer by mutableStateOf<String?>(null)
+    private var novelAiAskTarget by mutableStateOf<String?>(null)
+    private var novelAiAskLoading by mutableStateOf(false)
 
     private val ttsConnection = object : android.content.ServiceConnection {
         override fun onServiceConnected(name: android.content.ComponentName?, service: android.os.IBinder?) {
@@ -270,6 +311,7 @@ class NovelReaderActivity :
     }
 
     override fun onStart() {
+        disableNovelSystemTextToolbar()
         super.onStart()
         val intent = Intent(this, org.skepsun.kototoro.reader.novel.tts.TtsService::class.java)
         bindService(intent, ttsConnection, android.content.Context.BIND_AUTO_CREATE)
@@ -285,12 +327,31 @@ class NovelReaderActivity :
             unbindService(ttsConnection)
             isTtsBound = false
         }
+        restoreNovelSystemTextToolbar()
+    }
+
+    override fun onDestroy() {
+        restoreNovelSystemTextToolbar()
+        super.onDestroy()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // Compose 1.12 enables the new Android text context menu by default. It bypasses
+        // LocalTextToolbar, so the reader's own selection actions would otherwise be shown
+        // together with the system action bar.
+        disableNovelSystemTextToolbar()
+
         readerSettings = NovelReaderSettings.load(this).copy(isTranslationEnabled = false)
+        settings.observeAsFlow(AppSettings.KEY_READER_CHAPTER_TITLE_BOTTOM) {
+            isReaderChapterTitleAtBottom
+        }.onEach { enabled ->
+            if (readerSettings.chapterTitleAtBottom != enabled) {
+                readerSettings = readerSettings.copy(chapterTitleAtBottom = enabled)
+                composeReaderViewModel.publishSettings(readerSettings)
+            }
+        }.launchIn(lifecycleScope)
         isEInkModeEnabled = settings.isEInkModeEnabled
         settings.observeAsFlow(AppSettings.KEY_EINK_MODE) { isEInkModeEnabled }
             .onEach { enabled ->
@@ -376,6 +437,10 @@ class NovelReaderActivity :
         novelMarkingObservationJob?.cancel()
         novelMarkingObservationJob = novelMarkingRepository.observe(manga.id)
             .onEach(composeReaderViewModel::publishNovelMarkings)
+            .launchIn(lifecycleScope)
+        novelBookmarkObservationJob?.cancel()
+        novelBookmarkObservationJob = bookmarksRepository.observeBookmarks(manga)
+            .onEach(composeReaderViewModel::publishNovelBookmarks)
             .launchIn(lifecycleScope)
         composeReaderViewModel.publishReplaceRulesEnabled(replaceRulesEnabled)
         composeReaderViewModel.publishReplaceRules(
@@ -517,6 +582,9 @@ class NovelReaderActivity :
             onReplaceRuleToggle = ::toggleReplaceRule,
             onEditMarkingNote = ::editNovelMarkingNote,
             onDeleteMarking = ::deleteNovelMarking,
+            onJumpToMarking = ::jumpToNovelMarking,
+            onOpenBookmark = ::openNovelBookmark,
+            onDeleteBookmark = ::deleteNovelBookmark,
             onBookmark = ::onBookmarkClick,
             onTts = ::onTtsClick,
             onClearTranslationCache = ::onClearTranslationCacheClick,
@@ -587,6 +655,16 @@ class NovelReaderActivity :
                             },
                             onTextSelectionChanged = composeReaderViewModel::publishTextSelection,
                             onTextSelectionAction = ::onNovelTextSelectionAction,
+                            onMarkingClick = ::onNovelMarkingClick,
+                            onMarkingAction = ::onNovelMarkingAction,
+                            onOpenMarkingDetail = { noteDetailMarking = it },
+                            onJumpToMarking = ::jumpToNovelMarking,
+                            onDeleteBookmark = ::deleteNovelBookmark,
+                            onOpenBookmark = ::openNovelBookmark,
+                            excerpt = novelExcerpt,
+                            onDismissExcerpt = { novelExcerpt = null },
+                            onSaveExcerpt = ::saveNovelExcerpt,
+                            onShareExcerpt = ::shareNovelExcerpt,
                             onRequestPreviousChapter = ::requestPreviousComposeChapter,
                             onRequestNextChapter = ::requestNextComposeChapter,
                             onVisibleChapterChanged = ::onComposeVisibleChapterChanged,
@@ -654,95 +732,114 @@ class NovelReaderActivity :
                                 animationsEnabled = !isEInkModeEnabled,
                             )
                         }
-                        if (!state.settingsSheetVisible &&
-                            !state.replaceRulesSheetVisible &&
-                            !state.markingsSheetVisible &&
-                            !state.chaptersSheetVisible
-                        ) {
-                            spaceSwitcherDelegate.Fab(
-                                modifier = Modifier.fillMaxSize(),
-                            )
-                        }
+
                         ttsVoiceDialogState?.let { NovelTtsVoiceDialog(it) }
                         noteSelection?.let { selection ->
-                            AlertDialog(
-                                onDismissRequest = {
+                            NovelNoteEditorSheet(
+                                title = getString(R.string.novel_selection_note_title),
+                                quoteText = selection.text,
+                                initialNote = noteDraft,
+                                onDismiss = {
                                     noteSelection = null
                                     noteDraft = ""
                                 },
-                                title = { Text(getString(R.string.novel_selection_note_title)) },
-                                text = {
-                                    TextField(
-                                        value = noteDraft,
-                                        onValueChange = { noteDraft = it },
-                                        placeholder = {
-                                            Text(getString(R.string.novel_selection_note_hint))
-                                        },
-                                        minLines = 3,
-                                        maxLines = 6,
-                                    )
-                                },
-                                confirmButton = {
-                                    TextButton(
-                                        enabled = noteDraft.isNotBlank(),
-                                        onClick = {
-                                            saveNovelSelectionNote(selection, noteDraft.trim())
-                                            noteSelection = null
-                                            noteDraft = ""
-                                        },
-                                    ) {
-                                        Text(getString(R.string.save))
-                                    }
-                                },
-                                dismissButton = {
-                                    TextButton(
-                                        onClick = {
-                                            noteSelection = null
-                                            noteDraft = ""
-                                        },
-                                    ) {
-                                        Text(getString(R.string.cancel))
-                                    }
+                                onSave = { savedNote ->
+                                    saveNovelSelectionNote(selection, savedNote)
+                                    noteSelection = null
+                                    noteDraft = ""
                                 },
                             )
                         }
                         noteMarking?.let { marking ->
-                            AlertDialog(
-                                onDismissRequest = {
+                            NovelNoteEditorSheet(
+                                title = getString(
+                                    if (marking.note.isNullOrBlank()) {
+                                        R.string.novel_selection_note_title
+                                    } else {
+                                        R.string.novel_marking_edit_note_title
+                                    },
+                                ),
+                                quoteText = marking.selectedText,
+                                initialNote = noteDraft,
+                                onDismiss = {
                                     noteMarking = null
                                     noteDraft = ""
                                 },
-                                title = { Text(getString(R.string.novel_marking_edit_note_title)) },
+                                onSave = { savedNote ->
+                                    saveNovelMarkingNote(marking, savedNote.takeIf { it.isNotBlank() })
+                                    noteMarking = null
+                                    noteDraft = ""
+                                },
+                            )
+                        }
+                        noteDetailMarking?.let { marking ->
+                            NovelNoteDetailSheet(
+                                marking = marking,
+                                onDismiss = { noteDetailMarking = null },
+                                onEdit = {
+                                    val target = marking
+                                    noteDetailMarking = null
+                                    editNovelMarkingNote(target)
+                                },
+                                onExcerpt = {
+                                    val target = marking
+                                    noteDetailMarking = null
+                                    showNovelExcerpt(target.selectedText, target.note, target.chapterIndex)
+                                },
+                                onJumpToText = {
+                                    val target = marking
+                                    noteDetailMarking = null
+                                    jumpToNovelMarking(target)
+                                },
+                                onDelete = {
+                                    val target = marking
+                                    noteDetailMarking = null
+                                    deleteNovelMarking(target)
+                                },
+                            )
+                        }
+                        novelAiAskTarget?.let { target ->
+                            AlertDialog(
+                                onDismissRequest = ::dismissNovelAiAsk,
+                                title = { Text(getString(R.string.novel_ai_ask_title)) },
                                 text = {
-                                    TextField(
-                                        value = noteDraft,
-                                        onValueChange = { noteDraft = it },
-                                        placeholder = {
-                                            Text(getString(R.string.novel_selection_note_hint))
-                                        },
-                                        minLines = 3,
-                                        maxLines = 6,
-                                    )
+                                    Column(
+                                        modifier = Modifier.verticalScroll(rememberScrollState()),
+                                    ) {
+                                        TextField(
+                                            value = novelAiQuestion,
+                                            onValueChange = { novelAiQuestion = it },
+                                            placeholder = {
+                                                Text(getString(R.string.novel_ai_ask_hint))
+                                            },
+                                            enabled = !novelAiAskLoading,
+                                            minLines = 2,
+                                            maxLines = 5,
+                                        )
+                                        if (novelAiAskLoading) {
+                                            Text(
+                                                text = getString(R.string.novel_ai_ask_loading),
+                                                modifier = Modifier.padding(top = 12.dp),
+                                            )
+                                        }
+                                        novelAiAnswer?.let { answer ->
+                                            Text(
+                                                text = answer,
+                                                modifier = Modifier.padding(top = 12.dp),
+                                            )
+                                        }
+                                    }
                                 },
                                 confirmButton = {
                                     TextButton(
-                                        enabled = noteDraft.isNotBlank(),
-                                        onClick = {
-                                            saveNovelMarkingNote(marking, noteDraft.trim())
-                                            noteMarking = null
-                                            noteDraft = ""
-                                        },
+                                        enabled = novelAiQuestion.isNotBlank() && !novelAiAskLoading,
+                                        onClick = { askNovelAi(target) },
                                     ) {
-                                        Text(getString(R.string.save))
+                                        Text(getString(R.string.novel_ai_ask_send))
                                     }
                                 },
                                 dismissButton = {
-                                    TextButton(
-                                        onClick = {
-                                            noteMarking = null
-                                            noteDraft = ""
-                                        },
-                                    ) {
+                                    TextButton(onClick = ::dismissNovelAiAsk) {
                                         Text(getString(R.string.cancel))
                                     }
                                 },
@@ -755,7 +852,7 @@ class NovelReaderActivity :
                                 .navigationBarsPadding()
                                 .padding(16.dp),
                         )
-                        spaceSwitcherDelegate.Overlays()
+
                         }
                         EInkRefreshOverlay(eInkRefresh) { consumedId ->
                             if (eInkRefresh?.id == consumedId) eInkRefresh = null
@@ -972,6 +1069,7 @@ class NovelReaderActivity :
                     sourceLang = sourceLang,
                     targetLang = targetLang,
                     displayMode = displayMode,
+                    bookKey = "${manga.source.name}:${manga.id}",
                 ).collect { translation ->
                     android.util.Log.d("NovelReaderActivity", "Translation progress: complete=${translation.isComplete}, translations=${translation.translations.size}")
                     chapterTranslations.put(translation.chapterIndex, translation)
@@ -1105,6 +1203,9 @@ class NovelReaderActivity :
                 openNovelDictionary(selection.text)
                 clearNovelTextSelection(selection)
             }
+            NovelTextSelectionAction.BOOKMARK -> {
+                toggleNovelSelectionBookmark(selection)
+            }
             NovelTextSelectionAction.HIGHLIGHT -> {
                 toggleNovelMarking(selection)
             }
@@ -1117,7 +1218,88 @@ class NovelReaderActivity :
                     clearNovelTextSelection(selection)
                 }
             }
+            NovelTextSelectionAction.EXCERPT -> {
+                showNovelExcerpt(selection.text, null, selection.chapterIndex)
+                clearNovelTextSelection(selection)
+            }
+            NovelTextSelectionAction.ASK_AI -> {
+                showNovelAiAsk(selection.text)
+                clearNovelTextSelection(selection)
+            }
+            NovelTextSelectionAction.LISTEN -> {
+                val startOffset = selection.renderedRange?.first
+                    ?: selection.chapterText.indexOf(selection.text).coerceAtLeast(0)
+                startTtsFromOffset(selection.text, selection.chapterId, startOffset)
+                clearNovelTextSelection(selection)
+            }
+            NovelTextSelectionAction.DELETE -> Unit
         }
+    }
+
+    private fun onNovelMarkingAction(
+        marking: NovelMarkingEntity,
+        action: NovelTextSelectionAction,
+    ) {
+        when (action) {
+            NovelTextSelectionAction.COPY -> {
+                copyToClipboard(getString(R.string.novel_selection_text), marking.selectedText)
+                clearNovelMarkingSelection()
+                showReaderMessage(R.string.novel_selection_copied)
+            }
+            NovelTextSelectionAction.NOTE -> {
+                clearNovelMarkingSelection()
+                editNovelMarkingNote(marking)
+            }
+            NovelTextSelectionAction.EXCERPT -> {
+                showNovelExcerpt(marking.selectedText, marking.note, marking.chapterIndex)
+                clearNovelMarkingSelection()
+            }
+            NovelTextSelectionAction.ASK_AI -> {
+                showNovelAiAsk(marking.selectedText)
+                clearNovelMarkingSelection()
+            }
+            NovelTextSelectionAction.LISTEN -> {
+                startTtsFromOffset(marking.selectedText, marking.chapterId, marking.startOffset)
+                clearNovelMarkingSelection()
+            }
+            NovelTextSelectionAction.SHARE -> {
+                startActivity(ShareHelper(this).getShareTextIntent(marking.selectedText))
+                clearNovelMarkingSelection()
+            }
+            NovelTextSelectionAction.DICTIONARY -> {
+                openNovelDictionary(marking.selectedText)
+                clearNovelMarkingSelection()
+            }
+            NovelTextSelectionAction.BOOKMARK -> {
+                marking.toNovelSelection()?.let(::toggleNovelSelectionBookmark)
+            }
+            NovelTextSelectionAction.HIGHLIGHT -> {
+                clearNovelMarkingSelection()
+                deleteNovelMarking(marking)
+            }
+            NovelTextSelectionAction.DELETE -> {
+                clearNovelMarkingSelection()
+                deleteNovelMarking(marking)
+            }
+        }
+    }
+
+    private fun NovelMarkingEntity.toNovelSelection(): NovelTextSelection? {
+        val state = composeReaderViewModel.uiState.value
+        val chapterText = state.continuousChapters
+            .firstOrNull { it.chapterId == chapterId }
+            ?.content
+            ?: state.content.takeIf { state.chapterId == chapterId }
+        if (chapterText.isNullOrBlank()) return null
+        return NovelTextSelection(
+            text = selectedText,
+            chapterId = chapterId,
+            chapterIndex = chapterIndex,
+            chapterText = chapterText,
+            renderedStart = startOffset,
+            renderedText = selectedText,
+            clear = {},
+        )
     }
 
     private fun toggleNovelMarking(selection: NovelTextSelection) {
@@ -1159,12 +1341,58 @@ class NovelReaderActivity :
         }
     }
 
+    private fun toggleNovelSelectionBookmark(selection: NovelTextSelection) {
+        val chapter = chapters.firstOrNull { it.id == selection.chapterId }
+        if (chapter == null || resolveNovelSelectionRange(selection) == null) {
+            showReaderMessage(R.string.novel_selection_position_unavailable)
+            return
+        }
+        lifecycleScope.launch {
+            runCatching {
+                val state = composeReaderViewModel.uiState.value
+                val page = state.position
+                    ?.takeIf { it.chapterId == selection.chapterId }
+                    ?.page
+                    ?: currentPageIndex
+                val existing = bookmarksRepository.observeBookmark(manga, chapter.id, page).first()
+                if (existing != null) {
+                    bookmarksRepository.removeBookmark(manga.id, chapter.id, page)
+                    contentRoot.performConfirmHapticFeedback()
+                    showReaderMessage(R.string.novel_bookmark_removed)
+                } else {
+                    bookmarksRepository.addBookmark(
+                        org.skepsun.kototoro.bookmarks.domain.Bookmark(
+                            manga = manga,
+                            pageId = System.currentTimeMillis(),
+                            chapterId = chapter.id,
+                            page = page,
+                            scroll = 0,
+                            imageUrl = selection.text,
+                            createdAt = java.time.Instant.now(),
+                            percent = getCurrentProgressRatio(),
+                        ),
+                    )
+                    contentRoot.performConfirmHapticFeedback()
+                    showReaderMessage(R.string.novel_bookmark_added)
+                }
+                clearNovelTextSelection(selection)
+            }.onFailure {
+                android.util.Log.e("NovelReaderActivity", "Failed to toggle selection bookmark", it)
+                showReaderMessage(getString(R.string.novel_bookmark_failed, it.message ?: ""), 2000L)
+            }
+        }
+    }
+
+    private fun onNovelMarkingClick(marking: NovelMarkingEntity, rect: androidx.compose.ui.geometry.Rect) {
+        composeReaderViewModel.publishSelectedMarking(marking, rect = rect)
+    }
+
     private fun editNovelMarkingNote(marking: NovelMarkingEntity) {
         noteMarking = marking
         noteDraft = marking.note.orEmpty()
     }
 
-    private fun saveNovelMarkingNote(marking: NovelMarkingEntity, note: String) {
+    private fun saveNovelMarkingNote(marking: NovelMarkingEntity, note: String?) {
         lifecycleScope.launch {
             novelMarkingRepository.updateNote(marking, note)
             showReaderMessage(R.string.novel_selection_note_saved)
@@ -1176,6 +1404,205 @@ class NovelReaderActivity :
             novelMarkingRepository.delete(marking)
             showReaderMessage(R.string.novel_marking_deleted)
         }
+    }
+
+    private fun clearNovelMarkingSelection() {
+        composeReaderViewModel.publishSelectedMarking(null)
+    }
+
+    private fun showNovelExcerpt(text: String, note: String?, chapterIndex: Int) {
+        novelExcerpt = NovelExcerptData(
+            selectedText = text,
+            bookTitle = manga.title,
+            chapterTitle = chapters.getOrNull(chapterIndex)?.title.orEmpty(),
+            author = manga.authors.joinToString(", "),
+            userNickname = "书友",
+            note = note,
+        )
+    }
+
+    private fun saveNovelExcerpt(
+        data: NovelExcerptData,
+        configuration: NovelExcerptConfiguration,
+    ) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            runCatching {
+                val bitmap = NovelExcerptCardRenderer.render(data, configuration)
+                val filename = "kototoro_excerpt_${System.currentTimeMillis()}.png"
+                val values = ContentValues().apply {
+                    put(MediaStore.Images.Media.DISPLAY_NAME, filename)
+                    put(MediaStore.Images.Media.MIME_TYPE, "image/png")
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                        put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/Kototoro")
+                    }
+                }
+                val uri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+                    ?: error("MediaStore insert failed")
+                contentResolver.openOutputStream(uri)?.use { output ->
+                    check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, output))
+                } ?: error("Could not open gallery output")
+            }.onSuccess {
+                withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    showReaderMessage(R.string.novel_excerpt_saved)
+                    novelExcerpt = null
+                }
+            }.onFailure { error ->
+                android.util.Log.e("NovelReaderActivity", "Failed to save novel excerpt", error)
+                withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    showReaderMessage(R.string.novel_excerpt_share_failed)
+                }
+            }
+        }
+    }
+
+    private fun shareNovelExcerpt(
+        data: NovelExcerptData,
+        configuration: NovelExcerptConfiguration,
+    ) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            runCatching {
+                val bitmap = NovelExcerptCardRenderer.render(data, configuration)
+                val directory = File(cacheDir, "shared").apply { mkdirs() }
+                val file = File(directory, "kototoro_excerpt_${System.currentTimeMillis()}.png")
+                file.outputStream().use { output ->
+                    check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, output))
+                }
+                FileProvider.getUriForFile(this@NovelReaderActivity, "${BuildConfig.APPLICATION_ID}.files", file)
+            }.onSuccess { uri ->
+                withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    ShareHelper(this@NovelReaderActivity).shareImage(uri)
+                }
+            }.onFailure { error ->
+                android.util.Log.e("NovelReaderActivity", "Failed to share novel excerpt", error)
+                withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    showReaderMessage(R.string.novel_excerpt_share_failed)
+                }
+            }
+        }
+    }
+
+    private fun showNovelAiAsk(text: String) {
+        novelAiJob?.cancel()
+        novelAiJob = null
+        novelAiAskTarget = text
+        novelAiQuestion = ""
+        novelAiAnswer = null
+        novelAiAskLoading = false
+    }
+
+    private fun dismissNovelAiAsk() {
+        novelAiJob?.cancel()
+        novelAiJob = null
+        novelAiAskTarget = null
+        novelAiQuestion = ""
+        novelAiAnswer = null
+        novelAiAskLoading = false
+    }
+
+    private fun askNovelAi(excerpt: String) {
+        val question = novelAiQuestion.trim()
+        if (question.isBlank() || novelAiAskLoading) return
+        val configuredEndpoint = TranslationApiProviderCatalog.resolveChatEndpoint(
+            settings.readerTranslationApiProviderPreset,
+            settings.readerTranslationApiEndpoint,
+        )
+        if (configuredEndpoint.isBlank()) {
+            showReaderMessage(getString(R.string.novel_ai_ask_not_configured), 2500L)
+            return
+        }
+        novelAiJob?.cancel()
+        novelAiAskLoading = true
+        val bookTitle = manga.title
+        val chapterTitle = chapters.getOrNull(currentChapterIndex)?.title.orEmpty()
+        novelAiJob = lifecycleScope.launch {
+            runCatching {
+                translationProcessor.askBook(
+                    bookTitle = bookTitle,
+                    chapterTitle = chapterTitle,
+                    excerpt = excerpt,
+                    question = question,
+                )
+            }.onSuccess { answer ->
+                novelAiAnswer = answer.ifBlank { getString(R.string.novel_ai_ask_failed, "empty response") }
+            }.onFailure { error ->
+                if (error is CancellationException) return@launch
+                novelAiAnswer = getString(R.string.novel_ai_ask_failed, error.message ?: "unknown error")
+            }
+            novelAiAskLoading = false
+        }
+    }
+
+    private fun startTtsFromOffset(text: String, chapterId: Long, startOffset: Int) {
+        val service = ttsService
+        if (service == null) {
+            showReaderMessage("TTS 尚未准备好", 1800L)
+            return
+        }
+        val composeState = composeReaderViewModel.uiState.value
+        val chapterText = composeState.continuousChapters
+            .firstOrNull { it.chapterId == chapterId }?.content
+            ?: composeState.content.takeIf { composeState.chapterId == chapterId }
+
+        val (tokens, startIndex) = if (!chapterText.isNullOrBlank()) {
+            val allTokens = org.skepsun.kototoro.reader.novel.tts.Tokenizer.tokenize(chapterText)
+            val index = allTokens.indexOfFirst { it.range.last >= startOffset }.coerceAtLeast(0)
+            allTokens to index
+        } else {
+            org.skepsun.kototoro.reader.novel.tts.Tokenizer.tokenize(text) to 0
+        }
+
+        if (tokens.isEmpty()) return
+        composeReaderViewModel.showTtsControls()
+        runCatching {
+            val intent = Intent(this, org.skepsun.kototoro.reader.novel.tts.TtsService::class.java)
+            androidx.core.content.ContextCompat.startForegroundService(this, intent)
+            service.startTts(tokens, startIndex)
+        }.onFailure {
+            android.util.Log.e("NovelReaderActivity", "Failed to start selected text TTS", it)
+            showReaderMessage("TTS 启动失败: ${it.message}", 2000L)
+        }
+    }
+
+    private fun jumpToNovelMarking(marking: NovelMarkingEntity) {
+        composeReaderViewModel.dismissMarkings()
+        composeReaderViewModel.dismissChapters()
+        val chapterIndex = chapters.indexOfFirst { it.id == marking.chapterId }
+            .takeIf { it >= 0 } ?: marking.chapterIndex
+        if (chapterIndex < 0 || chapterIndex >= chapters.size) return
+        val target = org.skepsun.kototoro.reader.novel.compose.NovelMarkingTarget(
+            markingId = marking.id,
+            chapterId = marking.chapterId,
+            chapterIndex = chapterIndex,
+            startOffset = marking.startOffset,
+            endOffset = marking.endOffset,
+            selectedText = marking.selectedText,
+        )
+        composeReaderViewModel.jumpToMarking(target)
+        if (chapterIndex != currentChapterIndex) {
+            currentChapterIndex = chapterIndex
+            loadChapter(chapterIndex)
+        }
+    }
+
+    private fun deleteNovelBookmark(bookmark: org.skepsun.kototoro.bookmarks.domain.Bookmark) {
+        lifecycleScope.launch {
+            runCatching {
+                bookmarksRepository.removeBookmark(bookmark)
+                showReaderMessage(R.string.novel_bookmark_removed)
+            }.onFailure {
+                android.util.Log.e("NovelReaderActivity", "Failed to delete novel bookmark", it)
+            }
+        }
+    }
+
+    private fun openNovelBookmark(bookmark: org.skepsun.kototoro.bookmarks.domain.Bookmark) {
+        val chapterIndex = chapters.indexOfFirst { it.id == bookmark.chapterId }
+        if (chapterIndex < 0) return
+        composeReaderViewModel.dismissMarkings()
+        composeReaderViewModel.dismissChapters()
+        currentChapterIndex = chapterIndex
+        currentPageIndex = bookmark.page
+        loadChapter(chapterIndex)
     }
 
     private fun resolveNovelSelectionRange(selection: NovelTextSelection): IntRange? {
@@ -1196,18 +1623,7 @@ class NovelReaderActivity :
     private fun openNovelDictionary(text: String) {
         val query = text.trim()
         if (query.isEmpty()) return
-        val webSearch = Intent(Intent.ACTION_WEB_SEARCH)
-            .putExtra(SearchManager.QUERY, query)
-        try {
-            startActivity(webSearch)
-        } catch (_: Exception) {
-            startActivity(
-                Intent(
-                    Intent.ACTION_VIEW,
-                    Uri.parse("https://www.baidu.com/s?wd=${Uri.encode(query)}"),
-                ),
-            )
-        }
+        startActivity(DictionaryActivity.newIntent(this, query))
     }
 
     override fun onBookmarkClick() {
@@ -1658,7 +2074,67 @@ class NovelReaderActivity :
             currentPageIndex = 0
         }
 
+        val markingId = intent.getLongExtra(EXTRA_MARKING_ID, -1L).takeIf { it > 0 }
+        val startOffset = intent.getIntExtra(EXTRA_START_OFFSET, -1).takeIf { it >= 0 }
+        val endOffset = intent.getIntExtra(EXTRA_END_OFFSET, -1).takeIf { it >= 0 }
+        val selectedText = intent.getStringExtra(EXTRA_SELECTED_TEXT)
+        if (startOffset != null && !selectedText.isNullOrBlank()) {
+            val targetChapter = chapters.getOrNull(currentChapterIndex)
+            if (targetChapter != null) {
+                val target = org.skepsun.kototoro.reader.novel.compose.NovelMarkingTarget(
+                    markingId = markingId ?: 0L,
+                    chapterId = targetChapter.id,
+                    chapterIndex = currentChapterIndex,
+                    startOffset = startOffset,
+                    endOffset = endOffset ?: (startOffset + selectedText.length),
+                    selectedText = selectedText,
+                )
+                composeReaderViewModel.jumpToMarking(target)
+            }
+        }
+
         // Clear Intent state to avoid reusing it
+        intent.removeExtra(EXTRA_MARKING_ID)
+        intent.removeExtra(EXTRA_START_OFFSET)
+        intent.removeExtra(EXTRA_END_OFFSET)
+        intent.removeExtra(EXTRA_SELECTED_TEXT)
+        intent.removeExtra(org.skepsun.kototoro.core.nav.ReaderIntent.EXTRA_STATE)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        val markingId = intent.getLongExtra(EXTRA_MARKING_ID, -1L).takeIf { it > 0 }
+        val startOffset = intent.getIntExtra(EXTRA_START_OFFSET, -1).takeIf { it >= 0 }
+        val endOffset = intent.getIntExtra(EXTRA_END_OFFSET, -1).takeIf { it >= 0 }
+        val selectedText = intent.getStringExtra(EXTRA_SELECTED_TEXT)
+        val state = intent.getParcelableExtraCompat<org.skepsun.kototoro.reader.ui.ReaderState>(
+            org.skepsun.kototoro.core.nav.ReaderIntent.EXTRA_STATE
+        )
+        if (state != null && state.chapterId != 0L) {
+            val targetIndex = chapters.indexOfFirst { it.id == state.chapterId }
+            if (targetIndex >= 0) {
+                if (startOffset != null && !selectedText.isNullOrBlank()) {
+                    val target = org.skepsun.kototoro.reader.novel.compose.NovelMarkingTarget(
+                        markingId = markingId ?: 0L,
+                        chapterId = state.chapterId,
+                        chapterIndex = targetIndex,
+                        startOffset = startOffset,
+                        endOffset = endOffset ?: (startOffset + selectedText.length),
+                        selectedText = selectedText,
+                    )
+                    composeReaderViewModel.jumpToMarking(target)
+                }
+                if (targetIndex != currentChapterIndex) {
+                    currentChapterIndex = targetIndex
+                    loadChapter(targetIndex)
+                }
+            }
+        }
+        intent.removeExtra(EXTRA_MARKING_ID)
+        intent.removeExtra(EXTRA_START_OFFSET)
+        intent.removeExtra(EXTRA_END_OFFSET)
+        intent.removeExtra(EXTRA_SELECTED_TEXT)
         intent.removeExtra(org.skepsun.kototoro.core.nav.ReaderIntent.EXTRA_STATE)
     }
 
@@ -2100,7 +2576,8 @@ class NovelReaderActivity :
             settings = readerSettings,
             translation = chapterTranslations[chapterIndex],
         )
-        if (readerSettings.readingMode == ReadingMode.PAGED) {
+        val hasPendingMarking = composeReaderViewModel.uiState.value.pendingMarkingTarget?.chapterId == chapter.id
+        if (readerSettings.readingMode == ReadingMode.PAGED && !hasPendingMarking) {
             composeReaderViewModel.requestPage(
                 if (currentPageIndex < 0) Int.MAX_VALUE else currentPageIndex,
             )
@@ -2124,7 +2601,8 @@ class NovelReaderActivity :
             settings = readerSettings,
             translation = chapterTranslations[chapterIndex],
         )
-        if (readerSettings.readingMode == ReadingMode.PAGED) {
+        val hasPendingMarkingInChapter = composeReaderViewModel.uiState.value.pendingMarkingTarget?.chapterId == chapter.id
+        if (readerSettings.readingMode == ReadingMode.PAGED && !hasPendingMarkingInChapter) {
             composeReaderViewModel.requestPage(
                 if (currentPageIndex < 0) Int.MAX_VALUE else currentPageIndex,
             )
@@ -2614,6 +3092,10 @@ class NovelReaderActivity :
     }
 
     companion object {
+        const val EXTRA_MARKING_ID = "org.skepsun.kototoro.marking_id"
+        const val EXTRA_START_OFFSET = "org.skepsun.kototoro.start_offset"
+        const val EXTRA_END_OFFSET = "org.skepsun.kototoro.end_offset"
+        const val EXTRA_SELECTED_TEXT = "org.skepsun.kototoro.selected_text"
         private const val KEY_CHAPTER_INDEX = "chapter_index"
         private const val KEY_PAGE_INDEX = "page_index"
         private const val KEY_UI_VISIBLE = "ui_visible"

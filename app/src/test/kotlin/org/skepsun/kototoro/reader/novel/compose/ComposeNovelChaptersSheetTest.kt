@@ -73,4 +73,12 @@ class ComposeNovelChaptersSheetTest {
 		branch = branch,
 		source = UnknownContentSource,
 	)
+
+	@Test
+	fun `novel chapters sheet tab enum has expected entries and order`() {
+		val entries = NovelChaptersSheetTab.entries
+		assertEquals(2, entries.size)
+		assertEquals(NovelChaptersSheetTab.CHAPTERS, entries[0])
+		assertEquals(NovelChaptersSheetTab.NOTES, entries[1])
+	}
 }

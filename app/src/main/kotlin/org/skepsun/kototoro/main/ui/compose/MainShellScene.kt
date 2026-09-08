@@ -1252,12 +1252,9 @@ internal fun BookmarksTopLevelRouteContent(
         }
     }
 
-    org.skepsun.kototoro.bookmarks.ui.compose.AppBookmarksRoute(
-        viewModel = viewModel,
+    org.skepsun.kototoro.notes.ui.AppNotesRoute(
         contentPadding = contentPadding,
         appRouter = appRouter,
-        pageSaveHelper = pageSaveHelper,
-        onTopBarOverrideChanged = { bookmarksContextualTopBarOverride = it },
     )
 }
 

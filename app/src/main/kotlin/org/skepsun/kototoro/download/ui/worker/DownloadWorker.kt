@@ -638,6 +638,7 @@ class DownloadWorker @AssistedInject constructor(
                 sourceLang = sourceLang,
                 targetLang = targetLang,
                 displayMode = displayMode,
+                bookKey = "${manga.source.name}:${manga.id}",
             ).collect { translation ->
                 checkIsPaused()
                 val translatedCount = translation.translations.size.coerceAtMost(totalParagraphs)
