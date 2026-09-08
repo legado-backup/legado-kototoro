@@ -25,6 +25,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Density
@@ -181,6 +182,11 @@ object GlassDefaults {
 
 internal fun resolveGlassPressProgress(enabled: Boolean, progress: Float): Float =
     if (enabled) progress.coerceIn(0f, 1f) else 0f
+
+internal fun shouldTrackGlassPress(
+    componentRole: GlassComponentRole,
+    pressFeedbackEnabled: Boolean,
+): Boolean = componentRole != GlassComponentRole.TopBar && pressFeedbackEnabled
 
 internal fun shouldApplyGlassLens(enabled: Boolean, heightDp: Float, amountDp: Float): Boolean =
     enabled && heightDp > 0f && amountDp > 0f
@@ -377,8 +383,6 @@ fun LiquidGlassSurface(
 
     val colors = MaterialTheme.colorScheme
     val isDark = colors.isDarkTheme()
-    val isNavigationChrome = componentRole == GlassComponentRole.TopBar ||
-        componentRole == GlassComponentRole.BottomBar
     // Floating pill controls (search button, filter group, tab rails) are objects rather than
     // bars: they share the chrome tint below but are bucketed separately so their edge and
     // highlight treatment can evolve independently from real bars (bottom nav, reader
@@ -410,20 +414,21 @@ fun LiquidGlassSurface(
     val pressProgress = remember { Animatable(0f) }
     val coroutineScope = rememberCoroutineScope()
     // Pure observer: never consumes, so nested controls keep their own
-    // gestures; any touch landing on the glass boosts its exposure. Bars
-    // (bottom nav, reader control shells) opt out of press tracking entirely —
-    // a whole-bar brighten reads odd next to the discrete controls they host —
-    // while pill controls and content glass track press so they glow while
-    // touched.
-    val pressTracking = if (isNavigationChrome || !pressFeedbackEnabled) {
+    // gestures; any touch landing on the glass boosts its exposure. Top bars
+    // (settings, reader top chrome) opt out of press tracking entirely, while
+    // navigation bars (bottom nav), pill controls, and interactive content glass
+    // track press so they react while touched.
+    val pressTracking = if (!shouldTrackGlassPress(componentRole, pressFeedbackEnabled)) {
         Modifier
     } else {
         Modifier.pointerInput(Unit) {
             awaitEachGesture {
-                awaitFirstDown(requireUnconsumed = false)
+                awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
                 coroutineScope.launch { pressProgress.animateTo(1f, tween(90)) }
                 try {
-                    waitForUpOrCancellation()
+                    do {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                    } while (event.changes.any { it.pressed })
                 } finally {
                     coroutineScope.launch { pressProgress.animateTo(0f, tween(160)) }
                 }

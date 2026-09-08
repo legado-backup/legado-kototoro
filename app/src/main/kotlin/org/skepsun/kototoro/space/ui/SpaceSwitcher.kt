@@ -317,6 +317,7 @@ private fun SpaceSidekickPanel(
             borderAlpha = 0.22f,
         ),
         shape = shape,
+        pressFeedbackEnabled = false,
         // Floating workbench panel — pill chrome, not an edge-to-edge bar.
         componentRole = GlassComponentRole.PillControl,
     ) {

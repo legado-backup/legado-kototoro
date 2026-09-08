@@ -100,4 +100,18 @@ class GlassSurfacePolicyTest {
         style.backdropSurfaceAlpha(GlassComponentRole.BottomPanel, amoledCanvas = true) shouldBe 0.44f
         style.backdropSurfaceAlpha(GlassComponentRole.BottomPanel, amoledCanvas = false) shouldBe 0.44f
     }
+
+    @Test
+    fun `navigation bottom bar and pill controls track glass press`() {
+        shouldTrackGlassPress(GlassComponentRole.BottomBar, pressFeedbackEnabled = true) shouldBe true
+        shouldTrackGlassPress(GlassComponentRole.PillControl, pressFeedbackEnabled = true) shouldBe true
+        shouldTrackGlassPress(GlassComponentRole.BottomPanel, pressFeedbackEnabled = true) shouldBe true
+    }
+
+    @Test
+    fun `top bar or surfaces with press feedback disabled do not track glass press`() {
+        shouldTrackGlassPress(GlassComponentRole.TopBar, pressFeedbackEnabled = true) shouldBe false
+        shouldTrackGlassPress(GlassComponentRole.BottomBar, pressFeedbackEnabled = false) shouldBe false
+        shouldTrackGlassPress(GlassComponentRole.PillControl, pressFeedbackEnabled = false) shouldBe false
+    }
 }

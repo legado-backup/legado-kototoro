@@ -19,6 +19,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -31,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.graphics.Color
@@ -796,11 +799,13 @@ private fun FloatingBottomNavRow(
             }
         }
     }
+    var isPillPressed by remember { mutableStateOf(false) }
+    val isPillActive = isPillPressed || dragPreviewItemId != null
     val pillPressProgress = remember { Animatable(0f) }
-    LaunchedEffect(dragPreviewItemId) {
+    LaunchedEffect(isPillActive) {
         pillPressProgress.animateTo(
-            targetValue = if (dragPreviewItemId != null) 1f else 0f,
-            animationSpec = tween(if (dragPreviewItemId != null) 90 else 160),
+            targetValue = if (isPillActive) 1f else 0f,
+            animationSpec = tween(if (isPillActive) 90 else 160),
         )
     }
     val pillSelectPulse = remember { Animatable(0f) }
@@ -907,11 +912,6 @@ private fun FloatingBottomNavRow(
             style = barStyle,
             shape = barShape,
             exportedBackdrop = navigationShellBackdrop,
-            // Refraction follows the BottomBar scope like every other glass
-            // role. An older hard-disable predated the lens safety clamp and
-            // the role-delta tuner; the clamp now bounds the lens on this wide
-            // capsule, and the moving indicator keeps its own selection
-            // refraction layered on top. Tune per-role in the Glass tuner.
         ) {}
         if (useSharedLiquidGlassPill && targetIndicatorSize != IntSize.Zero) {
             val indicatorShape = Capsule()
@@ -938,7 +938,9 @@ private fun FloatingBottomNavRow(
             )
         }
         Row(
-            modifier = Modifier.layerBackdrop(navigationContentBackdrop),
+            modifier = Modifier
+                .align(Alignment.Center)
+                .layerBackdrop(navigationContentBackdrop),
             horizontalArrangement = Arrangement.spacedBy(itemSpacing, Alignment.CenterHorizontally),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -1025,6 +1027,20 @@ private fun FloatingBottomNavRow(
                                     }
                                 },
                             )
+                        }
+                    }
+                    .pointerInput(item.id, isSelected, useSharedLiquidGlassPill) {
+                        if (!isSelected || !useSharedLiquidGlassPill) return@pointerInput
+                        awaitEachGesture {
+                            awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                            isPillPressed = true
+                            try {
+                                do {
+                                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                                } while (event.changes.any { it.pressed })
+                            } finally {
+                                isPillPressed = false
+                            }
                         }
                     }
                     .clickable(
@@ -1215,11 +1231,13 @@ private fun FullWidthFloatingBottomNavRow(
             }
         }
     }
+    var isPillPressed by remember { mutableStateOf(false) }
+    val isPillActive = isPillPressed || dragPreviewItemId != null
     val pillPressProgress = remember { Animatable(0f) }
-    LaunchedEffect(dragPreviewItemId) {
+    LaunchedEffect(isPillActive) {
         pillPressProgress.animateTo(
-            targetValue = if (dragPreviewItemId != null) 1f else 0f,
-            animationSpec = tween(if (dragPreviewItemId != null) 90 else 160),
+            targetValue = if (isPillActive) 1f else 0f,
+            animationSpec = tween(if (isPillActive) 90 else 160),
         )
     }
     // Selection "magnet magnify" mirroring the LiquidBottomTabs sample: the pill
@@ -1414,6 +1432,20 @@ private fun FullWidthFloatingBottomNavRow(
                                     }
                                 },
                             )
+                        }
+                        .pointerInput(item.id, isSelected, capsuleEnabled) {
+                            if (!isSelected || !capsuleEnabled) return@pointerInput
+                            awaitEachGesture {
+                                awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                                isPillPressed = true
+                                try {
+                                    do {
+                                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                                    } while (event.changes.any { it.pressed })
+                                } finally {
+                                    isPillPressed = false
+                                }
+                            }
                         }
                         .clickable(
                             interactionSource = remember(item.id) { MutableInteractionSource() },
