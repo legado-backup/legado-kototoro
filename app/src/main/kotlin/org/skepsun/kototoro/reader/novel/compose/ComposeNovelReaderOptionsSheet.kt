@@ -43,8 +43,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.sp
 import org.skepsun.kototoro.R
 import org.skepsun.kototoro.reader.novel.NovelPageTurnAnimation
 import org.skepsun.kototoro.reader.novel.NovelReaderSettings
@@ -184,7 +182,6 @@ private fun NovelAppearanceOptionsPage(
     update: (NovelReaderSettings.() -> NovelReaderSettings) -> Unit,
     onEditSlider: (SliderEditor) -> Unit,
 ) = NovelOptionsPageList {
-    item { NovelPreview(settings) }
     item {
         ReaderSegmentedChoice(
             title = stringResource(R.string.novel_theme_preset),
@@ -295,7 +292,6 @@ internal fun ComposeNovelReaderOptionsPanel(
             .heightIn(max = 420.dp)
             .padding(horizontal = 12.dp, vertical = 10.dp),
     ) {
-        item { NovelPreview(settings) }
         item {
             ReaderSegmentedChoice(
                 title = stringResource(R.string.novel_reading_mode),
@@ -491,55 +487,6 @@ private fun NovelThemeSwatch(preset: NovelReaderThemePreset) {
             .background(Color(palette.backgroundColor), RoundedCornerShape(5.dp))
             .border(1.dp, Color(palette.secondaryTextColor).copy(alpha = 0.7f), RoundedCornerShape(5.dp)),
     )
-}
-
-@Composable private fun NovelPreview(settings: NovelReaderSettings) {
-    val palette = novelReaderPalette(settings.themePreset, isSystemInDarkTheme())
-    val shape = RoundedCornerShape(18.dp)
-    val backgroundColor = Color(palette.backgroundColor)
-    val textColor = Color(palette.textColor)
-    val secondaryTextColor = Color(palette.secondaryTextColor)
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(backgroundColor, shape)
-            .border(1.dp, secondaryTextColor.copy(alpha = 0.22f), shape)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-    ) {
-        Text(
-            stringResource(R.string.novel_preview_caption),
-            style = MaterialTheme.typography.labelMedium,
-            color = secondaryTextColor,
-        )
-        Text(
-            stringResource(R.string.novel_preview_title),
-            style = MaterialTheme.typography.titleMedium,
-            color = textColor,
-            modifier = Modifier.padding(top = 4.dp),
-        )
-        Text(
-            formatNovelParagraphText(
-                text = stringResource(R.string.novel_preview_body),
-                indentEnabled = settings.enableParagraphIndent,
-                spacingLines = settings.paragraphSpacingLines,
-            ),
-            style = MaterialTheme.typography.bodyLarge,
-            fontSize = settings.fontSizeSp.sp,
-            lineHeight = (settings.fontSizeSp * settings.lineSpacing).sp,
-            color = textColor,
-            maxLines = 3,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = 8.dp),
-        )
-        if (settings.translationDisplayMode == NovelTranslationDisplayMode.BILINGUAL) {
-            Text(
-                stringResource(R.string.novel_preview_body_secondary),
-                style = MaterialTheme.typography.bodyMedium,
-                color = secondaryTextColor,
-                modifier = Modifier.padding(top = 6.dp),
-            )
-        }
-    }
 }
 
 @Composable private fun Action(icon: Int, label: Int, onClick: () -> Unit) {

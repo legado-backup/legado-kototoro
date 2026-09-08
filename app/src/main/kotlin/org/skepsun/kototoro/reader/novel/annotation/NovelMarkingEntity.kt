@@ -25,4 +25,6 @@ data class NovelMarkingEntity(
     @ColumnInfo(name = "note") val note: String? = null,
     @ColumnInfo(name = "created_at") val createdAt: Long,
     @ColumnInfo(name = "updated_at") val updatedAt: Long,
+    @ColumnInfo(name = "color", defaultValue = "0") val color: Int = 0,
+    @ColumnInfo(name = "style", defaultValue = "0") val style: Int = 0,
 )

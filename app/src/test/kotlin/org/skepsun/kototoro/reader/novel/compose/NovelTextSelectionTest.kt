@@ -26,6 +26,44 @@ class NovelTextSelectionTest {
     }
 
     @Test
+    fun `maps a marking fragment that starts before the rendered range`() {
+        assertEquals(
+            0 until 20,
+            resolveNovelMarkingLocalRange(
+                sourceRange = 100..149,
+                markingStart = 80,
+                markingEnd = 120,
+                textLength = 50,
+            ),
+        )
+    }
+
+    @Test
+    fun `maps a marking fragment that ends after the rendered range`() {
+        assertEquals(
+            20 until 50,
+            resolveNovelMarkingLocalRange(
+                sourceRange = 100..149,
+                markingStart = 120,
+                markingEnd = 180,
+                textLength = 50,
+            ),
+        )
+    }
+
+    @Test
+    fun `ignores a marking without range intersection`() {
+        assertNull(
+            resolveNovelMarkingLocalRange(
+                sourceRange = 100..149,
+                markingStart = 150,
+                markingEnd = 180,
+                textLength = 50,
+            ),
+        )
+    }
+
+    @Test
     fun `places toolbar above when sufficient space exists`() {
         val placement = calculateNovelSelectionToolbarPlacement(
             anchorRect = Rect(left = 100f, top = 500f, right = 300f, bottom = 540f),
@@ -58,5 +96,39 @@ class NovelTextSelectionTest {
         requireNotNull(placement)
         assertFalse(placement.isAbove)
         assertEquals(96, placement.offset.y)
+    }
+
+    @Test
+    fun `keeps toolbar above the bottom safe inset`() {
+        val placement = calculateNovelSelectionToolbarPlacement(
+            anchorRect = Rect(left = 100f, top = 1800f, right = 300f, bottom = 1840f),
+            fallbackAnchor = null,
+            toolbarSize = IntSize(width = 200, height = 300),
+            rootSize = IntSize(width = 1080, height = 1920),
+            horizontalMargin = 16,
+            spacing = 6,
+            topSafeInset = 48,
+            bottomSafeInset = 120,
+        )
+
+        requireNotNull(placement)
+        assertTrue(placement.isAbove)
+        assertEquals(1484, placement.offset.y)
+        assertTrue(placement.offset.y + 300 <= 1920 - 120 - 16)
+    }
+
+    @Test
+    fun `clamps toolbar horizontally inside screen margins`() {
+        val placement = calculateNovelSelectionToolbarPlacement(
+            anchorRect = Rect(left = 440f, top = 300f, right = 490f, bottom = 340f),
+            fallbackAnchor = null,
+            toolbarSize = IntSize(width = 400, height = 120),
+            rootSize = IntSize(width = 500, height = 800),
+            horizontalMargin = 16,
+        )
+
+        requireNotNull(placement)
+        assertEquals(84, placement.offset.x)
+        assertTrue(placement.offset.x + 400 <= 500 - 16)
     }
 }

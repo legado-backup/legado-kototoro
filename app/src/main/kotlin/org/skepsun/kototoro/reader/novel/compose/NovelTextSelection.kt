@@ -26,7 +26,17 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.platform.LocalTextToolbar
 import androidx.compose.ui.platform.TextToolbar
 import androidx.compose.ui.platform.TextToolbarStatus
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.unit.dp
+import org.skepsun.kototoro.reader.novel.annotation.NovelMarkingColor
 import org.skepsun.kototoro.reader.novel.annotation.NovelMarkingEntity
+import org.skepsun.kototoro.reader.novel.annotation.NovelMarkingStyle
 import kotlin.math.abs
 
 enum class NovelTextSelectionAction {
@@ -184,27 +194,24 @@ internal fun NovelMarkingText(
                     val layout = currentLayoutResult
                     val coords = textCoordinates
                     val rootRect = if (layout != null && coords != null && coords.isAttached) {
-                        val sourceStart = sourceRange?.first ?: 0
-                        val localStart = (marking.startOffset - sourceStart).coerceIn(0, text.length)
-                        val localEnd = (marking.endOffset - sourceStart).coerceIn(localStart, text.length)
+                        val localRange = resolveNovelMarkingRenderedRange(text.text, sourceRange, marking)
+                        val localStart = localRange?.first ?: 0
+                        val localEnd = localRange?.let { it.last + 1 } ?: 0
                         val localBounds = if (localEnd > localStart) {
-                            val tappedLine = layout.getLineForVerticalPosition(releasePosition.y)
-                            val lineStart = layout.getLineStart(tappedLine)
-                            val lineEnd = layout.getLineEnd(tappedLine)
-                            val overlapStart = maxOf(localStart, lineStart)
-                            val overlapEnd = minOf(localEnd, lineEnd)
-                            if (overlapEnd > overlapStart) {
-                                runCatching { layout.getPathForRange(overlapStart, overlapEnd).getBounds() }.getOrNull()
-                                    ?: runCatching { layout.getPathForRange(localStart, localEnd).getBounds() }.getOrNull()
-                                    ?: layout.getBoundingBox(overlapStart.coerceIn(0, (text.length - 1).coerceAtLeast(0)))
-                            } else {
-                                runCatching { layout.getPathForRange(localStart, localEnd).getBounds() }.getOrNull()
-                                    ?: layout.getBoundingBox(localStart.coerceIn(0, (text.length - 1).coerceAtLeast(0)))
-                            }
+                            // Anchor to the whole visible marking fragment. The release line is
+                            // deliberately ignored so a tap in the middle of a wrapped marking
+                            // cannot move the panel over the remaining text.
+                            runCatching { layout.getPathForRange(localStart, localEnd).getBounds() }
+                                .getOrNull()
+                                ?.takeIf { it.width > 0f && it.height > 0f }
+                                ?: layout.getBoundingBox(localStart.coerceIn(0, (text.length - 1).coerceAtLeast(0)))
                         } else {
                             val charIndex = localStart.coerceIn(0, (text.length - 1).coerceAtLeast(0))
                             if (text.isNotEmpty()) layout.getBoundingBox(charIndex)
-                            else androidx.compose.ui.geometry.Rect(releasePosition, androidx.compose.ui.geometry.Size(1f, 1f))
+                            else androidx.compose.ui.geometry.Rect(
+                                releasePosition,
+                                androidx.compose.ui.geometry.Size(1f, 1f),
+                            )
                         }
                         val rootTopLeft = coords.localToRoot(localBounds.topLeft)
                         val rootBottomRight = coords.localToRoot(localBounds.bottomRight)
@@ -224,6 +231,105 @@ internal fun NovelMarkingText(
         modifier = modifier
             .onGloballyPositioned { textCoordinates = it }
             .then(clickModifier)
+            .drawBehind {
+                val layout = layoutResult ?: return@drawBehind
+                if (markings.isEmpty()) return@drawBehind
+                markings.forEach { marking ->
+                    val markingColor = NovelMarkingColor.fromId(marking.color)
+                    val markingStyle = NovelMarkingStyle.fromId(marking.style)
+
+                    val localRange = resolveNovelMarkingRenderedRange(text.text, sourceRange, marking)
+                    val (localStart, localEnd) = if (localRange != null) {
+                        localRange.first to (localRange.last + 1)
+                    } else {
+                        return@forEach
+                    }
+
+                    if (localEnd <= localStart) return@forEach
+
+                    val firstLine = layout.getLineForOffset(localStart)
+                    val lastLine = layout.getLineForOffset((localEnd - 1).coerceAtLeast(localStart))
+                    for (line in firstLine..lastLine) {
+                        val lineStart = layout.getLineStart(line)
+                        val lineEnd = layout.getLineEnd(line, visibleEnd = true)
+                        val segStart = maxOf(localStart, lineStart)
+                        val segEnd = minOf(localEnd, lineEnd)
+                        if (segEnd <= segStart) continue
+
+                        val x1 = if (segStart <= lineStart) {
+                            layout.getLineLeft(line)
+                        } else {
+                            layout.getHorizontalPosition(segStart, usePrimaryDirection = true)
+                        }
+                        val x2 = if (segEnd >= lineEnd) {
+                            layout.getLineRight(line)
+                        } else {
+                            layout.getHorizontalPosition(segEnd, usePrimaryDirection = true)
+                        }
+                        val left = minOf(x1, x2)
+                        val right = maxOf(x1, x2)
+                        if (right <= left) continue
+
+                        val lineBottom = layout.getLineBottom(line)
+                        val lineTop = layout.getLineTop(line)
+
+                        when (markingStyle) {
+                            NovelMarkingStyle.HIGHLIGHT -> {
+                                val paddingH = 2.dp.toPx()
+                                val topInset = 1.dp.toPx()
+                                val bottomInset = 1.dp.toPx()
+                                drawRoundRect(
+                                    color = markingColor.bgColor,
+                                    topLeft = Offset(left - paddingH, lineTop + topInset),
+                                    size = Size(
+                                        right - left + paddingH * 2,
+                                        lineBottom - lineTop - topInset - bottomInset,
+                                    ),
+                                    cornerRadius = CornerRadius(4.dp.toPx(), 4.dp.toPx()),
+                                )
+                            }
+                            NovelMarkingStyle.UNDERLINE -> {
+                                val strokeWidth = 2.dp.toPx()
+                                val y = lineBottom - 2.dp.toPx()
+                                drawLine(
+                                    color = markingColor.lineColor,
+                                    start = Offset(left, y),
+                                    end = Offset(right, y),
+                                    strokeWidth = strokeWidth,
+                                    cap = StrokeCap.Round,
+                                )
+                            }
+                            NovelMarkingStyle.WAVY -> {
+                                val yBase = lineBottom - 3.dp.toPx()
+                                val waveLength = 7.dp.toPx()
+                                val waveHeight = 2.dp.toPx()
+                                val path = Path()
+                                path.moveTo(left, yBase)
+                                var curX = left
+                                while (curX < right) {
+                                    val nextX = minOf(curX + waveLength, right)
+                                    val segW = nextX - curX
+                                    val cp1x = curX + segW * 0.25f
+                                    val cp1y = yBase - waveHeight
+                                    val cp2x = curX + segW * 0.75f
+                                    val cp2y = yBase + waveHeight
+                                    path.cubicTo(cp1x, cp1y, cp2x, cp2y, nextX, yBase)
+                                    curX = nextX
+                                }
+                                drawPath(
+                                    path = path,
+                                    color = markingColor.lineColor,
+                                    style = Stroke(
+                                        width = 1.8.dp.toPx(),
+                                        cap = StrokeCap.Round,
+                                        join = StrokeJoin.Round,
+                                    ),
+                                )
+                            }
+                        }
+                    }
+                }
+            }
             .fillMaxWidth(),
         onTextLayout = { layoutResult = it },
     )
@@ -235,18 +341,80 @@ internal fun findNovelMarkingAtOffset(
     sourceRange: IntRange?,
     markings: List<NovelMarkingEntity>,
 ): NovelMarkingEntity? {
-    val sourceOffset = sourceRange?.first?.plus(textOffset)
-    markings.firstOrNull { marking ->
-        sourceOffset != null && marking.startOffset <= sourceOffset && sourceOffset < marking.endOffset
-    }?.let { return it }
     return markings.firstOrNull { marking ->
-        val localStart = text.indexOf(marking.selectedText)
-        if (localStart >= 0) {
-            textOffset in localStart until (localStart + marking.selectedText.length)
-        } else {
-            sourceOffset != null && marking.startOffset <= sourceOffset && sourceOffset < marking.endOffset
-        }
+        resolveNovelMarkingRenderedRange(text, sourceRange, marking)?.contains(textOffset) == true
     }
+}
+
+private fun resolveNovelMarkingRenderedRange(
+    text: String,
+    sourceRange: IntRange?,
+    marking: NovelMarkingEntity,
+): IntRange? {
+    val sourceLocalRange = resolveNovelMarkingLocalRange(
+        sourceRange = sourceRange,
+        markingStart = marking.startOffset,
+        markingEnd = marking.endOffset,
+        textLength = text.length,
+    )
+    val textRange = findNovelTextRangeNear(
+        text = text,
+        selectedText = marking.selectedText,
+        expectedStart = sourceLocalRange?.first,
+    )
+    return when {
+        textRange != null && (sourceRange == null || sourceLocalRange != null) -> textRange
+        else -> sourceLocalRange
+    }
+}
+
+private fun findNovelTextRangeNear(
+    text: String,
+    selectedText: String,
+    expectedStart: Int?,
+): IntRange? {
+    if (text.isEmpty() || selectedText.isEmpty()) return null
+    var searchStart = 0
+    var closest: IntRange? = null
+    var closestDistance = Int.MAX_VALUE
+    while (searchStart < text.length) {
+        val matchStart = text.indexOf(selectedText, searchStart)
+        if (matchStart < 0) break
+        val matchEnd = (matchStart + selectedText.length).coerceAtMost(text.length)
+        val candidate = matchStart until matchEnd
+        val distance = expectedStart?.let { abs(matchStart - it) } ?: 0
+        if (distance < closestDistance) {
+            closest = candidate
+            closestDistance = distance
+        }
+        searchStart = matchStart + 1
+    }
+    return closest
+}
+
+/**
+ * Converts a persisted, half-open source range into the local range rendered by one text block.
+ * A marking can cross page or paragraph boundaries, so every block must render its intersection.
+ */
+internal fun resolveNovelMarkingLocalRange(
+    sourceRange: IntRange?,
+    markingStart: Int,
+    markingEnd: Int,
+    textLength: Int,
+): IntRange? {
+    if (textLength <= 0 || markingEnd <= markingStart) return null
+
+    if (sourceRange == null) return null
+
+    val sourceStart = sourceRange.first
+    val sourceEndExclusive = sourceRange.last + 1
+    val overlapStart = maxOf(sourceStart, markingStart)
+    val overlapEnd = minOf(sourceEndExclusive, markingEnd)
+    if (overlapEnd <= overlapStart) return null
+
+    val localStart = (overlapStart - sourceStart).coerceIn(0, textLength)
+    val localEnd = (overlapEnd - sourceStart).coerceIn(localStart, textLength)
+    return if (localEnd > localStart) localStart until localEnd else null
 }
 
 private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.detectNovelMarkingTap(

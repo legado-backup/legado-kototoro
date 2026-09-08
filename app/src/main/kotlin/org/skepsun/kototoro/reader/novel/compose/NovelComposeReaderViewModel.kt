@@ -74,6 +74,8 @@ data class NovelComposeReaderUiState(
     val pendingMarkingTarget: NovelMarkingTarget? = null,
     val markingHighlightRange: IntRange? = null,
     val markingHighlightText: String? = null,
+    val activeMarkingColor: Int = 0,
+    val activeMarkingStyle: Int = 0,
 )
 
 @Immutable
@@ -581,6 +583,13 @@ class NovelComposeReaderViewModel @Inject constructor() : ViewModel() {
             textSelection = null,
             selectedMarkingAnchor = resolvedAnchor,
             selectedMarkingRect = rect,
+        )
+    }
+
+    fun publishActiveMarkingStyle(color: Int, style: Int) {
+        _uiState.value = _uiState.value.copy(
+            activeMarkingColor = color,
+            activeMarkingStyle = style,
         )
     }
 

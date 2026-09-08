@@ -69,6 +69,7 @@ import org.skepsun.kototoro.parsers.model.Content
 import org.skepsun.kototoro.parsers.model.ContentPage
 import org.skepsun.kototoro.reader.novel.compose.NovelExcerptData
 import org.skepsun.kototoro.reader.novel.compose.NovelExcerptSheet
+import org.skepsun.kototoro.reader.novel.annotation.NovelMarkingColor
 
 @Composable
 fun BookNotesDetailScreen(
@@ -545,11 +546,8 @@ internal fun BookNoteCard(
                     .background(
                         when (item) {
                             is BookNoteItem.NovelHighlight -> {
-                                if (item.note.isNullOrBlank()) {
-                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
-                                } else {
-                                    MaterialTheme.colorScheme.secondary.copy(alpha = 0.15f)
-                                }
+                                val markingColor = NovelMarkingColor.fromId(item.color)
+                                markingColor.lineColor.copy(alpha = 0.18f)
                             }
                             is BookNoteItem.BookmarkEntry -> MaterialTheme.colorScheme.tertiary.copy(alpha = 0.12f)
                         },
@@ -558,18 +556,19 @@ internal fun BookNoteCard(
             ) {
                 when (item) {
                     is BookNoteItem.NovelHighlight -> {
+                        val markingColor = NovelMarkingColor.fromId(item.color)
                         if (item.note.isNullOrBlank()) {
                             Text(
                                 text = "A",
                                 style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                                color = MaterialTheme.colorScheme.primary,
+                                color = markingColor.lineColor,
                             )
                         } else {
                             Icon(
                                 painter = painterResource(R.drawable.ic_comment),
                                 contentDescription = "想法",
                                 modifier = Modifier.size(13.dp),
-                                tint = MaterialTheme.colorScheme.secondary,
+                                tint = markingColor.lineColor,
                             )
                         }
                     }

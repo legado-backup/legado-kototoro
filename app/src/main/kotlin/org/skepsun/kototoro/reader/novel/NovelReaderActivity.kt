@@ -108,8 +108,11 @@ import org.skepsun.kototoro.reader.novel.compose.NovelTextSelectionAction
 import org.skepsun.kototoro.reader.novel.compose.NovelExcerptCardRenderer
 import org.skepsun.kototoro.reader.novel.compose.NovelExcerptConfiguration
 import org.skepsun.kototoro.reader.novel.compose.NovelExcerptData
+import org.skepsun.kototoro.reader.novel.compose.NovelExcerptHelper
 import org.skepsun.kototoro.reader.novel.annotation.NovelMarkingEntity
 import org.skepsun.kototoro.reader.novel.annotation.NovelMarkingRepository
+import org.skepsun.kototoro.reader.novel.annotation.NovelMarkingColor
+import org.skepsun.kototoro.reader.novel.annotation.NovelMarkingStyle
 import org.skepsun.kototoro.reader.novel.compose.findNovelTextRange
 import org.skepsun.kototoro.reader.novel.compose.NovelNoteEditorSheet
 import org.skepsun.kototoro.reader.novel.compose.NovelNoteDetailSheet
@@ -265,6 +268,8 @@ class NovelReaderActivity :
     private var noteDraft by mutableStateOf("")
     private var noteDetailMarking: NovelMarkingEntity? by mutableStateOf(null)
     private var novelExcerpt: NovelExcerptData? by mutableStateOf(null)
+    private var activeMarkingColor by mutableStateOf(NovelMarkingColor.YELLOW.id)
+    private var activeMarkingStyle by mutableStateOf(NovelMarkingStyle.UNDERLINE.id)
     private var novelAiJob: Job? = null
     private var novelAiQuestion by mutableStateOf("")
     private var novelAiAnswer by mutableStateOf<String?>(null)
@@ -364,6 +369,11 @@ class NovelReaderActivity :
                 if (!enabled) resetEInkRefreshContext(clearIdentity = false)
             }
             .launchIn(lifecycleScope)
+
+        val markingPrefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
+        activeMarkingColor = markingPrefs.getInt("novel_active_marking_color", NovelMarkingColor.YELLOW.id)
+        activeMarkingStyle = markingPrefs.getInt("novel_active_marking_style", NovelMarkingStyle.UNDERLINE.id)
+        composeReaderViewModel.publishActiveMarkingStyle(activeMarkingColor, activeMarkingStyle)
 
         // 只恢复UI状态，不恢复章节和页码（由loadChapters处理）
         savedInstanceState?.let {
@@ -655,8 +665,11 @@ class NovelReaderActivity :
                             },
                             onTextSelectionChanged = composeReaderViewModel::publishTextSelection,
                             onTextSelectionAction = ::onNovelTextSelectionAction,
+                            onSelectionColorChange = ::onNovelSelectionColorChange,
+                            onSelectionStyleChange = ::onNovelSelectionStyleChange,
                             onMarkingClick = ::onNovelMarkingClick,
                             onMarkingAction = ::onNovelMarkingAction,
+                            onMarkingChangeStyle = ::onNovelMarkingChangeStyle,
                             onOpenMarkingDetail = { noteDetailMarking = it },
                             onJumpToMarking = ::jumpToNovelMarking,
                             onDeleteBookmark = ::deleteNovelBookmark,
@@ -1316,6 +1329,8 @@ class NovelReaderActivity :
                 startOffset = range.first,
                 endOffset = range.last + 1,
                 selectedText = selection.text,
+                color = activeMarkingColor,
+                style = activeMarkingStyle,
             )
             clearNovelTextSelection(selection)
             showReaderMessage(
@@ -1336,9 +1351,37 @@ class NovelReaderActivity :
                 endOffset = range.last + 1,
                 selectedText = selection.text,
                 note = note,
+                color = activeMarkingColor,
+                style = activeMarkingStyle,
             )
             showReaderMessage(R.string.novel_selection_note_saved)
         }
+    }
+
+    private fun onNovelSelectionColorChange(selection: NovelTextSelection, color: Int) {
+        activeMarkingColor = color
+        composeReaderViewModel.publishActiveMarkingStyle(activeMarkingColor, activeMarkingStyle)
+        persistActiveMarkingPreferences()
+    }
+
+    private fun onNovelSelectionStyleChange(selection: NovelTextSelection, style: Int) {
+        activeMarkingStyle = style
+        composeReaderViewModel.publishActiveMarkingStyle(activeMarkingColor, activeMarkingStyle)
+        persistActiveMarkingPreferences()
+    }
+
+    private fun onNovelMarkingChangeStyle(marking: NovelMarkingEntity, color: Int, style: Int) {
+        lifecycleScope.launch {
+            novelMarkingRepository.updateStyle(marking.id, color, style)
+        }
+    }
+
+    private fun persistActiveMarkingPreferences() {
+        val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
+        prefs.edit()
+            .putInt("novel_active_marking_color", activeMarkingColor)
+            .putInt("novel_active_marking_style", activeMarkingStyle)
+            .apply()
     }
 
     private fun toggleNovelSelectionBookmark(selection: NovelTextSelection) {
@@ -1425,33 +1468,9 @@ class NovelReaderActivity :
         data: NovelExcerptData,
         configuration: NovelExcerptConfiguration,
     ) {
-        lifecycleScope.launch(Dispatchers.IO) {
-            runCatching {
-                val bitmap = NovelExcerptCardRenderer.render(data, configuration)
-                val filename = "kototoro_excerpt_${System.currentTimeMillis()}.png"
-                val values = ContentValues().apply {
-                    put(MediaStore.Images.Media.DISPLAY_NAME, filename)
-                    put(MediaStore.Images.Media.MIME_TYPE, "image/png")
-                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-                        put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/Kototoro")
-                    }
-                }
-                val uri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
-                    ?: error("MediaStore insert failed")
-                contentResolver.openOutputStream(uri)?.use { output ->
-                    check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, output))
-                } ?: error("Could not open gallery output")
-            }.onSuccess {
-                withContext(kotlinx.coroutines.Dispatchers.Main) {
-                    showReaderMessage(R.string.novel_excerpt_saved)
-                    novelExcerpt = null
-                }
-            }.onFailure { error ->
-                android.util.Log.e("NovelReaderActivity", "Failed to save novel excerpt", error)
-                withContext(kotlinx.coroutines.Dispatchers.Main) {
-                    showReaderMessage(R.string.novel_excerpt_share_failed)
-                }
-            }
+        lifecycleScope.launch {
+            NovelExcerptHelper.saveExcerptToGallery(this@NovelReaderActivity, data, configuration)
+            novelExcerpt = null
         }
     }
 
@@ -1459,25 +1478,8 @@ class NovelReaderActivity :
         data: NovelExcerptData,
         configuration: NovelExcerptConfiguration,
     ) {
-        lifecycleScope.launch(Dispatchers.IO) {
-            runCatching {
-                val bitmap = NovelExcerptCardRenderer.render(data, configuration)
-                val directory = File(cacheDir, "shared").apply { mkdirs() }
-                val file = File(directory, "kototoro_excerpt_${System.currentTimeMillis()}.png")
-                file.outputStream().use { output ->
-                    check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, output))
-                }
-                FileProvider.getUriForFile(this@NovelReaderActivity, "${BuildConfig.APPLICATION_ID}.files", file)
-            }.onSuccess { uri ->
-                withContext(kotlinx.coroutines.Dispatchers.Main) {
-                    ShareHelper(this@NovelReaderActivity).shareImage(uri)
-                }
-            }.onFailure { error ->
-                android.util.Log.e("NovelReaderActivity", "Failed to share novel excerpt", error)
-                withContext(kotlinx.coroutines.Dispatchers.Main) {
-                    showReaderMessage(R.string.novel_excerpt_share_failed)
-                }
-            }
+        lifecycleScope.launch {
+            NovelExcerptHelper.shareExcerpt(this@NovelReaderActivity, data, configuration)
         }
     }
 

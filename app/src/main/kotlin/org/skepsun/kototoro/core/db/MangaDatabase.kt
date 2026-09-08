@@ -91,6 +91,7 @@ import org.skepsun.kototoro.core.db.migrations.Migration77To78
 import org.skepsun.kototoro.core.db.migrations.Migration78To79
 import org.skepsun.kototoro.core.db.migrations.Migration79To80
 import org.skepsun.kototoro.core.db.migrations.Migration80To81
+import org.skepsun.kototoro.core.db.migrations.Migration81To82
 import org.skepsun.kototoro.core.db.migrations.Migration1To2
 import org.skepsun.kototoro.core.db.migrations.Migration20To21
 import org.skepsun.kototoro.core.db.migrations.Migration21To22
@@ -168,7 +169,7 @@ import org.skepsun.kototoro.core.dictionary.DictionaryRuleDao
 import org.skepsun.kototoro.core.dictionary.TranslationDictionaryDao
 import org.skepsun.kototoro.core.dictionary.TranslationDictionaryEntity
 
-const val DATABASE_VERSION = 81
+const val DATABASE_VERSION = 82
 
 @Database(
     entities = [
@@ -357,6 +358,7 @@ fun getDatabaseMigrations(context: Context): Array<Migration> = arrayOf(
     Migration78To79(),
     Migration79To80(),
     Migration80To81(),
+    Migration81To82(),
 )
 
 fun MangaDatabase(context: Context): MangaDatabase = Room

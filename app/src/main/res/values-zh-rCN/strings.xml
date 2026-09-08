@@ -3707,6 +3707,10 @@ SHA-256 指纹:
     <string name="novel_selection_dictionary">查词</string>
     <string name="novel_selection_highlight">划线</string>
     <string name="novel_selection_note">批注</string>
+    <string name="novel_selection_write_idea">写下想法</string>
+    <string name="novel_selection_excerpt">摘录</string>
+    <string name="novel_selection_ask_ai">询问 AI</string>
+    <string name="novel_selection_listen">听书</string>
     <string name="novel_selection_highlight_added">已添加划线</string>
     <string name="novel_selection_highlight_removed">已取消划线</string>
     <string name="novel_selection_position_unavailable">无法在本章内容中定位这段选文</string>

@@ -38,4 +38,7 @@ interface NovelMarkingDao {
 
     @Query("UPDATE novel_markings SET note = :note, updated_at = :updatedAt WHERE id = :id")
     suspend fun updateNote(id: Long, note: String?, updatedAt: Long)
+
+    @Query("UPDATE novel_markings SET color = :color, style = :style, updated_at = :updatedAt WHERE id = :id")
+    suspend fun updateStyle(id: Long, color: Int, style: Int, updatedAt: Long)
 }

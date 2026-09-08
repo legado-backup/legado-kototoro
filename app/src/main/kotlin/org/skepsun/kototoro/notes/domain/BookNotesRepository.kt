@@ -100,6 +100,8 @@ class BookNotesRepository @Inject constructor(
                 endOffset = m.endOffset,
                 createdAt = m.createdAt,
                 updatedAt = m.updatedAt,
+                color = m.color,
+                style = m.style,
             )
         }
 

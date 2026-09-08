@@ -33,6 +33,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -42,7 +43,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -161,16 +164,22 @@ data class NovelExcerptData(
 fun NovelExcerptSheet(
     data: NovelExcerptData,
     onDismiss: () -> Unit,
-    onSave: (NovelExcerptConfiguration) -> Unit = {},
-    onShare: (NovelExcerptConfiguration) -> Unit = {},
+    onSave: ((NovelExcerptData, NovelExcerptConfiguration) -> Unit)? = null,
+    onShare: ((NovelExcerptData, NovelExcerptConfiguration) -> Unit)? = null,
 ) {
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     var configuration by remember { mutableStateOf(NovelExcerptConfiguration()) }
+    var userNickname by remember(data.userNickname) { mutableStateOf(data.userNickname) }
     var currentPageIndex by remember { mutableIntStateOf(0) }
     var optionsExpanded by remember { mutableStateOf(false) }
 
-    val pageCount = remember(data, configuration.font) {
-        NovelExcerptCardRenderer.calculateTotalPages(context, data, configuration.font)
+    val activeData = remember(data, userNickname) {
+        data.copy(userNickname = userNickname.ifBlank { "书友" })
+    }
+
+    val pageCount = remember(activeData, configuration.font) {
+        NovelExcerptCardRenderer.calculateTotalPages(context, activeData, configuration.font)
     }
 
     LaunchedEffect(pageCount) {
@@ -223,7 +232,7 @@ fun NovelExcerptSheet(
                 }
             }
             NovelExcerptCanvasPreview(
-                data = data,
+                data = activeData,
                 configuration = activeConfig,
                 pageIndex = currentPageIndex,
                 pageCount = pageCount,
@@ -240,12 +249,30 @@ fun NovelExcerptSheet(
                     Text(if (optionsExpanded) "收起设置" else "更换样式")
                 }
                 Button(
-                    onClick = { onSave(activeConfig) },
+                    onClick = {
+                        if (onSave != null) {
+                            onSave(activeData, activeConfig)
+                        } else {
+                            coroutineScope.launch {
+                                NovelExcerptHelper.saveExcerptToGallery(context, activeData, activeConfig)
+                            }
+                        }
+                    },
                     modifier = Modifier.weight(1f),
                 ) {
                     Text("保存到相册")
                 }
-                TextButton(onClick = { onShare(activeConfig) }) {
+                TextButton(
+                    onClick = {
+                        if (onShare != null) {
+                            onShare(activeData, activeConfig)
+                        } else {
+                            coroutineScope.launch {
+                                NovelExcerptHelper.shareExcerpt(context, activeData, activeConfig)
+                            }
+                        }
+                    },
+                ) {
                     Text("分享")
                 }
             }
@@ -253,6 +280,8 @@ fun NovelExcerptSheet(
                 NovelExcerptOptions(
                     configuration = configuration,
                     onConfigurationChanged = { configuration = it },
+                    userNickname = userNickname,
+                    onUserNicknameChanged = { userNickname = it },
                 )
             }
             Spacer(Modifier.height(8.dp))
@@ -264,9 +293,27 @@ fun NovelExcerptSheet(
 private fun NovelExcerptOptions(
     configuration: NovelExcerptConfiguration,
     onConfigurationChanged: (NovelExcerptConfiguration) -> Unit,
+    userNickname: String,
+    onUserNicknameChanged: (String) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         HorizontalDivider()
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text("读者署名", style = MaterialTheme.typography.labelLarge)
+            OutlinedTextField(
+                value = userNickname,
+                onValueChange = onUserNicknameChanged,
+                placeholder = { Text("书友", fontSize = 12.sp) },
+                singleLine = true,
+                modifier = Modifier.width(160.dp),
+                shape = RoundedCornerShape(8.dp),
+                textStyle = MaterialTheme.typography.bodySmall,
+            )
+        }
         NovelExcerptOptionRow(
             title = "模板",
             values = NovelExcerptTemplate.entries,

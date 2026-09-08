@@ -24,6 +24,15 @@ class NovelMarkingRepository @Inject constructor(
         )
     }
 
+    suspend fun updateStyle(id: Long, color: Int, style: Int) {
+        database.getNovelMarkingDao().updateStyle(
+            id = id,
+            color = color,
+            style = style,
+            updatedAt = System.currentTimeMillis(),
+        )
+    }
+
     /** Returns true when a marking was added, false when an identical marking was removed. */
     suspend fun toggle(
         mangaId: Long,
@@ -33,6 +42,8 @@ class NovelMarkingRepository @Inject constructor(
         endOffset: Int,
         selectedText: String,
         note: String? = null,
+        color: Int = 0,
+        style: Int = 0,
     ): Boolean {
         val dao = database.getNovelMarkingDao()
         val existing = dao.find(mangaId, chapterId, startOffset, endOffset)
@@ -52,6 +63,8 @@ class NovelMarkingRepository @Inject constructor(
                 note = note,
                 createdAt = now,
                 updatedAt = now,
+                color = color,
+                style = style,
             ),
         )
         return true
@@ -65,6 +78,8 @@ class NovelMarkingRepository @Inject constructor(
         endOffset: Int,
         selectedText: String,
         note: String,
+        color: Int = 0,
+        style: Int = 0,
     ) {
         val dao = database.getNovelMarkingDao()
         val existing = dao.find(mangaId, chapterId, startOffset, endOffset)
@@ -83,6 +98,8 @@ class NovelMarkingRepository @Inject constructor(
                     note = note,
                     createdAt = now,
                     updatedAt = now,
+                    color = color,
+                    style = style,
                 ),
             )
         }

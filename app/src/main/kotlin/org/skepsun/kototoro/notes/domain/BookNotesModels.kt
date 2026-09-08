@@ -48,6 +48,8 @@ sealed interface BookNoteItem {
         val endOffset: Int,
         override val createdAt: Long,
         val updatedAt: Long,
+        val color: Int = 0,
+        val style: Int = 0,
     ) : BookNoteItem {
         override val noteType: NoteType
             get() = if (note.isNullOrBlank()) NoteType.HIGHLIGHT else NoteType.THOUGHT

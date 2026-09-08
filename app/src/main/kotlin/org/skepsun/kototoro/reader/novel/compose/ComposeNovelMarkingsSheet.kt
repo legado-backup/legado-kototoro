@@ -58,6 +58,7 @@ import androidx.compose.ui.unit.sp
 import org.skepsun.kototoro.R
 import org.skepsun.kototoro.bookmarks.domain.Bookmark
 import org.skepsun.kototoro.parsers.model.ContentChapter
+import org.skepsun.kototoro.reader.novel.annotation.NovelMarkingColor
 import org.skepsun.kototoro.reader.novel.annotation.NovelMarkingEntity
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -307,12 +308,25 @@ internal fun ComposeNovelNotesContent(
                                 onJumpToMarking(marking)
                             },
                             headlineContent = {
-                                Text(
-                                    text = marking.selectedText,
-                                    maxLines = 3,
-                                    overflow = TextOverflow.Ellipsis,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    val markingColor = NovelMarkingColor.fromId(marking.color)
+                                    Box(
+                                        modifier = Modifier
+                                            .size(8.dp)
+                                            .clip(CircleShape)
+                                            .background(markingColor.lineColor),
+                                    )
+                                    Text(
+                                        text = marking.selectedText,
+                                        maxLines = 3,
+                                        overflow = TextOverflow.Ellipsis,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                }
                             },
                             supportingContent = {
                                 Column(

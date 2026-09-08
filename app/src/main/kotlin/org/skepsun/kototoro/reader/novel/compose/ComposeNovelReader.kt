@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.navigationBarsIgnoringVisibility
 import androidx.compose.foundation.layout.statusBarsIgnoringVisibility
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
@@ -60,6 +61,7 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerInputScope
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.graphics.asImageBitmap
@@ -670,8 +672,11 @@ fun ComposeNovelReaderRoute(
     onLongPress: (() -> Unit)? = null,
     onTextSelectionChanged: (NovelTextSelection?) -> Unit = {},
     onTextSelectionAction: (NovelTextSelection, NovelTextSelectionAction) -> Unit = { _, _ -> },
+    onSelectionColorChange: (NovelTextSelection, Int) -> Unit = { _, _ -> },
+    onSelectionStyleChange: (NovelTextSelection, Int) -> Unit = { _, _ -> },
     onMarkingClick: (NovelMarkingEntity, androidx.compose.ui.geometry.Rect) -> Unit = { _, _ -> },
     onMarkingAction: (NovelMarkingEntity, NovelTextSelectionAction) -> Unit = { _, _ -> },
+    onMarkingChangeStyle: (NovelMarkingEntity, Int, Int) -> Unit = { _, _, _ -> },
     onOpenMarkingDetail: (NovelMarkingEntity) -> Unit = {},
     onJumpToMarking: (NovelMarkingEntity) -> Unit = {},
     excerpt: NovelExcerptData? = null,
@@ -682,6 +687,7 @@ fun ComposeNovelReaderRoute(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val settings = state.settings
+    val selectionPanelPalette = settings?.let { novelReaderPalette(it.themePreset, isSystemInDarkTheme()) }
     if (renderContent && settings != null && state.content.isNotBlank()) {
         if (settings.readingMode == ReadingMode.PAGED) {
             ComposeNovelPagedChapter(
@@ -840,11 +846,19 @@ fun ComposeNovelReaderRoute(
                 selection.clear()
                 viewModel.publishTextSelection(null)
             },
-        ) { isAbove ->
+        ) { isAbove, maxWidth, maxHeight ->
             NovelTextSelectionActions(
                 selection = selection,
                 onAction = onTextSelectionAction,
+                selectedColor = state.activeMarkingColor,
+                selectedStyle = state.activeMarkingStyle,
+                onColorChange = { color -> onSelectionColorChange(selection, color) },
+                onStyleChange = { style -> onSelectionStyleChange(selection, style) },
                 isAbove = isAbove,
+                panelColor = selectionPanelPalette?.let { Color(it.chromeBackgroundColor) },
+                panelContentColor = selectionPanelPalette?.let { Color(it.chromeTextColor) },
+                maxWidth = maxWidth,
+                maxHeight = maxHeight,
             )
         }
     }
@@ -853,7 +867,7 @@ fun ComposeNovelReaderRoute(
             anchorRect = state.selectedMarkingRect,
             fallbackAnchor = state.selectedMarkingAnchor,
             onDismiss = { viewModel.publishSelectedMarking(null) },
-        ) { isAbove ->
+        ) { isAbove, maxWidth, maxHeight ->
             NovelTextSelectionActions(
                 selection = NovelTextSelection(
                     text = marking.selectedText,
@@ -866,11 +880,19 @@ fun ComposeNovelReaderRoute(
                     clear = { viewModel.publishSelectedMarking(null) },
                 ),
                 isMarking = true,
+                selectedColor = marking.color,
+                selectedStyle = marking.style,
+                onColorChange = { color -> onMarkingChangeStyle(marking, color, marking.style) },
+                onStyleChange = { style -> onMarkingChangeStyle(marking, marking.color, style) },
                 note = marking.note,
                 updatedAt = marking.updatedAt,
                 onAction = { _, action -> onMarkingAction(marking, action) },
                 onExpandNote = { onOpenMarkingDetail(marking) },
                 isAbove = isAbove,
+                panelColor = selectionPanelPalette?.let { Color(it.chromeBackgroundColor) },
+                panelContentColor = selectionPanelPalette?.let { Color(it.chromeTextColor) },
+                maxWidth = maxWidth,
+                maxHeight = maxHeight,
             )
         }
     }
@@ -975,8 +997,8 @@ fun ComposeNovelReaderRoute(
         NovelExcerptSheet(
             data = data,
             onDismiss = onDismissExcerpt,
-            onSave = { onSaveExcerpt(data, it) },
-            onShare = { onShareExcerpt(data, it) },
+            onSave = { excerptData, config -> onSaveExcerpt(excerptData, config) },
+            onShare = { excerptData, config -> onShareExcerpt(excerptData, config) },
         )
     }
 }
@@ -987,7 +1009,7 @@ private fun NovelSelectionActionsOverlay(
     anchorRect: androidx.compose.ui.geometry.Rect?,
     fallbackAnchor: Offset? = null,
     onDismiss: () -> Unit,
-    content: @Composable (isAbove: Boolean) -> Unit,
+    content: @Composable (isAbove: Boolean, maxWidth: Dp, maxHeight: Dp) -> Unit,
 ) {
     if (anchorRect == null && fallbackAnchor == null) return
 
@@ -996,6 +1018,12 @@ private fun NovelSelectionActionsOverlay(
         .asPaddingValues()
         .calculateTopPadding()
     val topSafeInsetPx = with(density) { statusBarTop.roundToPx() }
+    val bottomSafeInsetPx = with(density) {
+        WindowInsets.navigationBarsIgnoringVisibility
+            .asPaddingValues()
+            .calculateBottomPadding()
+            .roundToPx()
+    }
     val spacingPx = with(density) { 6.dp.roundToPx() }
     val horizontalMarginPx = with(density) { 16.dp.roundToPx() }
 
@@ -1023,9 +1051,29 @@ private fun NovelSelectionActionsOverlay(
                 horizontalMargin = horizontalMarginPx,
                 spacing = spacingPx,
                 topSafeInset = topSafeInsetPx,
+                bottomSafeInset = bottomSafeInsetPx,
             )
         } else {
             null
+        }
+
+        val maxToolbarWidth = if (rootSize != IntSize.Zero) {
+            with(density) {
+                (rootSize.width - horizontalMarginPx * 2)
+                    .coerceAtLeast(1)
+                    .toDp()
+            }
+        } else {
+            440.dp
+        }
+        val maxToolbarHeight = if (rootSize != IntSize.Zero) {
+            with(density) {
+                (
+                    rootSize.height - topSafeInsetPx - bottomSafeInsetPx - horizontalMarginPx * 2
+                ).coerceAtLeast(1).toDp()
+            }
+        } else {
+            600.dp
         }
 
         Box(
@@ -1039,7 +1087,7 @@ private fun NovelSelectionActionsOverlay(
                     },
                 ),
         ) {
-            content(placement?.isAbove ?: true)
+            content(placement?.isAbove ?: true, maxToolbarWidth, maxToolbarHeight)
         }
     }
 }
@@ -1057,6 +1105,7 @@ internal fun calculateNovelSelectionToolbarPlacement(
     horizontalMargin: Int = 16,
     spacing: Int = 6,
     topSafeInset: Int = 0,
+    bottomSafeInset: Int = 0,
 ): NovelToolbarPlacement? {
     if (rootSize == IntSize.Zero || toolbarSize == IntSize.Zero) return null
     if (anchorRect == null && fallbackAnchor == null) return null
@@ -1074,7 +1123,9 @@ internal fun calculateNovelSelectionToolbarPlacement(
     val aboveY = (anchorTop - toolbarSize.height - spacing).roundToInt()
     val belowY = (anchorBottom + spacing).roundToInt()
     val minY = (topSafeInset + horizontalMargin).coerceAtLeast(horizontalMargin)
-    val maxY = (rootSize.height - toolbarSize.height - horizontalMargin).coerceAtLeast(minY)
+    val maxY = (
+        rootSize.height - toolbarSize.height - bottomSafeInset - horizontalMargin
+    ).coerceAtLeast(minY)
 
     val isAbove = aboveY >= minY || belowY > maxY
     val y = if (isAbove) {
@@ -1094,6 +1145,7 @@ internal fun calculateNovelSelectionToolbarOffset(
     horizontalMargin: Int = 16,
     spacing: Int = 6,
     topSafeInset: Int = 0,
+    bottomSafeInset: Int = 0,
 ): IntOffset? = calculateNovelSelectionToolbarPlacement(
     anchorRect = anchorRect,
     fallbackAnchor = fallbackAnchor,
@@ -1102,6 +1154,7 @@ internal fun calculateNovelSelectionToolbarOffset(
     horizontalMargin = horizontalMargin,
     spacing = spacing,
     topSafeInset = topSafeInset,
+    bottomSafeInset = bottomSafeInset,
 )?.offset
 
 private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.detectNovelSelectionDismissTap(
@@ -2123,32 +2176,6 @@ private fun highlightedNovelText(
                         SpanStyle(background = transientHighlightColor),
                         start = (start - sourceRange.first).coerceIn(0, text.length),
                         end = (end - sourceRange.first + 1).coerceIn(0, text.length),
-                    )
-                }
-            }
-            markings.forEach { marking ->
-                val localMatch = text.indexOf(marking.selectedText)
-                if (localMatch >= 0) {
-                    addStyle(
-                        SpanStyle(
-                            background = highlightColor.copy(alpha = 0.72f),
-                            textDecoration = TextDecoration.Underline,
-                        ),
-                        start = localMatch,
-                        end = (localMatch + marking.selectedText.length).coerceAtMost(text.length),
-                    )
-                    return@forEach
-                }
-                val start = maxOf(sourceRange.first, marking.startOffset)
-                val end = minOf(sourceRange.last + 1, marking.endOffset)
-                if (start < end) {
-                    addStyle(
-                        SpanStyle(
-                            background = highlightColor.copy(alpha = 0.72f),
-                            textDecoration = TextDecoration.Underline,
-                        ),
-                        start = (start - sourceRange.first).coerceIn(0, text.length),
-                        end = (end - sourceRange.first).coerceIn(0, text.length),
                     )
                 }
             }
