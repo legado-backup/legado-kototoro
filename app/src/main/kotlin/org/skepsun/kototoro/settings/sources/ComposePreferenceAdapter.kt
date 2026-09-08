@@ -9,7 +9,7 @@ import androidx.preference.PreferenceCategory
 import androidx.preference.PreferenceGroup
 import androidx.preference.PreferenceManager
 import androidx.preference.PreferenceScreen
-import androidx.preference.SwitchPreferenceCompat
+import androidx.preference.TwoStatePreference
 import org.skepsun.kototoro.R
 import org.skepsun.kototoro.settings.compose.SettingsChoiceOption
 import org.skepsun.kototoro.settings.compose.SourceSettingsActionRowUiState
@@ -161,7 +161,7 @@ internal class ComposePreferenceAdapter(
             return null
         }
         return when (this) {
-            is SwitchPreferenceCompat -> SourceSettingsSwitchRowUiState(
+            is TwoStatePreference -> SourceSettingsSwitchRowUiState(
                 id = rowIdFor(this),
                 title = rowTitle(),
                 checked = isChecked,
