@@ -22,6 +22,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
@@ -31,14 +33,18 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -56,9 +62,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import org.skepsun.kototoro.R
+import org.skepsun.kototoro.core.util.ext.toFileNameSafe
 import org.skepsun.kototoro.notes.domain.BookNoteItem
 import org.skepsun.kototoro.notes.domain.NoteType
 import org.skepsun.kototoro.parsers.model.Content
+import org.skepsun.kototoro.parsers.model.ContentPage
 import org.skepsun.kototoro.reader.novel.compose.NovelExcerptData
 import org.skepsun.kototoro.reader.novel.compose.NovelExcerptSheet
 
@@ -81,6 +89,15 @@ fun BookNotesDetailScreen(
     var searchBarVisible by remember { mutableStateOf(false) }
     var filterMenuExpanded by remember { mutableStateOf(false) }
     var activeExcerptData by remember { mutableStateOf<NovelExcerptData?>(null) }
+    var exportSheetVisible by remember { mutableStateOf(false) }
+
+    val createDocumentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("text/markdown"),
+    ) { uri ->
+        if (uri != null && manga != null) {
+            BookNotesExportHelper.writeMarkdownToUri(context, uri, manga, notes)
+        }
+    }
 
     val highlightCount = notes.count { it is BookNoteItem.NovelHighlight && it.note.isNullOrBlank() }
     val thoughtCount = notes.count { it is BookNoteItem.NovelHighlight && !it.note.isNullOrBlank() }
@@ -190,7 +207,7 @@ fun BookNotesDetailScreen(
                         },
                         onSearchClick = { searchBarVisible = !searchBarVisible },
                         onExportClick = {
-                            exportNotesToClipboard(context, book, notes)
+                            exportSheetVisible = true
                         },
                         onReadClick = {
                             val firstNote = notes.firstOrNull()
@@ -303,6 +320,7 @@ fun BookNotesDetailScreen(
                     items(itemsInChapter, key = { it.id }) { item ->
                         BookNoteCard(
                             item = item,
+                            manga = manga,
                             onClick = {
                                 manga?.let { onJumpToReader(it, item) }
                             },
@@ -338,6 +356,25 @@ fun BookNotesDetailScreen(
         NovelExcerptSheet(
             data = data,
             onDismiss = { activeExcerptData = null },
+        )
+    }
+
+    // Export Bottom Sheet
+    if (exportSheetVisible && manga != null) {
+        BookNotesExportBottomSheet(
+            manga = manga,
+            notes = notes,
+            onDismiss = { exportSheetVisible = false },
+            onCopyMarkdown = {
+                BookNotesExportHelper.copyToClipboard(context, manga, notes)
+            },
+            onShareMarkdown = {
+                BookNotesExportHelper.shareMarkdownFile(context, manga, notes)
+            },
+            onSaveMarkdown = {
+                val safeTitle = manga.title.toFileNameSafe().ifBlank { "book" }.take(50)
+                createDocumentLauncher.launch("《${safeTitle}》读书笔记.md")
+            },
         )
     }
 }
@@ -474,13 +511,14 @@ private fun QuickActionButton(
 }
 
 @Composable
-private fun BookNoteCard(
+internal fun BookNoteCard(
     item: BookNoteItem,
     onClick: () -> Unit,
     onMakeExcerpt: () -> Unit,
     onCopy: () -> Unit,
     onDelete: () -> Unit,
     modifier: Modifier = Modifier,
+    manga: Content? = null,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
 
@@ -583,14 +621,29 @@ private fun BookNoteCard(
                             style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
                             color = MaterialTheme.colorScheme.onSurface,
                         )
-                        if (!item.imageUrl.isNullOrBlank()) {
+                        val imageModel = remember(item, manga) {
+                            when {
+                                !item.localSnapshotUri.isNullOrBlank() -> item.localSnapshotUri
+                                item.imageUrl?.startsWith("file://") == true -> item.imageUrl
+                                else -> item.toContentPage() ?: manga?.let {
+                                    ContentPage(
+                                        id = item.id,
+                                        url = item.imageUrl.orEmpty(),
+                                        preview = null,
+                                        source = it.source,
+                                    )
+                                } ?: item.imageUrl
+                            }
+                        }
+                        if (imageModel != null) {
                             Spacer(modifier = Modifier.height(6.dp))
                             AsyncImage(
-                                model = item.imageUrl,
+                                model = imageModel,
                                 contentDescription = null,
                                 contentScale = ContentScale.Crop,
                                 modifier = Modifier
-                                    .height(100.dp)
+                                    .fillMaxWidth()
+                                    .height(140.dp)
                                     .clip(RoundedCornerShape(8.dp)),
                             )
                         }
@@ -645,38 +698,100 @@ private fun BookNoteCard(
     }
 }
 
-private fun exportNotesToClipboard(context: Context, manga: Content, notes: List<BookNoteItem>) {
-    val sb = StringBuilder()
-    sb.appendLine("# 《${manga.title}》 读书笔记")
-    if (manga.authors.isNotEmpty()) {
-        sb.appendLine("作者：${manga.authors.joinToString()}")
-    }
-    sb.appendLine()
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun BookNotesExportBottomSheet(
+    manga: Content,
+    notes: List<BookNoteItem>,
+    onDismiss: () -> Unit,
+    onCopyMarkdown: () -> Unit,
+    onShareMarkdown: () -> Unit,
+    onSaveMarkdown: () -> Unit,
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 8.dp),
+        ) {
+            Text(
+                text = "导出《${manga.title}》笔记",
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, fontSize = 18.sp),
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = "共 ${notes.size} 条笔记，导出为标准 Markdown 格式",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(modifier = Modifier.height(16.dp))
 
-    notes.groupBy { it.chapterTitle }.forEach { (chapter, chapterNotes) ->
-        sb.appendLine("## $chapter")
-        chapterNotes.forEach { note ->
-            when (note) {
-                is BookNoteItem.NovelHighlight -> {
-                    if (!note.note.isNullOrBlank()) {
-                        sb.appendLine("> ${note.text}")
-                        sb.appendLine()
-                        sb.appendLine("💭 **想法**：${note.note}")
-                        sb.appendLine()
-                    } else {
-                        sb.appendLine("> ${note.text}")
-                        sb.appendLine()
-                    }
-                }
-                is BookNoteItem.BookmarkEntry -> {
-                    sb.appendLine("🔖 **书签**：第 ${note.page + 1} 页")
-                    sb.appendLine()
-                }
-            }
+            ListItem(
+                headlineContent = { Text("复制 Markdown 内容") },
+                supportingContent = { Text("复制到系统剪贴板，方便快速粘贴到其他地方") },
+                leadingContent = {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_copy),
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable {
+                        onDismiss()
+                        onCopyMarkdown()
+                    },
+            )
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+            ListItem(
+                headlineContent = { Text("分享 Markdown 文档") },
+                supportingContent = { Text("生成 .md 文件，发送到微信、QQ、Obsidian 等") },
+                leadingContent = {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_share),
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable {
+                        onDismiss()
+                        onShareMarkdown()
+                    },
+            )
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+            ListItem(
+                headlineContent = { Text("另存为本地文件") },
+                supportingContent = { Text("使用系统存储选择器，保存到手机本地目录") },
+                leadingContent = {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_download),
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable {
+                        onDismiss()
+                        onSaveMarkdown()
+                    },
+            )
+
+            Spacer(modifier = Modifier.height(32.dp))
         }
     }
-
-    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-    clipboard.setPrimaryClip(ClipData.newPlainText("notes_export", sb.toString()))
-    Toast.makeText(context, "已复制全书笔记 Markdown 格式", Toast.LENGTH_SHORT).show()
 }

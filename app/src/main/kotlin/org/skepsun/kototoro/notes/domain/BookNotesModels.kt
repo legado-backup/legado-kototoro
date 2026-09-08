@@ -1,5 +1,9 @@
 package org.skepsun.kototoro.notes.domain
 
+import org.skepsun.kototoro.core.util.MimeTypes
+import org.skepsun.kototoro.core.util.ext.isImage
+import org.skepsun.kototoro.parsers.model.ContentPage
+import org.skepsun.kototoro.parsers.model.ContentSource
 import org.skepsun.kototoro.parsers.model.ContentType
 
 enum class NoteType {
@@ -59,7 +63,20 @@ sealed interface BookNoteItem {
         val imageUrl: String?,
         val percent: Float,
         override val createdAt: Long,
+        val source: ContentSource? = null,
+        val localSnapshotUri: String? = null,
     ) : BookNoteItem {
         override val noteType: NoteType = NoteType.BOOKMARK
+
+        fun toContentPage(): ContentPage? = source?.let {
+            ContentPage(
+                id = id,
+                url = imageUrl.orEmpty(),
+                preview = imageUrl?.takeIf {
+                    MimeTypes.getMimeTypeFromUrl(it)?.isImage == true
+                },
+                source = it,
+            )
+        }
     }
 }

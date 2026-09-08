@@ -22,11 +22,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.collection.LruCache
+import androidx.core.net.toUri
 import coil3.compose.AsyncImage
 import org.jsoup.Jsoup
 import org.skepsun.kototoro.R
 import org.skepsun.kototoro.bookmarks.domain.Bookmark
 import org.skepsun.kototoro.core.ui.compose.CompactPosterCardStyle
+import java.io.File
 
 private val novelBookmarkPreviewCache = LruCache<String, String>(128)
 
@@ -40,6 +42,18 @@ fun KototoroBookmarkCardThumb(
     onLongClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+    val snapshotFile = remember(item) {
+        File(context.filesDir, "bookmarks/manga_${item.manga.id}_chapter_${item.chapterId}_page_${item.page}.jpg")
+    }
+    val imageModel = remember(item, snapshotFile) {
+        when {
+            snapshotFile.exists() && snapshotFile.length() > 0 -> snapshotFile.toUri().toString()
+            item.imageUrl.startsWith("file://") -> item.imageUrl
+            else -> item.toContentPage()
+        }
+    }
+
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -53,7 +67,7 @@ fun KototoroBookmarkCardThumb(
             .height(cardStyle.posterHeight)
     ) {
         AsyncImage(
-            model = item.imageUrl,
+            model = imageModel,
             contentDescription = null,
             contentScale = ContentScale.Crop,
             modifier = Modifier.matchParentSize()

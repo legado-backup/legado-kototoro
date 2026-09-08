@@ -9,6 +9,8 @@ import androidx.annotation.WorkerThread
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import java.io.File
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -102,6 +104,7 @@ private const val READER_WINDOW_LOG_TAG = "ReaderWindow"
 
 @HiltViewModel
 class ReaderViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val savedStateHandle: SavedStateHandle,
     private val dataRepository: ContentDataRepository,
     private val historyRepository: HistoryRepository,
@@ -900,16 +903,45 @@ class ReaderViewModel @Inject constructor(
             if (isBookmarkAdded.value) {
                 val manga = requireContent()
                 bookmarksRepository.removeBookmark(manga.id, state.chapterId, state.page)
+                val snapshotFile = File(context.filesDir, "bookmarks/manga_${manga.id}_chapter_${state.chapterId}_page_${state.page}.jpg")
+                if (snapshotFile.exists()) {
+                    snapshotFile.delete()
+                }
                 onShowToast.call(R.string.bookmark_removed)
             } else {
                 val page = checkNotNull(getCurrentPage()) { "Page not found" }
+                val manga = requireContent()
+                val resolvedUrl = runCatchingCancellable { pageLoader.getPageUrl(page) }.getOrNull()
+                val pageUri = runCatchingCancellable { pageLoader.loadPage(page, force = false) }.getOrNull()
+
+                // Save persistent local thumbnail snapshot
+                val bookmarkDir = File(context.filesDir, "bookmarks").apply { mkdirs() }
+                val snapshotFile = File(bookmarkDir, "manga_${manga.id}_chapter_${state.chapterId}_page_${state.page}.jpg")
+                if (pageUri != null) {
+                    runCatchingCancellable {
+                        if (pageUri.scheme == "file") {
+                            val srcFile = File(pageUri.path ?: "")
+                            if (srcFile.exists()) {
+                                srcFile.copyTo(snapshotFile, overwrite = true)
+                            }
+                        } else {
+                            context.contentResolver.openInputStream(pageUri)?.use { input ->
+                                snapshotFile.outputStream().use { output ->
+                                    input.copyTo(output)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                val finalImageUrl = resolvedUrl ?: (page.preview.ifNullOrEmpty { page.url })
                 val bookmark = Bookmark(
-                    manga = requireContent(),
+                    manga = manga,
                     pageId = page.id,
                     chapterId = state.chapterId,
                     page = state.page,
                     scroll = state.scroll,
-                    imageUrl = page.preview.ifNullOrEmpty { page.url },
+                    imageUrl = finalImageUrl,
                     createdAt = Instant.now(),
                     percent = computePercent(state.chapterId, state.page),
                 )

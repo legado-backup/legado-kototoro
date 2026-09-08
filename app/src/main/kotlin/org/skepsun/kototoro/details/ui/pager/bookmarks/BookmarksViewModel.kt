@@ -27,6 +27,8 @@ import org.skepsun.kototoro.list.ui.model.EmptyState
 import org.skepsun.kototoro.list.ui.model.ListHeader
 import org.skepsun.kototoro.list.ui.model.ListModel
 import org.skepsun.kototoro.list.ui.model.LoadingState
+import org.skepsun.kototoro.notes.domain.BookNoteItem
+import org.skepsun.kototoro.notes.domain.BookNotesRepository
 import org.skepsun.kototoro.parsers.model.Content
 import org.skepsun.kototoro.reader.ui.PageSaveHelper
 import javax.inject.Inject
@@ -34,10 +36,12 @@ import javax.inject.Inject
 @HiltViewModel
 class BookmarksViewModel @Inject constructor(
     private val bookmarksRepository: BookmarksRepository,
+    private val bookNotesRepository: BookNotesRepository,
     settings: AppSettings,
 ) : BaseViewModel(), FlowCollector<ContentDetails?> {
 
-    private val manga = MutableStateFlow<Content?>(null)
+    val currentContent = MutableStateFlow<Content?>(null)
+    private val manga = currentContent
     val onActionDone = MutableEventFlow<ReversibleAction>()
 
     val gridScale = settings.observeAsStateFlow(
@@ -53,8 +57,18 @@ class BookmarksViewModel @Inject constructor(
         .filterNotNull()
         .stateIn(viewModelScope + Dispatchers.Default, SharingStarted.Lazily, listOf(LoadingState))
 
+    val bookNotes: StateFlow<List<BookNoteItem>> = manga.filterNotNull().flatMapLatest { m ->
+        bookNotesRepository.observeBookNotes(m.id)
+    }.stateIn(viewModelScope + Dispatchers.Default, SharingStarted.Lazily, emptyList())
+
     override suspend fun emit(value: ContentDetails?) {
         manga.value = value?.toContent()
+    }
+
+    fun deleteBookNote(item: BookNoteItem) {
+        launchJob(Dispatchers.Default) {
+            bookNotesRepository.deleteNote(item)
+        }
     }
 
     fun removeBookmarks(ids: Set<Long>) {

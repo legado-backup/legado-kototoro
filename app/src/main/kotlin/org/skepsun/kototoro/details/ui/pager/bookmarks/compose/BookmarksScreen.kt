@@ -35,6 +35,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.core.net.toUri
 import coil3.compose.AsyncImage
 import org.skepsun.kototoro.R
 import org.skepsun.kototoro.bookmarks.domain.Bookmark
@@ -42,16 +43,29 @@ import org.skepsun.kototoro.details.ui.compose.state.DetailsPaneState
 import org.skepsun.kototoro.details.ui.compose.state.rememberDetailsPaneNestedScrollConnection
 import org.skepsun.kototoro.core.ui.compose.performSelectionHapticFeedback
 import org.skepsun.kototoro.list.ui.model.ListHeader
+import java.io.File
 
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-fun BookmarkCard(
+private fun BookmarkCard(
     bookmark: Bookmark,
     isSelected: Boolean,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
+    val snapshotFile = remember(bookmark) {
+        File(context.filesDir, "bookmarks/manga_${bookmark.manga.id}_chapter_${bookmark.chapterId}_page_${bookmark.page}.jpg")
+    }
+    val imageModel = remember(bookmark, snapshotFile) {
+        when {
+            snapshotFile.exists() && snapshotFile.length() > 0 -> snapshotFile.toUri().toString()
+            bookmark.imageUrl.startsWith("file://") -> bookmark.imageUrl
+            else -> bookmark.toContentPage()
+        }
+    }
+
     Card(
         modifier = modifier
             .fillMaxWidth()
@@ -68,7 +82,7 @@ fun BookmarkCard(
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
             AsyncImage(
-                model = bookmark.toContentPage() ?: bookmark.imageUrl,
+                model = imageModel,
                 contentDescription = "Bookmark Thumbnail",
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),

@@ -120,14 +120,15 @@ fun ChaptersPagesTabsContent(
     val isBookmarksTabEnabled = !isVideo
     val isDownloadedFilterVisible = mangaDetails?.local != null
 
-    val tabsList = remember(isPagesTabEnabled, isBookmarksTabEnabled) {
+    val tabsList = remember(isPagesTabEnabled, isBookmarksTabEnabled, isNovel) {
         buildList {
             add(DetailsTabSpec(tabId = DETAILS_TAB_CHAPTERS, titleResId = R.string.chapters, iconResId = R.drawable.ic_list))
             if (isPagesTabEnabled) {
                 add(DetailsTabSpec(tabId = DETAILS_TAB_PAGES, titleResId = R.string.pages, iconResId = R.drawable.ic_grid))
             }
             if (isBookmarksTabEnabled) {
-                add(DetailsTabSpec(tabId = DETAILS_TAB_BOOKMARKS, titleResId = R.string.bookmarks, iconResId = R.drawable.ic_bookmark))
+                val titleRes = if (isNovel) R.string.notes else R.string.bookmarks
+                add(DetailsTabSpec(tabId = DETAILS_TAB_BOOKMARKS, titleResId = titleRes, iconResId = R.drawable.ic_bookmark))
             }
         }
     }

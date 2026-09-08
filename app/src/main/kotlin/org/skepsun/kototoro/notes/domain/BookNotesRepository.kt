@@ -1,14 +1,19 @@
 package org.skepsun.kototoro.notes.domain
 
+import android.content.Context
+import androidx.core.net.toUri
 import dagger.Reusable
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import org.skepsun.kototoro.core.db.MangaDatabase
 import org.skepsun.kototoro.core.db.entity.toContent
+import java.io.File
 import javax.inject.Inject
 
 @Reusable
 class BookNotesRepository @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val database: MangaDatabase,
 ) {
 
@@ -98,10 +103,21 @@ class BookNotesRepository @Inject constructor(
             )
         }
 
+        val manga = database.getMangaDao().find(mangaId)?.toContent()
+        val source = manga?.source
+
         val bookmarkItems = bookmarks.map { b ->
             val chapter = chapters[b.chapterId]
             val chapterIndex = chapter?.index ?: 0
             val chapterTitle = chapter?.title ?: "第 ${b.page + 1} 页"
+            val snapshotFile = File(context.filesDir, "bookmarks/manga_${b.mangaId}_chapter_${b.chapterId}_page_${b.page}.jpg")
+            val localSnapshotUri = if (snapshotFile.exists() && snapshotFile.length() > 0) {
+                snapshotFile.toUri().toString()
+            } else if (b.imageUrl.startsWith("file://")) {
+                b.imageUrl
+            } else {
+                null
+            }
             BookNoteItem.BookmarkEntry(
                 id = b.pageId,
                 mangaId = b.mangaId,
@@ -112,6 +128,8 @@ class BookNotesRepository @Inject constructor(
                 imageUrl = b.imageUrl,
                 percent = b.percent,
                 createdAt = b.createdAt,
+                source = source,
+                localSnapshotUri = localSnapshotUri,
             )
         }
 
@@ -130,7 +148,13 @@ class BookNotesRepository @Inject constructor(
     suspend fun deleteNote(item: BookNoteItem) {
         when (item) {
             is BookNoteItem.NovelHighlight -> database.getNovelMarkingDao().deleteById(item.id)
-            is BookNoteItem.BookmarkEntry -> database.getBookmarksDao().delete(item.id)
+            is BookNoteItem.BookmarkEntry -> {
+                database.getBookmarksDao().delete(item.id)
+                val snapshotFile = File(context.filesDir, "bookmarks/manga_${item.mangaId}_chapter_${item.chapterId}_page_${item.page}.jpg")
+                if (snapshotFile.exists()) {
+                    snapshotFile.delete()
+                }
+            }
         }
     }
 
