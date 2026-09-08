@@ -65,7 +65,16 @@ class NovelTranslationProcessor @Inject constructor(
         chapterTitle: String,
         excerpt: String,
         question: String,
-    ): String = translationCoordinator.askBook(bookTitle, chapterTitle, excerpt, question)
+        contextBefore: String = "",
+        contextAfter: String = "",
+    ): String = translationCoordinator.askBook(
+        bookTitle = bookTitle,
+        chapterTitle = chapterTitle,
+        excerpt = excerpt,
+        question = question,
+        contextBefore = contextBefore,
+        contextAfter = contextAfter,
+    )
 
     /**
      * 翻译一章内容，返回进度 Flow。

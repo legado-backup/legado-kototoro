@@ -8,11 +8,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -24,12 +24,13 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.mutableStateOf
@@ -69,51 +70,65 @@ internal fun ComposeNovelReaderOptionsSheet(
     replaceRulesEnabled: Boolean = true,
     onToggleReplaceRules: () -> Unit = {},
     onShowReplaceRules: () -> Unit = {},
-    onShowMarkings: () -> Unit = {},
-    onBookmark: () -> Unit,
     onTts: () -> Unit,
     onClearTranslationCache: () -> Unit,
+    workTitle: String = "",
+    chapterTitle: String = "",
+    progressLabel: String = "",
+    progressFraction: Float? = null,
 ) {
     var sliderEditor by remember { mutableStateOf<SliderEditor?>(null) }
     fun update(transform: NovelReaderSettings.() -> NovelReaderSettings) {
         onSettingsChanged(settings.transform().normalized())
     }
     val pages = listOf(
-        NovelOptionsPage(R.drawable.ic_book_page, R.string.novel_reading_mode),
-        NovelOptionsPage(R.drawable.ic_appearance, R.string.appearance),
-        NovelOptionsPage(R.drawable.ic_translate, R.string.novel_translation_display_mode),
-        NovelOptionsPage(R.drawable.ic_more_vert, R.string.reader_actions),
+        NovelOptionsPage(R.drawable.ic_book_page, R.string.novel_reader_tab_reading),
+        NovelOptionsPage(R.drawable.ic_translate, R.string.novel_reader_tab_tools),
+        NovelOptionsPage(R.drawable.ic_more_vert, R.string.novel_reader_tab_page),
     )
     val pagerState = rememberPagerState(pageCount = pages::size)
     val scope = rememberCoroutineScope()
     ModalBottomSheet(onDismissRequest = onDismiss, modifier = Modifier.fillMaxHeight()) {
         Column(modifier = Modifier.fillMaxWidth().weight(1f)) {
-            Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 4.dp),
+            ) {
                 pages.forEachIndexed { index, page ->
                     NovelOptionsTab(
                         page = page,
                         selected = pagerState.currentPage == index,
                         onClick = { scope.launch { pagerState.animateScrollToPage(index) } },
+                        modifier = Modifier.weight(1f),
                     )
                 }
             }
             HorizontalPager(state = pagerState, modifier = Modifier.fillMaxWidth().weight(1f)) { page ->
                 when (page) {
-                    0 -> NovelReadingOptionsPage(settings, ::update)
-                    1 -> NovelAppearanceOptionsPage(settings, ::update, onEditSlider = { sliderEditor = it })
-                    2 -> NovelTranslationOptionsPage(
+                    0 -> NovelReaderReadingPage(
+                        workTitle = workTitle,
+                        chapterTitle = chapterTitle,
+                        progressLabel = progressLabel,
+                        progressFraction = progressFraction,
+                        settings = settings,
+                        update = ::update,
+                        onEditSlider = { sliderEditor = it },
+                    )
+                    1 -> NovelReaderToolsPage(
                         settings = settings,
                         update = ::update,
                         onToggleTranslation = { onToggleTranslation(); onDismiss() },
                         onClearTranslationCache = onClearTranslationCache,
-                    )
-                    else -> NovelMiscOptionsPage(
+                        onTts = { onTts(); onDismiss() },
                         replaceRulesEnabled = replaceRulesEnabled,
                         onToggleReplaceRules = { onToggleReplaceRules(); onDismiss() },
                         onShowReplaceRules = { onShowReplaceRules(); onDismiss() },
-                        onShowMarkings = { onShowMarkings(); onDismiss() },
-                        onBookmark = { onBookmark(); onDismiss() },
-                        onTts = { onTts(); onDismiss() },
+                    )
+                    else -> NovelReaderPageActionsPage(
+                        settings = settings,
+                        update = ::update,
                         onReset = { onSettingsChanged(NovelReaderSettings()) },
                     )
                 }
@@ -127,26 +142,162 @@ internal fun ComposeNovelReaderOptionsSheet(
 private data class NovelOptionsPage(val icon: Int, val label: Int)
 
 @Composable
-private fun RowScope.NovelOptionsTab(page: NovelOptionsPage, selected: Boolean, onClick: () -> Unit) {
+private fun NovelOptionsTab(
+    page: NovelOptionsPage,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     Surface(
         shape = RoundedCornerShape(18.dp),
         color = if (selected) MaterialTheme.colorScheme.surfaceContainerHigh else Color.Transparent,
+        modifier = modifier,
     ) {
-        IconButton(onClick = onClick, modifier = Modifier.size(44.dp)) {
+        TextButton(
+            onClick = onClick,
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp),
+            modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp),
+        ) {
             Icon(
                 painter = painterResource(page.icon),
                 contentDescription = stringResource(page.label),
                 tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp),
+            )
+            Spacer(Modifier.size(4.dp))
+            Text(
+                text = stringResource(page.label),
+                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
             )
         }
     }
 }
 
+private fun androidx.compose.foundation.lazy.LazyListScope.novelReaderOverviewContent(
+    workTitle: String,
+    chapterTitle: String,
+    progressLabel: String,
+    progressFraction: Float?,
+) {
+    item {
+        Surface(
+            shape = RoundedCornerShape(24.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerLow,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.padding(20.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.novel_reader_overview),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Text(
+                    text = workTitle.ifBlank { stringResource(R.string.novel_reader_untitled) },
+                    style = MaterialTheme.typography.titleLarge,
+                    maxLines = 2,
+                )
+                if (chapterTitle.isNotBlank()) {
+                    Text(
+                        text = chapterTitle,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                    )
+                }
+                if (progressFraction != null) {
+                    LinearProgressIndicator(
+                        progress = { progressFraction.coerceIn(0f, 1f) },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                Row(
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Bottom,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        text = stringResource(R.string.progress),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        text = progressLabel.ifBlank { "—" },
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
+        }
+    }
+}
+
 @Composable
-private fun NovelReadingOptionsPage(
+private fun NovelReaderReadingPage(
+    workTitle: String,
+    chapterTitle: String,
+    progressLabel: String,
+    progressFraction: Float?,
     settings: NovelReaderSettings,
     update: (NovelReaderSettings.() -> NovelReaderSettings) -> Unit,
+    onEditSlider: (SliderEditor) -> Unit,
 ) = NovelOptionsPageList {
+    novelReaderOverviewContent(workTitle, chapterTitle, progressLabel, progressFraction)
+    item {
+        Text(
+            text = stringResource(R.string.novel_reader_display_section),
+            style = MaterialTheme.typography.titleMedium,
+        )
+    }
+    novelAppearanceOptionsContent(settings, update, onEditSlider)
+}
+
+@Composable
+private fun NovelReaderToolsPage(
+    settings: NovelReaderSettings,
+    update: (NovelReaderSettings.() -> NovelReaderSettings) -> Unit,
+    onToggleTranslation: () -> Unit,
+    onClearTranslationCache: () -> Unit,
+    onTts: () -> Unit,
+    replaceRulesEnabled: Boolean,
+    onToggleReplaceRules: () -> Unit,
+    onShowReplaceRules: () -> Unit,
+) = NovelOptionsPageList {
+    item {
+        Text(
+            text = stringResource(R.string.novel_reader_tools_section),
+            style = MaterialTheme.typography.titleMedium,
+        )
+    }
+    novelTranslationOptionsContent(settings, update, onToggleTranslation, onClearTranslationCache)
+    item {
+        ReaderOptionGroup {
+            Text(
+                text = stringResource(R.string.novel_reader_assistance_section),
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Spacer(Modifier.size(4.dp))
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Action(R.drawable.ic_voice_input, R.string.tts_settings_title, onTts)
+                Action(R.drawable.ic_replace, R.string.replace_rule_effective_title, onShowReplaceRules)
+            }
+            ReaderOptionDivider()
+            ReaderOptionSwitchRow(
+                label = stringResource(R.string.replace_rule_book_toggle),
+                checked = replaceRulesEnabled,
+                onCheckedChange = { onToggleReplaceRules() },
+            )
+        }
+    }
+}
+
+private fun androidx.compose.foundation.lazy.LazyListScope.novelReadingOptionsContent(
+    settings: NovelReaderSettings,
+    update: (NovelReaderSettings.() -> NovelReaderSettings) -> Unit,
+) {
     item {
         ReaderSegmentedChoice(
             title = stringResource(R.string.novel_reading_mode),
@@ -176,12 +327,17 @@ private fun NovelReadingOptionsPage(
     }
 }
 
-@Composable
-private fun NovelAppearanceOptionsPage(
+private fun androidx.compose.foundation.lazy.LazyListScope.novelAppearanceOptionsContent(
     settings: NovelReaderSettings,
     update: (NovelReaderSettings.() -> NovelReaderSettings) -> Unit,
     onEditSlider: (SliderEditor) -> Unit,
-) = NovelOptionsPageList {
+) {
+    item {
+        NovelReaderFontOptionRow(
+            selected = settings.font,
+            onSelected = { update { copy(font = it) } },
+        )
+    }
     item {
         ReaderSegmentedChoice(
             title = stringResource(R.string.novel_theme_preset),
@@ -199,13 +355,12 @@ private fun NovelAppearanceOptionsPage(
     }
 }
 
-@Composable
-private fun NovelTranslationOptionsPage(
+private fun androidx.compose.foundation.lazy.LazyListScope.novelTranslationOptionsContent(
     settings: NovelReaderSettings,
     update: (NovelReaderSettings.() -> NovelReaderSettings) -> Unit,
     onToggleTranslation: () -> Unit,
     onClearTranslationCache: () -> Unit,
-) = NovelOptionsPageList {
+) {
     item {
         ReaderSegmentedChoice(
             title = stringResource(R.string.novel_translation_display_mode),
@@ -236,33 +391,29 @@ private fun NovelTranslationOptionsPage(
 }
 
 @Composable
-private fun NovelMiscOptionsPage(
-    replaceRulesEnabled: Boolean,
-    onToggleReplaceRules: () -> Unit,
-    onShowReplaceRules: () -> Unit,
-    onShowMarkings: () -> Unit,
-    onBookmark: () -> Unit,
-    onTts: () -> Unit,
+private fun NovelReaderPageActionsPage(
+    settings: NovelReaderSettings,
+    update: (NovelReaderSettings.() -> NovelReaderSettings) -> Unit,
     onReset: () -> Unit,
-) =
-    NovelOptionsPageList {
-        item {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Action(R.drawable.ic_bookmark, R.string.bookmark_add, onBookmark)
-                Action(R.drawable.ic_voice_input, R.string.tts_settings_title, onTts)
-                Action(R.drawable.ic_replace, R.string.replace_rule_effective_title, onShowReplaceRules)
-                Action(R.drawable.ic_select_range, R.string.novel_markings_title, onShowMarkings)
-                Action(R.drawable.ic_backup_restore, R.string.novel_reset, onReset)
-            }
-        }
-        item {
-            ReaderOptionSwitchRow(
-                label = stringResource(R.string.replace_rule_book_toggle),
-                checked = replaceRulesEnabled,
-                onCheckedChange = { onToggleReplaceRules() },
+) = NovelOptionsPageList {
+    item {
+        Text(
+            text = stringResource(R.string.novel_reader_page_section),
+            style = MaterialTheme.typography.titleMedium,
+        )
+    }
+    novelReadingOptionsContent(settings, update)
+    item {
+        ReaderOptionGroup {
+            Text(
+                text = stringResource(R.string.novel_reader_page_reset_section),
+                style = MaterialTheme.typography.titleSmall,
             )
+            Spacer(Modifier.size(4.dp))
+            Action(R.drawable.ic_backup_restore, R.string.novel_reset, onReset)
         }
     }
+}
 
 @Composable
 private fun NovelOptionsPageList(content: androidx.compose.foundation.lazy.LazyListScope.() -> Unit) {
@@ -335,9 +486,9 @@ internal fun ComposeNovelReaderOptionsPanel(
             }
         }
         item {
-            Action(R.drawable.ic_backup_restore, R.string.novel_reset) {
+            Action(R.drawable.ic_backup_restore, R.string.novel_reset, onClick = {
                 onSettingsChanged(NovelReaderSettings())
-            }
+            })
         }
     }
     SliderEditorDialog(sliderEditor) { sliderEditor = null }
@@ -489,8 +640,14 @@ private fun NovelThemeSwatch(preset: NovelReaderThemePreset) {
     )
 }
 
-@Composable private fun Action(icon: Int, label: Int, onClick: () -> Unit) {
-    FilledTonalButton(onClick = onClick) {
+@Composable
+private fun Action(
+    icon: Int,
+    label: Int,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    FilledTonalButton(onClick = onClick, modifier = modifier) {
         Icon(painterResource(icon), contentDescription = null)
         Text(stringResource(label), modifier = Modifier.padding(start = 8.dp))
     }

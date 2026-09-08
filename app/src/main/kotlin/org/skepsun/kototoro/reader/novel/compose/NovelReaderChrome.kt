@@ -503,6 +503,7 @@ internal fun NovelReaderBottomChrome(
             bookmarks = state.novelBookmarks,
             markings = state.novelMarkings,
             chapters = state.chapters,
+            bookTitle = state.workTitle,
             onDismiss = callbacks.onDismissMarkings,
             onEditNote = callbacks.onEditMarkingNote,
             onDelete = callbacks.onDeleteMarking,
@@ -521,10 +522,14 @@ internal fun NovelReaderBottomChrome(
                 replaceRulesEnabled = state.replaceRulesEnabled,
                 onToggleReplaceRules = callbacks.onToggleReplaceRules,
                 onShowReplaceRules = callbacks.onShowReplaceRules,
-                onShowMarkings = callbacks.onShowMarkings,
-                onBookmark = callbacks.onBookmark,
                 onTts = callbacks.onTts,
                 onClearTranslationCache = callbacks.onClearTranslationCache,
+                workTitle = state.workTitle,
+                chapterTitle = state.chapterTitle,
+                progressLabel = state.progressLabel,
+                progressFraction = state.progressMax.takeIf { it > 0f }?.let {
+                    (state.progressValue / it).coerceIn(0f, 1f)
+                },
             )
         }
     }

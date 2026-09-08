@@ -14,6 +14,7 @@ import kotlin.math.roundToInt
  */
 data class NovelReaderSettings(
     val fontSizeSp: Float = 17f,
+    val font: NovelReaderFont = NovelReaderFont.SYSTEM_SERIF,
     val lineSpacing: Float = 1.6f,
     val paragraphSpacing: Float = 0f,
     val marginHorizontal: Int = 36,
@@ -72,6 +73,7 @@ data class NovelReaderSettings(
         val normalized = normalized()
         getPrefs(context).edit {
             putFloat(KEY_FONT_SIZE, normalized.fontSizeSp)
+            putString(KEY_FONT, normalized.font.name)
             putFloat(KEY_LINE_SPACING, normalized.lineSpacing)
             putInt(KEY_PARAGRAPH_SPACING_LINES, normalized.paragraphSpacing.roundToInt())
             remove(KEY_PARAGRAPH_SPACING)
@@ -107,6 +109,7 @@ data class NovelReaderSettings(
 
         private const val PREF_NAME = "novel_reader_settings"
         private const val KEY_FONT_SIZE = "font_size"
+        private const val KEY_FONT = "font"
         private const val KEY_LINE_SPACING = "line_spacing"
         private const val KEY_PARAGRAPH_SPACING = "paragraph_spacing"
         private const val KEY_PARAGRAPH_SPACING_LINES = "paragraph_spacing_lines"
@@ -134,6 +137,11 @@ data class NovelReaderSettings(
             val legacyChapterTitleAtBottom = prefs.getBoolean(KEY_CHAPTER_TITLE_AT_BOTTOM, false)
             return NovelReaderSettings(
                 fontSizeSp = prefs.getSafeFloat(KEY_FONT_SIZE, 17f),
+                font = runCatching {
+                    NovelReaderFont.valueOf(
+                        prefs.getString(KEY_FONT, null) ?: NovelReaderFont.SYSTEM_SERIF.name
+                    )
+                }.getOrDefault(NovelReaderFont.SYSTEM_SERIF),
                 lineSpacing = prefs.getSafeFloat(KEY_LINE_SPACING, 1.6f),
                 paragraphSpacing = if (prefs.contains(KEY_PARAGRAPH_SPACING_LINES)) {
                     prefs.getInt(KEY_PARAGRAPH_SPACING_LINES, 0).toFloat()
@@ -220,6 +228,16 @@ enum class NovelReaderThemePreset {
 enum class NovelPageTurnAnimation {
     SLIDE,
     SIMULATION,
+}
+
+enum class NovelReaderFont(val displayName: String) {
+    SOURCE_HAN_SERIF("思源宋体"),
+    LXGW_WENKAI("霞鹜文楷"),
+    NOTO_SANS("思源黑体"),
+    SYSTEM_SERIF("系统衬线"),
+    SYSTEM_SANS("系统无衬线"),
+    SYSTEM_CURSIVE("系统手写"),
+    SYSTEM_MONOSPACE("系统等宽"),
 }
 
 data class NovelReaderPalette(

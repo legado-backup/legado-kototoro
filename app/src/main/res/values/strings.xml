@@ -669,6 +669,7 @@
     <string name="video_info_last_failure_detail">Last Failure Detail: %s</string>
     <!-- Novel reader strings -->
     <string name="novel_font_size">Text Size</string>
+    <string name="novel_font">Font</string>
     <string name="novel_line_spacing">Line Height</string>
 	<string name="novel_paragraph_spacing">Paragraph Spacing</string>
 	<string name="novel_paragraph_spacing_value">%1$d lines</string>
@@ -3882,6 +3883,13 @@
     <string name="novel_ai_ask_loading">Thinking…</string>
     <string name="novel_ai_ask_not_configured">Configure an AI translation API first in AI settings</string>
     <string name="novel_ai_ask_failed">AI request failed: %s</string>
+    <string name="novel_ai_ask_selected_label">Selected text</string>
+    <string name="novel_ai_ask_context_label">Nearby context is used to improve the answer but is not shown</string>
+    <string name="novel_ai_ask_suggestions">Try asking</string>
+    <string name="novel_ai_question_summary">What is the main point of this passage?</string>
+    <string name="novel_ai_question_character_motivation">What are the characters’ emotions and motivations here?</string>
+    <string name="novel_ai_question_chapter_role">What role does this passage play in the chapter?</string>
+    <string name="novel_ai_question_explain_details">Explain the metaphors, foreshadowing, or difficult parts.</string>
     <string name="novel_selection_highlight_added">Highlight added</string>
     <string name="novel_selection_highlight_removed">Highlight removed</string>
     <string name="novel_selection_position_unavailable">This selection cannot be located in the chapter</string>
@@ -3897,6 +3905,25 @@
     <string name="novel_marking_edit_note_title">Edit note</string>
     <string name="novel_marking_delete">Delete</string>
     <string name="novel_marking_deleted">Item deleted</string>
+    <string name="novel_reader_overview">Overview</string>
+    <string name="novel_reader_tab_reading">Reading</string>
+    <string name="novel_reader_tab_tools">Tools</string>
+    <string name="novel_reader_tab_page">Page</string>
+    <string name="novel_reader_display_section">Display and layout</string>
+    <string name="novel_reader_tools_section">Translation and tools</string>
+    <string name="novel_reader_assistance_section">Reading assistance</string>
+    <string name="novel_reader_page_section">Page behavior</string>
+    <string name="novel_reader_page_reset_section">Other</string>
+    <string name="novel_reader_untitled">Untitled book</string>
+    <string name="novel_reader_chapter_index">Chapter index</string>
+    <string name="novel_reader_chapter_position">%1$d / %2$d</string>
+    <string name="novel_reader_current_chapter">Current chapter</string>
+    <string name="novel_reader_quick_actions">Quick actions</string>
+    <string name="novel_reader_notes_counts">%1$d highlights · %2$d notes · %3$d bookmarks</string>
+    <string name="novel_reader_notes_sort_chapter">By chapter</string>
+    <string name="novel_reader_notes_sort_time">By time</string>
+    <string name="novel_reader_notes_search_hint">Search notes or highlights…</string>
+    <string name="novel_reader_no_matching_notes">No matching notes</string>
     <string name="cancel">Cancel</string>
     <string name="local_download_manager">Download manager</string>
     <string name="local_download_idle">View tasks and download history</string>

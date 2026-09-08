@@ -11,6 +11,7 @@ import org.skepsun.kototoro.reader.novel.NovelParagraph
 import org.skepsun.kototoro.reader.novel.NovelParagraphType
 import org.skepsun.kototoro.reader.novel.NovelReaderSettings
 import org.skepsun.kototoro.reader.novel.NovelTranslationDisplayMode
+import org.skepsun.kototoro.reader.novel.annotation.NovelMarkingEntity
 
 class NovelComposeReaderViewModelTest {
 
@@ -273,12 +274,67 @@ class NovelComposeReaderViewModelTest {
 	}
 
 	@Test
-	fun `showMarkings opens chapters sheet with NOTES tab`() {
+	fun `showMarkings opens only the markings sheet`() {
 		val viewModel = NovelComposeReaderViewModel()
+		val chapter = ContentChapter(
+			id = 1L,
+			title = "Chapter 1",
+			volume = 0,
+			number = 1f,
+			url = "ch1",
+			scanlator = null,
+			uploadDate = 0,
+			branch = null,
+			source = org.skepsun.kototoro.core.model.UnknownContentSource,
+		)
+		viewModel.showChapters(listOf(chapter), 0)
 		viewModel.showMarkings()
 
 		val state = viewModel.uiState.value
-		assertTrue(state.chaptersSheetVisible)
-		assertEquals(NovelChaptersSheetTab.NOTES, state.chaptersSheetInitialTab)
+		assertFalse(state.chaptersSheetVisible)
+		assertTrue(state.markingsSheetVisible)
+	}
+
+	@Test
+	fun `publishing a marking style updates the selected marking immediately`() {
+		val viewModel = NovelComposeReaderViewModel()
+		val marking = NovelMarkingEntity(
+			id = 17L,
+			mangaId = 1L,
+			chapterId = 2L,
+			chapterIndex = 0,
+			startOffset = 10,
+			endOffset = 15,
+			selectedText = "选中文本",
+			createdAt = 1L,
+			updatedAt = 1L,
+			color = 0,
+			style = 0,
+		)
+		viewModel.publishNovelMarkings(listOf(marking))
+		viewModel.publishSelectedMarking(marking)
+
+		viewModel.publishNovelMarkingStyle(marking.id, color = 3, style = 2)
+
+		val state = viewModel.uiState.value
+		assertEquals(3, state.selectedMarking?.color)
+		assertEquals(2, state.selectedMarking?.style)
+		assertEquals(3, state.novelMarkings.single().color)
+		assertEquals(2, state.novelMarkings.single().style)
+
+		viewModel.publishNovelMarkings(listOf(marking))
+
+		val staleState = viewModel.uiState.value
+		assertEquals(3, staleState.selectedMarking?.color)
+		assertEquals(2, staleState.selectedMarking?.style)
+		assertEquals(3, staleState.novelMarkings.single().color)
+		assertEquals(2, staleState.novelMarkings.single().style)
+
+		viewModel.publishNovelMarkings(listOf(marking.copy(color = 3, style = 2)))
+		val persistedState = viewModel.uiState.value
+		assertEquals(3, persistedState.selectedMarking?.color)
+		assertEquals(2, persistedState.selectedMarking?.style)
+		assertEquals(3, persistedState.novelMarkings.single().color)
+		assertEquals(2, persistedState.novelMarkings.single().style)
 	}
 }

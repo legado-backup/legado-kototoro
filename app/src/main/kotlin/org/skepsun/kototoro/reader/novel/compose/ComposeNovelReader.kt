@@ -78,6 +78,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -131,11 +132,13 @@ fun ComposeNovelReader(
     modifier: Modifier = Modifier,
 ) {
     if (pages.isEmpty()) return
+    val fontFamily = rememberNovelReaderFontFamily(settings.font)
     if (settings.readingMode == ReadingMode.SCROLL) {
         ComposeNovelContinuousReader(
             pages,
             settings,
             initialPage,
+            fontFamily,
             onPageChanged,
             onTextSelectionChanged,
             modifier,
@@ -158,6 +161,7 @@ fun ComposeNovelReader(
             NovelPageText(
                 page = pages[index],
                 settings = settings,
+                fontFamily = fontFamily,
                 onSelectionChanged = onTextSelectionChanged,
                 modifier = Modifier.fillMaxSize(),
             )
@@ -170,6 +174,7 @@ private fun ComposeNovelContinuousReader(
     pages: List<NovelPage>,
     settings: NovelReaderSettings,
     initialPage: Int,
+    fontFamily: FontFamily,
     onPageChanged: (NovelPage) -> Unit,
     onTextSelectionChanged: (NovelTextSelection?) -> Unit,
     modifier: Modifier,
@@ -185,6 +190,7 @@ private fun ComposeNovelContinuousReader(
             NovelPageText(
                 page = pages[index],
                 settings = settings,
+                fontFamily = fontFamily,
                 onSelectionChanged = onTextSelectionChanged,
                 modifier = Modifier.fillParentMaxWidth(),
             )
@@ -196,6 +202,7 @@ private fun ComposeNovelContinuousReader(
 private fun NovelPageText(
     page: NovelPage,
     settings: NovelReaderSettings,
+    fontFamily: FontFamily,
     onSelectionChanged: (NovelTextSelection?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -218,6 +225,7 @@ private fun NovelPageText(
                     spacingLines = settings.paragraphSpacingLines,
                 ),
                 style = MaterialTheme.typography.bodyLarge.copy(
+                    fontFamily = fontFamily,
                     fontSize = settings.fontSizeSp.sp,
                     lineHeight = (settings.fontSizeSp * settings.lineSpacing).sp,
                     textDirection = direction,
@@ -256,6 +264,7 @@ fun ComposeNovelChapter(
     modifier: Modifier = Modifier,
 ) {
     val actualListState = listState ?: rememberLazyListState()
+    val fontFamily = rememberNovelReaderFontFamily(settings.font)
     val palette = novelReaderPalette(settings.themePreset, isSystemInDarkTheme())
     val contentColor = Color(palette.textColor)
     val blocks = androidx.compose.runtime.remember(content, translation) {
@@ -338,6 +347,7 @@ fun ComposeNovelChapter(
                             )
                         }
                         val style = MaterialTheme.typography.bodyLarge.copy(
+                            fontFamily = fontFamily,
                             fontSize = settings.fontSizeSp.sp,
                             lineHeight = (settings.fontSizeSp * settings.lineSpacing).sp,
                             textDirection = direction,
@@ -448,6 +458,7 @@ private fun ComposeNovelChapterWindow(
     activeChapterId: Long = 0L,
 ) {
     val palette = novelReaderPalette(settings.themePreset, isSystemInDarkTheme())
+    val fontFamily = rememberNovelReaderFontFamily(settings.font)
     val contentColor = Color(palette.textColor)
     val blocks = androidx.compose.runtime.remember(chapters) {
         buildNovelComposeWindowBlocks(chapters)
@@ -552,6 +563,7 @@ private fun ComposeNovelChapterWindow(
                             )
                         }
                         val style = MaterialTheme.typography.bodyLarge.copy(
+                            fontFamily = fontFamily,
                             fontSize = settings.fontSizeSp.sp,
                             lineHeight = (settings.fontSizeSp * settings.lineSpacing).sp,
                             textDirection = direction,
@@ -645,7 +657,6 @@ fun ComposeNovelReaderRoute(
     onShowReplaceRules: () -> Unit = {},
     onDismissReplaceRules: () -> Unit = {},
     onReplaceRuleToggle: (org.skepsun.kototoro.core.replace.ReplaceRule, Boolean) -> Unit = { _, _ -> },
-    onShowMarkings: () -> Unit = {},
     onDismissMarkings: () -> Unit = {},
     onEditMarkingNote: (NovelMarkingEntity) -> Unit = {},
     onDeleteMarking: (NovelMarkingEntity) -> Unit = {},
@@ -925,10 +936,14 @@ fun ComposeNovelReaderRoute(
             replaceRulesEnabled = state.replaceRulesEnabled,
             onToggleReplaceRules = onToggleReplaceRules,
             onShowReplaceRules = { viewModel.showReplaceRules(); onShowReplaceRules() },
-            onShowMarkings = { viewModel.showMarkings(); onShowMarkings() },
-            onBookmark = onBookmark,
             onTts = onTts,
             onClearTranslationCache = onClearTranslationCache,
+            workTitle = state.workTitle,
+            chapterTitle = state.chapterTitle,
+            progressLabel = state.progressLabel,
+            progressFraction = state.progressMax.takeIf { it > 0f }?.let {
+                (state.progressValue / it).coerceIn(0f, 1f)
+            },
         )
     }
     if (!state.chromeEnabled && state.chaptersSheetVisible) {
@@ -981,6 +996,7 @@ fun ComposeNovelReaderRoute(
             bookmarks = state.novelBookmarks,
             markings = state.novelMarkings,
             chapters = state.chapters,
+            bookTitle = state.workTitle,
             onDismiss = {
                 viewModel.dismissMarkings()
                 onDismissMarkings()
@@ -1370,6 +1386,7 @@ private fun ComposeNovelPagedChapter(
     modifier: Modifier,
 ) {
     val density = LocalDensity.current
+    val fontFamily = rememberNovelReaderFontFamily(settings.font)
     // Pagination owns its measurer and only uses it from its background calculation.
     val textMeasurer = rememberTextMeasurer(cacheSize = 0)
     val palette = novelReaderPalette(settings.themePreset, isSystemInDarkTheme())
@@ -1377,6 +1394,7 @@ private fun ComposeNovelPagedChapter(
     val direction = if (settings.textDirection == NovelTextDirection.RTL) TextDirection.Rtl else TextDirection.Ltr
     val alignment = if (direction == TextDirection.Rtl) TextAlign.Right else TextAlign.Start
     val style = MaterialTheme.typography.bodyLarge.copy(
+        fontFamily = fontFamily,
         fontSize = settings.fontSizeSp.sp,
         lineHeight = (settings.fontSizeSp * settings.lineSpacing).sp,
         textDirection = direction,

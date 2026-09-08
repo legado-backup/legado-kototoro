@@ -1,6 +1,5 @@
 package org.skepsun.kototoro.reader.novel.compose
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -12,7 +11,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -33,7 +31,6 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
@@ -67,7 +64,7 @@ import java.util.Locale
 internal enum class NovelMarkingsTab(val label: String) {
     ALL("全部"),
     HIGHLIGHTS("划线"),
-    THOUGHTS("想法"),
+    ANNOTATIONS("批注"),
     BOOKMARKS("书签"),
 }
 
@@ -77,6 +74,7 @@ internal fun ComposeNovelMarkingsSheet(
     bookmarks: List<Bookmark> = emptyList(),
     markings: List<NovelMarkingEntity>,
     chapters: List<ContentChapter> = emptyList(),
+    bookTitle: String = "",
     onDismiss: () -> Unit,
     onEditNote: (NovelMarkingEntity) -> Unit,
     onDelete: (NovelMarkingEntity) -> Unit,
@@ -92,6 +90,7 @@ internal fun ComposeNovelMarkingsSheet(
             bookmarks = bookmarks,
             markings = markings,
             chapters = chapters,
+            bookTitle = bookTitle,
             onDismiss = onDismiss,
             onJumpToMarking = onJumpToMarking,
             onOpenBookmark = onOpenBookmark,
@@ -108,6 +107,7 @@ internal fun ComposeNovelNotesContent(
     bookmarks: List<Bookmark> = emptyList(),
     markings: List<NovelMarkingEntity> = emptyList(),
     chapters: List<ContentChapter> = emptyList(),
+    bookTitle: String = "",
     onDismiss: () -> Unit = {},
     onJumpToMarking: (NovelMarkingEntity) -> Unit = {},
     onOpenBookmark: (Bookmark) -> Unit = {},
@@ -119,15 +119,16 @@ internal fun ComposeNovelNotesContent(
 ) {
     var selectedTab by remember { mutableStateOf(NovelMarkingsTab.ALL) }
     var searchQuery by remember { mutableStateOf("") }
+    var sortByChapter by remember { mutableStateOf(true) }
 
-    val thoughtCount = remember(markings) { markings.count { !it.note.isNullOrBlank() } }
+    val annotationCount = remember(markings) { markings.count { !it.note.isNullOrBlank() } }
     val highlightCount = remember(markings) { markings.size }
     val bookmarkCount = remember(bookmarks) { bookmarks.size }
 
     val filteredMarkings = remember(markings, selectedTab, searchQuery) {
         val base = when (selectedTab) {
             NovelMarkingsTab.ALL, NovelMarkingsTab.HIGHLIGHTS -> markings
-            NovelMarkingsTab.THOUGHTS -> markings.filter { !it.note.isNullOrBlank() }
+            NovelMarkingsTab.ANNOTATIONS -> markings.filter { !it.note.isNullOrBlank() }
             NovelMarkingsTab.BOOKMARKS -> emptyList()
         }
         if (searchQuery.isBlank()) {
@@ -139,9 +140,8 @@ internal fun ComposeNovelNotesContent(
             }
         }
     }
-
     val filteredBookmarks = remember(bookmarks, selectedTab, searchQuery) {
-        if (selectedTab == NovelMarkingsTab.HIGHLIGHTS || selectedTab == NovelMarkingsTab.THOUGHTS) {
+        if (selectedTab != NovelMarkingsTab.ALL && selectedTab != NovelMarkingsTab.BOOKMARKS) {
             emptyList()
         } else if (searchQuery.isBlank()) {
             bookmarks
@@ -149,15 +149,20 @@ internal fun ComposeNovelNotesContent(
             bookmarks.filter { it.imageUrl.contains(searchQuery, ignoreCase = true) }
         }
     }
+    val displayedMarkings = remember(filteredMarkings, sortByChapter) {
+        if (sortByChapter) filteredMarkings else filteredMarkings.sortedByDescending { it.updatedAt }
+    }
+    val displayedBookmarks = remember(filteredBookmarks, sortByChapter) {
+        if (sortByChapter) filteredBookmarks else filteredBookmarks.sortedByDescending { it.createdAt }
+    }
 
     Column(
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = if (showTitle) 0.dp else 8.dp),
     ) {
         if (showTitle) {
-            // Title & Counts
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -169,7 +174,12 @@ internal fun ComposeNovelNotesContent(
                         style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                     )
                     Text(
-                        text = "共 $highlightCount 条划线 · $thoughtCount 条想法 · $bookmarkCount 个书签",
+                        text = stringResource(
+                            R.string.novel_reader_notes_counts,
+                            highlightCount,
+                            annotationCount,
+                            bookmarkCount,
+                        ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -178,228 +188,184 @@ internal fun ComposeNovelNotesContent(
                     Icon(imageVector = Icons.Default.Close, contentDescription = stringResource(R.string.close))
                 }
             }
+            if (bookTitle.isNotBlank()) {
+                NovelNotesBookSummary(
+                    title = bookTitle,
+                    itemCount = highlightCount + bookmarkCount,
+                )
+            }
         } else {
             Text(
-                text = "共 $highlightCount 条划线 · $thoughtCount 条想法 · $bookmarkCount 个书签",
+                text = stringResource(
+                    R.string.novel_reader_notes_counts,
+                            highlightCount,
+                            annotationCount,
+                            bookmarkCount,
+                ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 4.dp),
             )
         }
 
-        // Search Bar
-        OutlinedTextField(
-            value = searchQuery,
-            onValueChange = { searchQuery = it },
-            modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("搜索划线或想法内容...") },
-            leadingIcon = {
-                Icon(imageVector = Icons.Default.Search, contentDescription = null, modifier = Modifier.size(20.dp))
-            },
-            trailingIcon = {
-                if (searchQuery.isNotEmpty()) {
-                    IconButton(onClick = { searchQuery = "" }) {
-                        Icon(imageVector = Icons.Default.Clear, contentDescription = "Clear", modifier = Modifier.size(18.dp))
-                    }
-                }
-            },
-            singleLine = true,
-            shape = RoundedCornerShape(12.dp),
-        )
-
-        // Category Filter Chips
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            NovelMarkingsTab.entries.forEach { tab ->
-                val count = when (tab) {
-                    NovelMarkingsTab.ALL -> highlightCount + bookmarkCount
-                    NovelMarkingsTab.HIGHLIGHTS -> highlightCount
-                    NovelMarkingsTab.THOUGHTS -> thoughtCount
-                    NovelMarkingsTab.BOOKMARKS -> bookmarkCount
-                }
-                FilterChip(
-                    selected = selectedTab == tab,
-                    onClick = { selectedTab = tab },
-                    label = { Text("${tab.label} ($count)") },
-                    shape = RoundedCornerShape(8.dp),
+            FilterChip(
+                selected = selectedTab == NovelMarkingsTab.ALL,
+                onClick = { selectedTab = NovelMarkingsTab.ALL },
+                label = { Text("${NovelMarkingsTab.ALL.label} (${highlightCount + bookmarkCount})") },
+                shape = RoundedCornerShape(10.dp),
+            )
+            FilterChip(
+                selected = selectedTab == NovelMarkingsTab.HIGHLIGHTS,
+                onClick = { selectedTab = NovelMarkingsTab.HIGHLIGHTS },
+                label = { Text("${NovelMarkingsTab.HIGHLIGHTS.label} ($highlightCount)") },
+                shape = RoundedCornerShape(10.dp),
+            )
+            FilterChip(
+                selected = selectedTab == NovelMarkingsTab.ANNOTATIONS,
+                onClick = { selectedTab = NovelMarkingsTab.ANNOTATIONS },
+                label = { Text("${NovelMarkingsTab.ANNOTATIONS.label} ($annotationCount)") },
+                shape = RoundedCornerShape(10.dp),
+            )
+            FilterChip(
+                selected = selectedTab == NovelMarkingsTab.BOOKMARKS,
+                onClick = { selectedTab = NovelMarkingsTab.BOOKMARKS },
+                label = { Text("${NovelMarkingsTab.BOOKMARKS.label} ($bookmarkCount)") },
+                shape = RoundedCornerShape(10.dp),
+            )
+        }
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                modifier = Modifier.weight(1f),
+                placeholder = { Text(stringResource(R.string.novel_reader_notes_search_hint)) },
+                leadingIcon = {
+                    Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(20.dp))
+                },
+                trailingIcon = {
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(onClick = { searchQuery = "" }) {
+                            Icon(Icons.Default.Clear, contentDescription = stringResource(R.string.clear), modifier = Modifier.size(18.dp))
+                        }
+                    }
+                },
+                singleLine = true,
+                shape = RoundedCornerShape(14.dp),
+            )
+            IconButton(onClick = { sortByChapter = !sortByChapter }) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_sort_desc),
+                    contentDescription = stringResource(
+                        if (sortByChapter) R.string.novel_reader_notes_sort_time else R.string.novel_reader_notes_sort_chapter,
+                    ),
+                    tint = if (sortByChapter) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
                 )
             }
         }
 
-        // List of items
         LazyColumn(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f, fill = false)
-                .heightIn(max = 680.dp),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 16.dp),
+            modifier = Modifier.fillMaxWidth().weight(1f),
         ) {
-            if (filteredBookmarks.isNotEmpty()) {
-                item {
+            if (displayedBookmarks.isNotEmpty()) {
+                item(key = "bookmarks_header") {
                     Text(
                         text = stringResource(R.string.bookmarks),
                         style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
                         color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(top = 8.dp, bottom = 4.dp),
+                        modifier = Modifier.padding(top = 4.dp, bottom = 2.dp),
                     )
                 }
-                items(filteredBookmarks, key = { "bookmark:${it.pageId}" }) { bookmark ->
-                    val chapterName = chapters.firstOrNull { it.id == bookmark.chapterId }?.title
-                    ListItem(
-                        modifier = Modifier.clickable(onClick = {
+                items(displayedBookmarks, key = { "bookmark:${it.pageId}" }) { bookmark ->
+                    NovelBookmarkCard(
+                        bookmark = bookmark,
+                        chapterName = chapters.firstOrNull { it.id == bookmark.chapterId }?.title
+                            ?: bookmark.chapterTitle,
+                        onOpen = {
                             onDismiss()
                             onOpenBookmark(bookmark)
-                        }),
-                        headlineContent = {
-                            Text(
-                                text = bookmark.imageUrl.ifBlank {
-                                    stringResource(R.string.bookmark_position, bookmark.page + 1)
-                                },
-                                maxLines = 3,
-                                overflow = TextOverflow.Ellipsis,
-                            )
                         },
-                        supportingContent = {
-                            val positionText = stringResource(R.string.bookmark_position, bookmark.page + 1)
-                            Text(
-                                text = if (!chapterName.isNullOrBlank()) "$chapterName · $positionText" else positionText,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        },
-                        trailingContent = {
-                            IconButton(onClick = { onDeleteBookmark(bookmark) }) {
-                                Icon(
-                                    painter = painterResource(R.drawable.ic_delete),
-                                    contentDescription = stringResource(R.string.delete),
-                                )
-                            }
-                        },
+                        onDelete = { onDeleteBookmark(bookmark) },
                     )
-                    HorizontalDivider()
                 }
             }
 
-            if (filteredMarkings.isNotEmpty()) {
-                // Group markings by chapterIndex
-                val grouped = filteredMarkings.groupBy { it.chapterIndex }
-                grouped.forEach { (chapIdx, list) ->
-                    item(key = "chap_header_$chapIdx") {
-                        val chapterTitle = chapters.getOrNull(chapIdx)?.title
-                        val headerText = if (!chapterTitle.isNullOrBlank()) {
-                            "第 ${chapIdx + 1} 章 · $chapterTitle"
-                        } else {
-                            "第 ${chapIdx + 1} 章"
+            if (displayedMarkings.isNotEmpty()) {
+                if (sortByChapter) {
+                    displayedMarkings.groupBy { it.chapterIndex }.forEach { (chapterIndex, chapterMarkings) ->
+                        item(key = "chapter_header:$chapterIndex") {
+                            val chapterTitle = chapters.getOrNull(chapterIndex)?.title
+                            Text(
+                                text = chapterTitle?.takeIf { it.isNotBlank() }
+                                    ?: stringResource(R.string.novel_marking_chapter, chapterIndex + 1),
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(top = 10.dp, bottom = 2.dp),
+                            )
                         }
+                        items(chapterMarkings, key = { "marking:${it.id}" }) { marking ->
+                            NovelMarkingCard(
+                                marking = marking,
+                                chapterName = chapters.getOrNull(marking.chapterIndex)?.title,
+                                onOpen = {
+                                    onDismiss()
+                                    onJumpToMarking(marking)
+                                },
+                                onEdit = { onEditNote(marking) },
+                                onDelete = { onDelete(marking) },
+                            )
+                        }
+                    }
+                } else {
+                    item(key = "recent_markings_header") {
                         Text(
-                            text = headerText,
+                            text = stringResource(R.string.novel_reader_notes_sort_time),
                             style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
                             color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(top = 10.dp, bottom = 4.dp),
+                            modifier = Modifier.padding(top = 10.dp, bottom = 2.dp),
                         )
                     }
-                    items(list, key = { "marking_${it.id}" }) { marking ->
-                        ListItem(
-                            modifier = Modifier.clickable {
+                    items(displayedMarkings, key = { "marking:${it.id}" }) { marking ->
+                        NovelMarkingCard(
+                            marking = marking,
+                            chapterName = chapters.getOrNull(marking.chapterIndex)?.title,
+                            onOpen = {
                                 onDismiss()
                                 onJumpToMarking(marking)
                             },
-                            headlineContent = {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                ) {
-                                    val markingColor = NovelMarkingColor.fromId(marking.color)
-                                    Box(
-                                        modifier = Modifier
-                                            .size(8.dp)
-                                            .clip(CircleShape)
-                                            .background(markingColor.lineColor),
-                                    )
-                                    Text(
-                                        text = marking.selectedText,
-                                        maxLines = 3,
-                                        overflow = TextOverflow.Ellipsis,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        modifier = Modifier.weight(1f),
-                                    )
-                                }
-                            },
-                            supportingContent = {
-                                Column(
-                                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                                    modifier = Modifier.padding(top = 4.dp),
-                                ) {
-                                    if (!marking.note.isNullOrBlank()) {
-                                        Surface(
-                                            shape = RoundedCornerShape(8.dp),
-                                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
-                                            modifier = Modifier.fillMaxWidth(),
-                                        ) {
-                                            Row(modifier = Modifier.padding(8.dp)) {
-                                                Box(
-                                                    modifier = Modifier
-                                                        .width(3.dp)
-                                                        .height(20.dp)
-                                                        .clip(CircleShape)
-                                                        .background(MaterialTheme.colorScheme.primary),
-                                                )
-                                                Spacer(Modifier.width(6.dp))
-                                                Text(
-                                                    text = marking.note,
-                                                    maxLines = 2,
-                                                    overflow = TextOverflow.Ellipsis,
-                                                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
-                                                    color = MaterialTheme.colorScheme.primary,
-                                                )
-                                            }
-                                        }
-                                    }
-                                    val dateStr = remember(marking.updatedAt) {
-                                        SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(marking.updatedAt))
-                                    }
-                                    Text(
-                                        text = dateStr,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                    )
-                                }
-                            },
-                            trailingContent = {
-                                Row {
-                                    IconButton(onClick = { onEditNote(marking) }) {
-                                        Icon(
-                                            painter = painterResource(R.drawable.ic_edit),
-                                            contentDescription = stringResource(R.string.novel_marking_edit_note),
-                                        )
-                                    }
-                                    IconButton(onClick = { onDelete(marking) }) {
-                                        Icon(
-                                            painter = painterResource(R.drawable.ic_delete),
-                                            contentDescription = stringResource(R.string.novel_marking_delete),
-                                        )
-                                    }
-                                }
-                            },
+                            onEdit = { onEditNote(marking) },
+                            onDelete = { onDelete(marking) },
                         )
-                        HorizontalDivider()
                     }
                 }
             }
 
-            if (filteredBookmarks.isEmpty() && filteredMarkings.isEmpty()) {
+            if (displayedBookmarks.isEmpty() && displayedMarkings.isEmpty()) {
                 item {
                     Box(
                         contentAlignment = Alignment.Center,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 36.dp),
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 36.dp),
                     ) {
                         Text(
-                            text = if (searchQuery.isNotEmpty()) "未找到匹配内容" else stringResource(R.string.novel_markings_empty),
+                            text = if (searchQuery.isNotEmpty()) {
+                                stringResource(R.string.novel_reader_no_matching_notes)
+                            } else {
+                                stringResource(R.string.novel_markings_empty)
+                            },
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
@@ -407,6 +373,196 @@ internal fun ComposeNovelNotesContent(
             }
         }
     }
+}
+
+@Composable
+private fun NovelNotesBookSummary(title: String, itemCount: Int) {
+    Surface(
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.padding(16.dp),
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = stringResource(R.string.novel_markings_summary, itemCount),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Icon(
+                painter = painterResource(R.drawable.ic_book_page),
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(32.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun NovelBookmarkCard(
+    bookmark: Bookmark,
+    chapterName: String?,
+    onOpen: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    val positionText = stringResource(R.string.bookmark_position, bookmark.page + 1)
+    Surface(
+        onClick = onOpen,
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+    ) {
+        Column(
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.padding(start = 16.dp, top = 14.dp, end = 8.dp, bottom = 12.dp),
+        ) {
+            Row(verticalAlignment = Alignment.Top) {
+                Box(
+                    modifier = Modifier
+                        .width(4.dp)
+                        .height(42.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.75f)),
+                )
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    text = bookmark.imageUrl.ifBlank { positionText },
+                    style = MaterialTheme.typography.bodyLarge,
+                    maxLines = 4,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                IconButton(onClick = onDelete) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_delete),
+                        contentDescription = stringResource(R.string.delete),
+                    )
+                }
+            }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    text = chapterName?.takeIf { it.isNotBlank() } ?: positionText,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                Text("·", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    text = formatNovelDate(Date.from(bookmark.createdAt)),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun NovelMarkingCard(
+    marking: NovelMarkingEntity,
+    chapterName: String?,
+    onOpen: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    val markingColor = NovelMarkingColor.fromId(marking.color)
+    val location = chapterName?.takeIf { it.isNotBlank() }
+        ?: stringResource(R.string.novel_marking_chapter, marking.chapterIndex + 1)
+    Surface(
+        onClick = onOpen,
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+    ) {
+        Column(
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.padding(start = 16.dp, top = 14.dp, end = 8.dp, bottom = 10.dp),
+        ) {
+            Row(verticalAlignment = Alignment.Top) {
+                Box(
+                    modifier = Modifier
+                        .width(4.dp)
+                        .height(48.dp)
+                        .clip(CircleShape)
+                        .background(markingColor.lineColor),
+                )
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    text = marking.selectedText,
+                    style = MaterialTheme.typography.bodyLarge,
+                    maxLines = 4,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            if (!marking.note.isNullOrBlank()) {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.55f),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        text = marking.note,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                    )
+                }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = location,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = formatNovelDate(Date(marking.updatedAt)),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+                    )
+                }
+                IconButton(onClick = onEdit) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_edit),
+                        contentDescription = stringResource(R.string.novel_marking_edit_note),
+                    )
+                }
+                IconButton(onClick = onDelete) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_delete),
+                        contentDescription = stringResource(R.string.novel_marking_delete),
+                    )
+                }
+            }
+        }
+    }
+}
+
+private fun formatNovelDate(date: Date): String {
+    return SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(date)
 }
 
 /**
@@ -635,4 +791,3 @@ internal fun NovelNoteDetailSheet(
         }
     }
 }
-

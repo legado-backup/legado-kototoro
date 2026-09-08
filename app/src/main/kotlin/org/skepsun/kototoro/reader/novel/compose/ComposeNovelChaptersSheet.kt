@@ -2,6 +2,7 @@ package org.skepsun.kototoro.reader.novel.compose
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -20,6 +21,7 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -30,8 +32,7 @@ import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -42,6 +43,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -105,50 +108,90 @@ internal fun ComposeNovelChaptersSheet(
                     .fillMaxHeight()
                     .align(Alignment.TopCenter),
             ) {
-                TabRow(
-                    selectedTabIndex = pagerState.currentPage,
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    contentColor = MaterialTheme.colorScheme.primary,
-                    divider = {
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
-                    },
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 20.dp, top = 2.dp, end = 12.dp, bottom = 2.dp),
                 ) {
-                    NovelChaptersSheetTab.entries.forEachIndexed { index, tab ->
-                        val selected = pagerState.currentPage == index
-                        val label = when (tab) {
-                            NovelChaptersSheetTab.CHAPTERS -> "${stringResource(R.string.chapters)} (${chapters.size})"
-                            NovelChaptersSheetTab.NOTES -> {
-                                val totalNotes = markings.size + bookmarks.size
-                                "${stringResource(R.string.notes)} ($totalNotes)"
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = stringResource(R.string.novel_reader_chapter_index),
+                            style = MaterialTheme.typography.titleLarge,
+                        )
+                        Text(
+                            text = if (chapters.isEmpty()) {
+                                stringResource(R.string.chapters_empty)
+                            } else {
+                                stringResource(
+                                    R.string.novel_reader_chapter_position,
+                                    currentIndex.coerceIn(0, chapters.lastIndex) + 1,
+                                    chapters.size,
+                                )
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Default.Close, contentDescription = stringResource(R.string.close))
+                    }
+                }
+                Surface(
+                    shape = RoundedCornerShape(24.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+                ) {
+                    Row(modifier = Modifier.padding(4.dp)) {
+                        NovelChaptersSheetTab.entries.forEachIndexed { index, tab ->
+                            val selected = pagerState.currentPage == index
+                            val label = when (tab) {
+                                NovelChaptersSheetTab.CHAPTERS -> "${stringResource(R.string.chapters)} (${chapters.size})"
+                                NovelChaptersSheetTab.NOTES -> {
+                                    val totalNotes = markings.size + bookmarks.size
+                                    "${stringResource(R.string.notes)} ($totalNotes)"
+                                }
+                            }
+                            val iconRes = when (tab) {
+                                NovelChaptersSheetTab.CHAPTERS -> R.drawable.ic_list
+                                NovelChaptersSheetTab.NOTES -> R.drawable.ic_bookmark
+                            }
+                            Surface(
+                                onClick = {
+                                    coroutineScope.launch {
+                                        pagerState.animateScrollToPage(index)
+                                    }
+                                },
+                                shape = RoundedCornerShape(20.dp),
+                                color = if (selected) MaterialTheme.colorScheme.surface else Color.Transparent,
+                                modifier = Modifier.weight(1f),
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
+                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 10.dp),
+                                ) {
+                                    Icon(
+                                        painter = painterResource(iconRes),
+                                        contentDescription = null,
+                                        tint = if (selected) {
+                                            MaterialTheme.colorScheme.primary
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                        },
+                                        modifier = Modifier.size(18.dp),
+                                    )
+                                    Text(
+                                        text = label,
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
                             }
                         }
-                        val iconRes = when (tab) {
-                            NovelChaptersSheetTab.CHAPTERS -> R.drawable.ic_list
-                            NovelChaptersSheetTab.NOTES -> R.drawable.ic_bookmark
-                        }
-                        Tab(
-                            selected = selected,
-                            onClick = {
-                                coroutineScope.launch {
-                                    pagerState.animateScrollToPage(index)
-                                }
-                            },
-                            text = {
-                                Text(
-                                    text = label,
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                                )
-                            },
-                            icon = {
-                                Icon(
-                                    painter = painterResource(iconRes),
-                                    contentDescription = null,
-                                    modifier = Modifier.size(20.dp),
-                                )
-                            },
-                        )
                     }
                 }
 
@@ -279,21 +322,49 @@ internal fun ComposeNovelChaptersContent(
                                     },
                                 )
                             },
+                            supportingContent = {
+                                val subtitle = if (selected) {
+                                    stringResource(R.string.novel_reader_current_chapter)
+                                } else {
+                                    item.chapter.branch
+                                }
+                                subtitle?.takeIf { it.isNotBlank() }?.let { branch ->
+                                    Text(
+                                        text = branch,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            },
                             leadingContent = if (selected) {
                                 { Icon(painterResource(R.drawable.ic_current_chapter), null) }
                             } else {
                                 null
                             },
+                            trailingContent = {
+                                Text(
+                                    text = (item.originalIndex + 1).toString(),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = if (selected) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    },
+                                )
+                            },
                             colors = ListItemDefaults.colors(
                                 containerColor = if (selected) {
                                     MaterialTheme.colorScheme.secondaryContainer
                                 } else {
-                                    MaterialTheme.colorScheme.surfaceContainerLow
+                                    Color.Transparent
                                 },
                             ),
-                            modifier = Modifier.clickable { onChapterSelected(item.originalIndex) },
+                            modifier = Modifier
+                                .padding(vertical = 2.dp)
+                                .clip(RoundedCornerShape(14.dp))
+                                .clickable { onChapterSelected(item.originalIndex) },
                         )
-                        HorizontalDivider()
                     }
                 }
             }

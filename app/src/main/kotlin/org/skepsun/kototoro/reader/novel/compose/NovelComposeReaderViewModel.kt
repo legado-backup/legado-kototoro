@@ -424,8 +424,7 @@ class NovelComposeReaderViewModel @Inject constructor() : ViewModel() {
 
     fun showMarkings() {
         _uiState.value = _uiState.value.copy(
-            chaptersSheetVisible = true,
-            chaptersSheetInitialTab = NovelChaptersSheetTab.NOTES,
+            chaptersSheetVisible = false,
             markingsSheetVisible = true,
             settingsSheetVisible = false,
             replaceRulesSheetVisible = false,
@@ -536,7 +535,25 @@ class NovelComposeReaderViewModel @Inject constructor() : ViewModel() {
     }
 
     fun publishNovelMarkings(markings: List<NovelMarkingEntity>) {
-        _uiState.value = _uiState.value.copy(novelMarkings = markings)
+        val pendingStyles = pendingNovelMarkingStyles.toMap()
+        val mergedMarkings = markings.map { marking ->
+            pendingStyles[marking.id]?.let { style ->
+                marking.copy(color = style.color, style = style.style)
+            } ?: marking
+        }
+        pendingNovelMarkingStyles.entries.toList().forEach { (id, style) ->
+            val persisted = markings.firstOrNull { it.id == id }
+            if (persisted != null && persisted.color == style.color && persisted.style == style.style) {
+                pendingNovelMarkingStyles.remove(id)
+            }
+        }
+        val selectedMarking = _uiState.value.selectedMarking?.let { selected ->
+            mergedMarkings.firstOrNull { it.id == selected.id } ?: selected
+        }
+        _uiState.value = _uiState.value.copy(
+            novelMarkings = mergedMarkings,
+            selectedMarking = selectedMarking,
+        )
     }
 
     fun publishNovelBookmarks(bookmarks: List<Bookmark>) {
@@ -586,6 +603,19 @@ class NovelComposeReaderViewModel @Inject constructor() : ViewModel() {
         )
     }
 
+    fun publishNovelMarkingStyle(markingId: Long, color: Int, style: Int) {
+        pendingNovelMarkingStyles[markingId] = NovelMarkingStyleOverride(color, style)
+        val state = _uiState.value
+        _uiState.value = state.copy(
+            novelMarkings = state.novelMarkings.map { marking ->
+                marking.takeUnless { it.id == markingId } ?: marking.copy(color = color, style = style)
+            },
+            selectedMarking = state.selectedMarking?.let { marking ->
+                if (marking.id == markingId) marking.copy(color = color, style = style) else marking
+            },
+        )
+    }
+
     fun publishActiveMarkingStyle(color: Int, style: Int) {
         _uiState.value = _uiState.value.copy(
             activeMarkingColor = color,
@@ -621,6 +651,8 @@ class NovelComposeReaderViewModel @Inject constructor() : ViewModel() {
 
     private var highlightJob: Job? = null
 
+    private val pendingNovelMarkingStyles = mutableMapOf<Long, NovelMarkingStyleOverride>()
+
     fun triggerTransientHighlight(range: IntRange?, text: String? = null, durationMs: Long = 1500L) {
         highlightJob?.cancel()
         if (range == null && text == null) {
@@ -645,6 +677,11 @@ class NovelComposeReaderViewModel @Inject constructor() : ViewModel() {
         }
     }
 }
+
+private data class NovelMarkingStyleOverride(
+    val color: Int,
+    val style: Int,
+)
 
 internal const val NOVEL_PAGER_LOG_TAG = "NovelPager"
 

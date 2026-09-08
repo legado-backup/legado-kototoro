@@ -53,12 +53,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.skepsun.kototoro.core.ui.theme.OnlineFontLoader
-import org.skepsun.kototoro.core.ui.theme.OnlineFontPreset
+import org.skepsun.kototoro.reader.novel.NovelReaderFont
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -71,20 +70,6 @@ enum class NovelExcerptTemplate(val displayName: String) {
     SHADOW("静影"),
     MANUSCRIPT("手札"),
     JINSHU("锦书"),
-}
-
-enum class NovelExcerptFont(
-    val displayName: String,
-    val family: FontFamily,
-    val onlinePreset: OnlineFontPreset? = null,
-) {
-    SOURCE_HAN_SERIF("思源宋体", FontFamily.Serif, OnlineFontPreset.SOURCE_HAN_SERIF_SC),
-    LXGW_WENKAI("霞鹜文楷", FontFamily.Serif, OnlineFontPreset.LXGW_WENKAI),
-    NOTO_SANS("思源黑体", FontFamily.SansSerif, OnlineFontPreset.NOTO_SANS_CJK_SC),
-    SYSTEM_SERIF("系统衬线", FontFamily.Serif),
-    SYSTEM_SANS("系统无衬线", FontFamily.SansSerif),
-    SYSTEM_CURSIVE("系统手写", FontFamily.Cursive),
-    SYSTEM_MONOSPACE("系统等宽", FontFamily.Monospace),
 }
 
 private data class NovelExcerptTemplateStyle(
@@ -144,7 +129,7 @@ enum class NovelExcerptBackground(val displayName: String, val color: Color?) {
 
 data class NovelExcerptConfiguration(
     val template: NovelExcerptTemplate = NovelExcerptTemplate.CALENDAR,
-    val font: NovelExcerptFont = NovelExcerptFont.SYSTEM_SERIF,
+    val font: NovelReaderFont = NovelReaderFont.SYSTEM_SERIF,
     val background: NovelExcerptBackground = NovelExcerptBackground.AUTO,
     val pageIndex: Int = 0,
 )
@@ -321,11 +306,8 @@ private fun NovelExcerptOptions(
             label = { it.displayName },
             onSelected = { onConfigurationChanged(configuration.copy(template = it)) },
         )
-        NovelExcerptOptionRow(
-            title = "字体",
-            values = NovelExcerptFont.entries,
+        NovelReaderFontOptionRow(
             selected = configuration.font,
-            label = { it.displayName },
             onSelected = { onConfigurationChanged(configuration.copy(font = it)) },
         )
         NovelExcerptOptionRow(
@@ -528,7 +510,7 @@ internal object NovelExcerptCardRenderer {
     fun calculateTotalPages(
         context: Context?,
         data: NovelExcerptData,
-        font: NovelExcerptFont,
+        font: NovelReaderFont,
     ): Int {
         val tf = resolveTypeface(context, font)
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -1163,19 +1145,20 @@ internal object NovelExcerptCardRenderer {
         }
     }
 
-    private fun resolveTypeface(context: Context?, font: NovelExcerptFont): Typeface? {
-        if (context != null && font.onlinePreset != null) {
-            val cached = OnlineFontLoader.getCachedTypeface(context, font.onlinePreset)
+    private fun resolveTypeface(context: Context?, font: NovelReaderFont): Typeface? {
+        val onlinePreset = font.onlinePreset
+        if (context != null && onlinePreset != null) {
+            val cached = OnlineFontLoader.getCachedTypeface(context, onlinePreset)
             if (cached != null) return cached
         }
         val familyName = when (font) {
-            NovelExcerptFont.SOURCE_HAN_SERIF,
-            NovelExcerptFont.SYSTEM_SERIF -> "serif"
-            NovelExcerptFont.NOTO_SANS,
-            NovelExcerptFont.SYSTEM_SANS -> "sans-serif"
-            NovelExcerptFont.LXGW_WENKAI,
-            NovelExcerptFont.SYSTEM_CURSIVE -> "cursive"
-            NovelExcerptFont.SYSTEM_MONOSPACE -> "monospace"
+            NovelReaderFont.SOURCE_HAN_SERIF,
+            NovelReaderFont.SYSTEM_SERIF -> "serif"
+            NovelReaderFont.NOTO_SANS,
+            NovelReaderFont.SYSTEM_SANS -> "sans-serif"
+            NovelReaderFont.LXGW_WENKAI,
+            NovelReaderFont.SYSTEM_CURSIVE -> "cursive"
+            NovelReaderFont.SYSTEM_MONOSPACE -> "monospace"
         }
         return runCatching { Typeface.create(familyName, Typeface.NORMAL) }.getOrNull()
     }

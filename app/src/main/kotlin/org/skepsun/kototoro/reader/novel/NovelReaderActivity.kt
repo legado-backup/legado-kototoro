@@ -15,11 +15,14 @@ import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.foundation.ComposeFoundationFlags
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
@@ -34,6 +37,7 @@ import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.Text
@@ -132,7 +136,10 @@ import java.io.File
  * 小说阅读器 Activity。正文、阅读控件与 Space FAB 均由单一 Compose 根节点渲染。
  */
 @AndroidEntryPoint
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(
+    ExperimentalFoundationApi::class,
+    androidx.compose.foundation.layout.ExperimentalLayoutApi::class,
+)
 class NovelReaderActivity :
     BaseComposeFullscreenActivity(),
     ReaderControlDelegate.OnInteractionListener {
@@ -273,8 +280,9 @@ class NovelReaderActivity :
     private var novelAiJob: Job? = null
     private var novelAiQuestion by mutableStateOf("")
     private var novelAiAnswer by mutableStateOf<String?>(null)
-    private var novelAiAskTarget by mutableStateOf<String?>(null)
+    private var novelAiAskTarget by mutableStateOf<NovelAiAskTarget?>(null)
     private var novelAiAskLoading by mutableStateOf(false)
+    private var novelAiRequestId = 0L
 
     private val ttsConnection = object : android.content.ServiceConnection {
         override fun onServiceConnected(name: android.content.ComponentName?, service: android.os.IBinder?) {
@@ -647,7 +655,6 @@ class NovelReaderActivity :
                             onShowReplaceRules = composeReaderViewModel::showReplaceRules,
                             onDismissReplaceRules = composeReaderViewModel::dismissReplaceRules,
                             onReplaceRuleToggle = ::toggleReplaceRule,
-                            onShowMarkings = composeReaderViewModel::showMarkings,
                             onDismissMarkings = composeReaderViewModel::dismissMarkings,
                             onEditMarkingNote = ::editNovelMarkingNote,
                             onDeleteMarking = ::deleteNovelMarking,
@@ -819,6 +826,43 @@ class NovelReaderActivity :
                                     Column(
                                         modifier = Modifier.verticalScroll(rememberScrollState()),
                                     ) {
+                                        Text(
+                                            text = getString(R.string.novel_ai_ask_selected_label),
+                                            modifier = Modifier.padding(bottom = 4.dp),
+                                        )
+                                        Text(
+                                            text = target.excerpt,
+                                            modifier = Modifier.padding(bottom = 8.dp),
+                                        )
+                                        if (target.chapterTitle.isNotBlank()) {
+                                            Text(
+                                                text = target.chapterTitle,
+                                                modifier = Modifier.padding(bottom = 8.dp),
+                                            )
+                                        }
+                                        Text(
+                                            text = getString(R.string.novel_ai_ask_context_label),
+                                            modifier = Modifier.padding(bottom = 8.dp),
+                                        )
+                                        Text(
+                                            text = getString(R.string.novel_ai_ask_suggestions),
+                                            modifier = Modifier.padding(bottom = 4.dp),
+                                        )
+                                        FlowRow(
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                                            modifier = Modifier.padding(bottom = 8.dp),
+                                        ) {
+                                            novelAiQuestionPresets.forEach { preset ->
+                                                AssistChip(
+                                                    onClick = {
+                                                        novelAiQuestion = getString(preset.questionRes)
+                                                    },
+                                                    enabled = !novelAiAskLoading,
+                                                    label = { Text(getString(preset.questionRes)) },
+                                                )
+                                            }
+                                        }
                                         TextField(
                                             value = novelAiQuestion,
                                             onValueChange = { novelAiQuestion = it },
@@ -828,6 +872,7 @@ class NovelReaderActivity :
                                             enabled = !novelAiAskLoading,
                                             minLines = 2,
                                             maxLines = 5,
+                                            modifier = Modifier.fillMaxWidth(),
                                         )
                                         if (novelAiAskLoading) {
                                             Text(
@@ -1236,7 +1281,7 @@ class NovelReaderActivity :
                 clearNovelTextSelection(selection)
             }
             NovelTextSelectionAction.ASK_AI -> {
-                showNovelAiAsk(selection.text)
+                showNovelAiAsk(selection)
                 clearNovelTextSelection(selection)
             }
             NovelTextSelectionAction.LISTEN -> {
@@ -1268,7 +1313,7 @@ class NovelReaderActivity :
                 clearNovelMarkingSelection()
             }
             NovelTextSelectionAction.ASK_AI -> {
-                showNovelAiAsk(marking.selectedText)
+                showNovelAiAsk(marking)
                 clearNovelMarkingSelection()
             }
             NovelTextSelectionAction.LISTEN -> {
@@ -1371,6 +1416,7 @@ class NovelReaderActivity :
     }
 
     private fun onNovelMarkingChangeStyle(marking: NovelMarkingEntity, color: Int, style: Int) {
+        composeReaderViewModel.publishNovelMarkingStyle(marking.id, color, style)
         lifecycleScope.launch {
             novelMarkingRepository.updateStyle(marking.id, color, style)
         }
@@ -1483,10 +1529,38 @@ class NovelReaderActivity :
         }
     }
 
-    private fun showNovelAiAsk(text: String) {
+    private fun showNovelAiAsk(selection: NovelTextSelection) {
+        val range = resolveNovelSelectionRange(selection)
+        showNovelAiAsk(
+            NovelAiAskTarget(
+                bookTitle = manga.title,
+                chapterTitle = chapters.getOrNull(selection.chapterIndex)?.title.orEmpty(),
+                excerpt = selection.text,
+                context = buildNovelAiContext(selection.chapterText, range),
+            ),
+        )
+    }
+
+    private fun showNovelAiAsk(marking: NovelMarkingEntity) {
+        marking.toNovelSelection()?.let {
+            showNovelAiAsk(it)
+            return
+        }
+        showNovelAiAsk(
+            NovelAiAskTarget(
+                bookTitle = manga.title,
+                chapterTitle = chapters.getOrNull(marking.chapterIndex)?.title.orEmpty(),
+                excerpt = marking.selectedText,
+                context = NovelAiContext(),
+            ),
+        )
+    }
+
+    private fun showNovelAiAsk(target: NovelAiAskTarget) {
         novelAiJob?.cancel()
         novelAiJob = null
-        novelAiAskTarget = text
+        novelAiRequestId++
+        novelAiAskTarget = target
         novelAiQuestion = ""
         novelAiAnswer = null
         novelAiAskLoading = false
@@ -1495,13 +1569,14 @@ class NovelReaderActivity :
     private fun dismissNovelAiAsk() {
         novelAiJob?.cancel()
         novelAiJob = null
+        novelAiRequestId++
         novelAiAskTarget = null
         novelAiQuestion = ""
         novelAiAnswer = null
         novelAiAskLoading = false
     }
 
-    private fun askNovelAi(excerpt: String) {
+    private fun askNovelAi(target: NovelAiAskTarget) {
         val question = novelAiQuestion.trim()
         if (question.isBlank() || novelAiAskLoading) return
         val configuredEndpoint = TranslationApiProviderCatalog.resolveChatEndpoint(
@@ -1513,24 +1588,37 @@ class NovelReaderActivity :
             return
         }
         novelAiJob?.cancel()
+        val requestId = ++novelAiRequestId
         novelAiAskLoading = true
-        val bookTitle = manga.title
-        val chapterTitle = chapters.getOrNull(currentChapterIndex)?.title.orEmpty()
         novelAiJob = lifecycleScope.launch {
-            runCatching {
-                translationProcessor.askBook(
-                    bookTitle = bookTitle,
-                    chapterTitle = chapterTitle,
-                    excerpt = excerpt,
+            try {
+                val answer = translationProcessor.askBook(
+                    bookTitle = target.bookTitle,
+                    chapterTitle = target.chapterTitle,
+                    excerpt = target.excerpt,
+                    contextBefore = target.context.before,
+                    contextAfter = target.context.after,
                     question = question,
                 )
-            }.onSuccess { answer ->
-                novelAiAnswer = answer.ifBlank { getString(R.string.novel_ai_ask_failed, "empty response") }
-            }.onFailure { error ->
-                if (error is CancellationException) return@launch
-                novelAiAnswer = getString(R.string.novel_ai_ask_failed, error.message ?: "unknown error")
+                if (requestId == novelAiRequestId && novelAiAskTarget == target) {
+                    novelAiAnswer = answer.ifBlank {
+                        getString(R.string.novel_ai_ask_failed, "empty response")
+                    }
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                if (requestId == novelAiRequestId && novelAiAskTarget == target) {
+                    novelAiAnswer = getString(
+                        R.string.novel_ai_ask_failed,
+                        error.message ?: "unknown error",
+                    )
+                }
+            } finally {
+                if (requestId == novelAiRequestId) {
+                    novelAiAskLoading = false
+                }
             }
-            novelAiAskLoading = false
         }
     }
 

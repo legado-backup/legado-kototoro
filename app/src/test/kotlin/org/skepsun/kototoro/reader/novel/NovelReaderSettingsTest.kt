@@ -12,4 +12,12 @@ class NovelReaderSettingsTest {
 		assertEquals(2, NovelReaderSettings(paragraphSpacing = 1.7f).normalized().paragraphSpacingLines)
 		assertEquals(3, NovelReaderSettings(paragraphSpacing = 9f).normalized().paragraphSpacingLines)
 	}
+
+	@Test
+	fun `font selection is preserved when settings are normalized`() {
+		assertEquals(
+			NovelReaderFont.LXGW_WENKAI,
+			NovelReaderSettings(font = NovelReaderFont.LXGW_WENKAI).normalized().font,
+		)
+	}
 }
