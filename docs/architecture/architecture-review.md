@@ -8,7 +8,7 @@ This is not an implementation plan for a single feature. It is a project-level s
 
 ## Executive Summary
 
-Kototoro is no longer just a manga reader fork with a few add-ons. The codebase is clearly evolving toward a unified Android content platform that brings together:
+Kototoro is no longer just a manga reader derivative with a few add-ons. The codebase is clearly evolving toward a unified Android content platform that brings together:
 
 - manga
 - novels
@@ -763,7 +763,7 @@ For an execution-oriented version of this priority order, see [`architecture-roa
 
 ## Overall Assessment
 
-Kototoro is already beyond the level of a simple reader fork. It is evolving into a unified Android content platform for manga, novels, video, OCR-enhanced reading, and external ecosystem compatibility.
+Kototoro is already beyond the level of a simple reader derivative. It is evolving into a unified Android content platform for manga, novels, video, OCR-enhanced reading, and external ecosystem compatibility.
 
 That is a strong and differentiated direction.
 

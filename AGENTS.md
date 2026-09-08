@@ -51,7 +51,7 @@ The official Agent workflow consists of three related pieces:
 `app/` contains the Android application. Main Kotlin sources live under `app/src/main/kotlin/org/skepsun/kototoro` and are organized by feature with `data`, `domain`, and `ui` layers. Shared parser contracts are in `parser-api/`. Unit tests in `app/src/test/kotlin`, instrumented tests in `app/src/androidTest/kotlin`, Room schemas in `app/schemas/`. Docs in `docs/` built with VitePress.
 
 ### Namespace Caveat
-The main code uses `org.skepsun.kototoro`. Some test classes and the Hilt test runner retain the original fork path `org.koitharu.kotatsu` — this is intentional. **Do not bulk-rename** these legacy paths.
+The main code uses `org.skepsun.kototoro`. Some test classes and the Hilt test runner retain the legacy Kotatsu-derived package path `org.koitharu.kotatsu` — this is intentional. **Do not bulk-rename** these legacy paths.
 
 ## Coding Style & Naming Conventions
 Follow `.editorconfig`: UTF-8, LF, 4-space indentation, 120-character line width. Kotlin official style with trailing commas enabled. Name classes and tests in `PascalCase`, methods and properties in `camelCase`, Android resources in lowercase underscore style. Prefer extending existing feature modules over creating parallel implementations.

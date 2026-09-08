@@ -403,7 +403,7 @@ LazyVerticalStaggeredGrid 的官方定位是“**允许单项高度不同**”�
   （open）：用户在大型本地库上打开 App 时“条目全部显示出来要 3–5 秒”。它说明“一次把整个库摆出来再渲染”是漫画
   客户端已知的痛，反证 Paging 分页 + 首屏有限量（Kototoro 已做的 `initialLoadSize = 64`）才是正确方向
   （上游 issue，2026-08-27 经 `gh` 读取）。
-- 上游 [KotatsuApp/Kotatsu](https://github.com/KotatsuApp/Kotatsu)（Kototoro 的直接前身）以
+- 参考 [KotatsuApp/Kotatsu](https://github.com/KotatsuApp/Kotatsu)（Kototoro 最初派生自 Kotatsu，现已独立开发）以
   `LazyVerticalGrid`/封面网格为主的库屏，GitHub 搜索未发现直接命中“LazyVerticalGrid/重组合”的 issue；相关感知卡顿多
   以“scroll/lag/图片加载”形态出现（如 [#1716](https://github.com/KotatsuApp/Kotatsu/issues/1716) chapters 滚动），
   佐证该类问题的真正瓶颈在图片管线与滚动状态处理，而非网格组件本身（2026-08-27 搜索）。

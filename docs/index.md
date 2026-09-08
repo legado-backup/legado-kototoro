@@ -64,6 +64,7 @@ features:
 ## What Makes Kototoro Different
 
 - One Android app for manga, novels, and video
+- An independent project originally derived from Kotatsu, now a Compose-first multi-format reading/player platform rather than a Kotatsu fork
 - Local OCR + translation directly in the reader
 - Video super-resolution (Anime4K / NCNN), DLNA casting, subtitle and audio track selection
 - Tracking discovery across MAL, Kitsu, AniList, Bangumi, Shikimori, and MangaUpdates

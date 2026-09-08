@@ -16,6 +16,10 @@ Kototoro is an open-source Android app that brings manga, novels, and video into
 > **中文简介**：Kototoro 是一款开源的 Android 应用程序，将漫画、小说和视频整合到了一个阅读器中。它结合了极好的图源兼容性、本地 OCR + 机器翻译、视频超分辨率加载以及基于 WebDAV 的多设备同步功能。
 >
 > **Compose 优先，端到端构建**：Kototoro 可能是最早一批真正意义上的全 Jetpack Compose 漫画、小说和视频阅读器之一。Compose 不只是用于外围页面，漫画/小说阅读器和视频播放器本身也全部采用 Compose 构建。旧的 XML、Fragment 以及混合过渡层已经基本清空，核心阅读与播放体验如今都围绕 Jetpack Compose 打造。
+>
+> **Project status**: Originally derived from Kotatsu, Kototoro is now independently developed as a multi-format, Compose-first reading/player platform. It borrows some Kotatsu UI patterns and source code as historical inspiration, but it is no longer a Kotatsu fork.
+>
+> **项目定位**：Kototoro 最初源于 Kotatsu，现已独立开发，成为一个多格式、Compose 优先的阅读/播放器平台。它借鉴了 Kotatsu 的部分界面与源代码作为历史基础，但已经不再是一个 Kotatsu 分叉项目。
 
 ## Why Kototoro / 核心特性
 
@@ -107,6 +111,7 @@ limitations under the License.
 
 - [Mihon](https://github.com/mihonapp/mihon)
 - [Yomihon](https://github.com/yomihon/yomihon)
+- [KotatsuApp/Kotatsu](https://github.com/KotatsuApp/Kotatsu) as the original source/UI base that Kototoro was initially derived from
 - [kotatsu-redo](https://github.com/Kotatsu-Redo/Kotatsu-Redo) for the implementation inspiration behind automatic background handling of Cloudflare detection
 - [Venera](https://github.com/venera-app/venera)
 - [Kazumi](https://github.com/Predidit/Kazumi)

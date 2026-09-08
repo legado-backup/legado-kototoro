@@ -17,6 +17,10 @@ The most distinctive capabilities are:
 - Broad external source compatibility across Mihon, Aniyomi, IReader, Legado, and TVBox ecosystems
 - Kotatsu-Redo parser library integration for extended built-in source coverage
 
+## Is Kototoro a Kotatsu Fork?
+
+No. Kototoro was originally derived from Kotatsu, but it has since been independently developed as a multi-format, Compose-first reading/player platform. It borrows some Kotatsu UI patterns and source code as historical inspiration, but it is no longer a Kotatsu fork: it has its own architecture, content model, and feature set covering manga, novels, video, OCR + translation, and external source ecosystems.
+
 ## Do I Need Mihon, Aniyomi, Legado, or TVBox Installed?
 
 Not always. Kototoro has built-in sources (including the full Kotatsu-Redo parser library), so the app is still usable on its own. External ecosystems matter when you want broader catalog coverage or already maintain your sources there. Mihon, Aniyomi, and IReader are extension-based, while Legado and TVBox are usually imported from JSON files or JSON URLs.

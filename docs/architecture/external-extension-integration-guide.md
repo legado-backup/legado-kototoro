@@ -1,6 +1,6 @@
 # Guide: Integrating Tachiyomi and Mihon Extensions
 
-This guide is intended for developers of other Android reader applications (such as forks of Kotatsu) who wish to integrate Tachiyomi, Mihon, or Aniyomi extension ecosystems into their own applications. Kototoro uses this approach to successfully map Mihon sources into its native framework.
+This guide is intended for developers of other Android reader applications (including Kotatsu-derived readers) who wish to integrate Tachiyomi, Mihon, or Aniyomi extension ecosystems into their own applications. Kototoro uses this approach to successfully map Mihon sources into its native framework.
 
 ## 1. Extension Discovery and Metadata Reading
 

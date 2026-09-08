@@ -259,7 +259,7 @@ RELEASE_KEY_PASSWORD=***
 - Android 资源使用小写下划线命名（如 `pref_appearance.xml`）
 
 ### 命名空间说明
-项目主代码使用 `org.skepsun.kototoro` 命名空间（从 Kotatsu 分叉而来）。部分历史代码（如 instrumented test runner `org.koitharu.kotatsu.HiltTestRunner` 和部分 androidTest 测试类）仍保留原始包路径，这是正常现象，不要批量重命名。
+项目主代码使用 `org.skepsun.kototoro` 命名空间（最初从 Kotatsu 派生，现已独立开发）。部分历史代码（如 instrumented test runner `org.koitharu.kotatsu.HiltTestRunner` 和部分 androidTest 测试类）仍保留原始包路径，这是正常现象，不要批量重命名。
 
 ### 提交规范
 推荐使用 Conventional Commits 格式：

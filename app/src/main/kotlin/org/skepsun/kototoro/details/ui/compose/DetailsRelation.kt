@@ -456,7 +456,7 @@ private fun EntityRelationCardPreview() {
                 name = "Kototoro",
                 coverUrl = null,
                 type = org.skepsun.kototoro.entitygraph.domain.EntityType.WORK,
-                subtitle = "Fork of Kotatsu",
+                subtitle = "Independent reader/player",
                 supportingText = "Manga · Ongoing",
             ),
             onClick = {},
