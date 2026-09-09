@@ -24,10 +24,13 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -137,8 +140,10 @@ import org.skepsun.kototoro.settings.sources.SourcesSettingsViewModel
 import org.skepsun.kototoro.settings.sources.unified.UnifiedSourceKind
 import org.skepsun.kototoro.settings.sources.unified.UnifiedSourcesActivity
 import org.skepsun.kototoro.settings.sources.unified.UnifiedSourcesDeepLink
-import org.skepsun.kototoro.settings.sources.unified.UnifiedSourcesDeepLinkParser
+import org.skepsun.kototoro.settings.sources.unified.UNIFIED_SOURCES_TAB_COUNT
+import org.skepsun.kototoro.settings.sources.unified.UnifiedSourcesTopBarTabs
 import org.skepsun.kototoro.settings.sources.unified.UnifiedSourcesToolbarActions
+import org.skepsun.kototoro.settings.sources.unified.UnifiedSourcesActionCapsule
 import org.skepsun.kototoro.settings.sources.unified.UnifiedSourcesSearchTopBar
 import org.skepsun.kototoro.settings.sources.unified.UnifiedToolbarFilterPanel
 import org.skepsun.kototoro.settings.sources.unified.UnifiedSourcesRoute
@@ -689,12 +694,14 @@ class SettingsActivity :
     @Composable
     private fun RenderComposeSection(
         title: String?,
+        titleContent: (@Composable () -> Unit)? = null,
         searchContent: (@Composable () -> Unit)? = null,
         actions: (@Composable BoxScope.() -> Unit)? = null,
         content: @Composable () -> Unit,
     ) {
         SettingsSectionScaffold(
             title = title,
+            titleContent = titleContent,
             onNavigateUp = if (isMasterDetails) null else ::handleComposeNavigateUp,
             showTopBar = true,
             searchContent = searchContent,
@@ -1447,41 +1454,56 @@ class SettingsActivity :
             is SettingsDestination.UnifiedSources -> {
                 val state by unifiedSourcesViewModel.uiState.collectAsStateWithLifecycle()
                 val readyState = state as? UnifiedSourcesUiState.Ready
+                val pagerState = rememberPagerState(pageCount = { UNIFIED_SOURCES_TAB_COUNT })
+                val coroutineScope = rememberCoroutineScope()
+                var tabReselectTrigger by remember { mutableStateOf<Pair<Int, Long>?>(null) }
                 val closeSearch = {
                     updateUnifiedSourcesSearchActive(false)
                     unifiedSourcesViewModel.setSearchQuery("")
                 }
-                val openLanguageFilter = {
-                    unifiedSourcesActivePanel = UnifiedToolbarFilterPanel.LANGUAGE
-                }
-                val openMoreFilters = {
-                    unifiedSourcesActivePanel = UnifiedToolbarFilterPanel.MORE
+                val openFilter = {
+                    unifiedSourcesActivePanel = UnifiedToolbarFilterPanel.FILTER
                 }
                 val toolbarActions: @Composable (Modifier) -> Unit = { modifier ->
-                    UnifiedSourcesToolbarActions(
+                    UnifiedSourcesActionCapsule(
                         readyState = readyState,
                         onSearchClick = { updateUnifiedSourcesSearchActive(true) },
-                        onLanguageFilterClick = openLanguageFilter,
-                        onMoreFiltersClick = openMoreFilters,
+                        onFilterClick = openFilter,
                         modifier = modifier,
                     )
                 }
                 RenderComposeSection(
                     title = null,
+                    titleContent = if (!unifiedSourcesSearchActive) {
+                        {
+                            UnifiedSourcesTopBarTabs(
+                                pagerState = pagerState,
+                                onTabClick = { tabIndex ->
+                                    if (pagerState.currentPage == tabIndex) {
+                                        tabReselectTrigger = tabIndex to System.currentTimeMillis()
+                                    } else {
+                                        coroutineScope.launch {
+                                            pagerState.animateScrollToPage(tabIndex)
+                                        }
+                                    }
+                                },
+                                readyState = readyState,
+                            )
+                        }
+                    } else null,
                     searchContent = if (unifiedSourcesSearchActive) {
                         {
                             UnifiedSourcesSearchTopBar(
                                 readyState = readyState,
                                 onNavigateUp = closeSearch,
                                 onSearchQueryChange = unifiedSourcesViewModel::setSearchQuery,
-                                onLanguageFilterClick = openLanguageFilter,
-                                onMoreFiltersClick = openMoreFilters,
+                                onFilterClick = openFilter,
                             )
                         }
                     } else {
                         null
                     },
-                    actions = { toolbarActions(Modifier.fillMaxSize()) },
+                    actions = { toolbarActions(Modifier) },
                 ) {
                     UnifiedSourcesRoute(
                         searchActive = unifiedSourcesSearchActive,
@@ -1490,6 +1512,8 @@ class SettingsActivity :
                         onActivePanelChange = { unifiedSourcesActivePanel = it },
                         initialAddRepositoryKind = destination.initialRepositoryKind,
                         initialAddRepositoryUrl = destination.initialRepositoryUrl,
+                        pagerState = pagerState,
+                        tabReselectTrigger = tabReselectTrigger,
                         viewModel = unifiedSourcesViewModel,
                         onBrowseSource = { item -> router.openList(item.source, null, null) },
                         onOpenSourceSettings = { item -> router.openSourceSettings(item.source) },

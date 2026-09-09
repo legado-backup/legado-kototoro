@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.pager.PagerState
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -36,6 +38,7 @@ import org.skepsun.kototoro.settings.compose.SettingsAlertDialog
 import org.skepsun.kototoro.settings.compose.SettingsDialogActionButton
 
 enum class UnifiedToolbarFilterPanel {
+    FILTER,
     LANGUAGE,
     MORE,
 }
@@ -174,6 +177,8 @@ fun UnifiedSourcesRoute(
     initialAddRepositoryKind: UnifiedSourceKind? = null,
     initialAddRepositoryUrl: String? = null,
     modifier: Modifier = Modifier,
+    pagerState: PagerState = rememberPagerState(pageCount = { UNIFIED_SOURCES_TAB_COUNT }),
+    tabReselectTrigger: Pair<Int, Long>? = null,
     viewModel: UnifiedSourcesViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
@@ -257,6 +262,8 @@ fun UnifiedSourcesRoute(
         isLoading = isLoading,
         updateAllInProgress = updateAllInProgress,
         searchActive = searchActive,
+        pagerState = pagerState,
+        tabReselectTrigger = tabReselectTrigger,
         onSearchClick = { onSearchActiveChange(true) },
         onSearchClose = {
             onSearchActiveChange(false)
@@ -268,7 +275,7 @@ fun UnifiedSourcesRoute(
         onRepositoryFilterClick = viewModel::setRepositoryFilter,
         onPackageStatusClick = viewModel::setPackageStatusFilter,
         onLanguageFilterClick = { onActivePanelChange(UnifiedToolbarFilterPanel.LANGUAGE) },
-        onMoreFiltersClick = { onActivePanelChange(UnifiedToolbarFilterPanel.MORE) },
+        onMoreFiltersClick = { onActivePanelChange(UnifiedToolbarFilterPanel.FILTER) },
         onSourceEnabledChange = viewModel::setSourceEnabled,
         onEnableAllSources = { confirmSetFilteredSourcesEnabled(true) },
         onDisableAllSources = { confirmSetFilteredSourcesEnabled(false) },
@@ -357,71 +364,23 @@ fun UnifiedSourcesRoute(
     )
 
     val readyState = state as? UnifiedSourcesUiState.Ready
-    when (activePanel) {
-        UnifiedToolbarFilterPanel.LANGUAGE -> if (readyState != null) {
-            UnifiedLanguageFilterDialog(
-                languages = readyState.availableLanguages,
-                selectedLanguages = readyState.filters.languages,
-                onDismiss = { onActivePanelChange(null) },
-                onLanguageClick = viewModel::toggleLanguage,
-                onApplyPreferredLanguages = viewModel::applyPreferredLanguages,
-                onClear = viewModel::clearLanguages,
-            )
-        }
-        UnifiedToolbarFilterPanel.MORE -> if (readyState != null) {
-            UnifiedFilterGroupDialog(
-                title = stringResource(R.string.more_filters),
-                onDismiss = { onActivePanelChange(null) },
-                onClear = viewModel::clearFilters,
-            ) {
-                FilterSection(title = stringResource(R.string.status)) {
-                    items(UnifiedEnabledFilter.entries) { filter ->
-                        CompactFilterChip(
-                            selected = readyState.filters.enabledFilter == filter,
-                            onClick = { viewModel.setEnabledFilter(filter) },
-                            text = filter.displayLabel(),
-                        )
-                    }
-                }
-                FilterSection(title = stringResource(R.string.availability_filter_title)) {
-                    items(UnifiedAvailabilityFilter.entries) { filter ->
-                        CompactFilterChip(
-                            selected = readyState.filters.availabilityFilter == filter,
-                            onClick = { viewModel.setAvailabilityFilter(filter) },
-                            text = filter.displayLabel(),
-                        )
-                    }
-                }
-                FilterSection(title = stringResource(R.string.source_test_availability_filter_title)) {
-                    items(UnifiedTestAvailabilityFilter.entries) { filter ->
-                        CompactFilterChip(
-                            selected = readyState.filters.testAvailabilityFilter == filter,
-                            onClick = { viewModel.setTestAvailabilityFilter(filter) },
-                            text = filter.displayLabel(),
-                        )
-                    }
-                }
-                FilterSection(title = stringResource(R.string.nsfw_filter_title)) {
-                    items(UnifiedNsfwFilter.entries) { filter ->
-                        CompactFilterChip(
-                            selected = readyState.filters.nsfwFilter == filter,
-                            onClick = { viewModel.setNsfwFilter(filter) },
-                            text = filter.displayLabel(),
-                        )
-                    }
-                }
-                FilterSection(title = stringResource(R.string.repository_source)) {
-                    items(readyState.availableLocationTypes) { type ->
-                        CompactFilterChip(
-                            selected = type in readyState.filters.locationTypes,
-                            onClick = { viewModel.toggleLocationType(type) },
-                            text = type.displayLabel(),
-                        )
-                    }
-                }
-            }
-        }
-        null -> Unit
+    if (activePanel != null && readyState != null) {
+        UnifiedCombinedFilterDialog(
+            readyState = readyState,
+            initialTab = if (activePanel == UnifiedToolbarFilterPanel.LANGUAGE) 1 else 0,
+            onDismiss = { onActivePanelChange(null) },
+            onClearAll = {
+                viewModel.clearFilters()
+                viewModel.clearLanguages()
+            },
+            onLanguageClick = viewModel::toggleLanguage,
+            onApplyPreferredLanguages = viewModel::applyPreferredLanguages,
+            onEnabledFilterChange = viewModel::setEnabledFilter,
+            onAvailabilityFilterChange = viewModel::setAvailabilityFilter,
+            onTestAvailabilityFilterChange = viewModel::setTestAvailabilityFilter,
+            onNsfwFilterChange = viewModel::setNsfwFilter,
+            onLocationTypeToggle = viewModel::toggleLocationType,
+        )
     }
 
     when (val dialog = activeDialog) {

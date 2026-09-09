@@ -39,11 +39,10 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.pager.PagerState
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SecondaryTabRow
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRowDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.text.font.FontWeight
@@ -52,7 +51,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -61,7 +59,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.lerp
 import androidx.compose.foundation.shape.RoundedCornerShape
 import org.skepsun.kototoro.R
 import org.skepsun.kototoro.core.model.titleResId
@@ -69,9 +66,6 @@ import org.skepsun.kototoro.core.ui.compose.KototoroPullToRefreshBox
 import org.skepsun.kototoro.settings.compose.SettingsContentHorizontalPadding
 import org.skepsun.kototoro.settings.compose.settingsContentTopInset
 import org.skepsun.kototoro.parsers.model.ContentType
-import kotlinx.coroutines.launch
-import kotlin.math.abs
-import kotlin.math.sign
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -116,26 +110,24 @@ fun UnifiedSourcesScreen(
     onAddRecommendedRepository: (UnifiedRecommendedRepository) -> Unit,
     onPullRefresh: (Int) -> Unit,
     modifier: Modifier = Modifier,
+    pagerState: PagerState = rememberPagerState(pageCount = { UNIFIED_SOURCES_TAB_COUNT }),
+    tabReselectTrigger: Pair<Int, Long>? = null,
 ) {
     val readyState = state as? UnifiedSourcesUiState.Ready
-    val pagerState = rememberPagerState(pageCount = { UNIFIED_SOURCES_TAB_COUNT })
-    val coroutineScope = rememberCoroutineScope()
     val sourceListState = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
     val repositoryListState = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
     val packageListState = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
     val selectedTab = pagerState.currentPage.coerceIn(0, UNIFIED_SOURCES_TAB_COUNT - 1)
-    val onTabClick: (Int, LazyListState) -> Unit = { tab, listState ->
-        if (tab != UNIFIED_SOURCES_TAB_SOURCES) {
-            onClearSourceSelection()
-        }
-        coroutineScope.launch {
-            if (selectedTab == tab) {
-                listState.animateScrollToItem(0)
-            } else {
-                pagerState.animateScrollToPage(tab)
-            }
+
+    LaunchedEffect(tabReselectTrigger) {
+        val trigger = tabReselectTrigger ?: return@LaunchedEffect
+        when (trigger.first) {
+            UNIFIED_SOURCES_TAB_SOURCES -> sourceListState.animateScrollToItem(0)
+            UNIFIED_SOURCES_TAB_REPOSITORIES -> repositoryListState.animateScrollToItem(0)
+            UNIFIED_SOURCES_TAB_PACKAGES -> packageListState.animateScrollToItem(0)
         }
     }
+
     val activeSelectedSourceIds = remember(readyState?.sources, selectedSourceIds) {
         val visibleSourceIds = readyState?.sources.orEmpty().mapTo(LinkedHashSet()) { it.id }
         selectedSourceIds intersect visibleSourceIds
@@ -168,64 +160,6 @@ fun UnifiedSourcesScreen(
                     LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                 }
                 if (readyState != null) {
-                    SecondaryTabRow(
-                        selectedTabIndex = selectedTab,
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                        indicator = {
-                            TabRowDefaults.SecondaryIndicator(
-                                modifier = Modifier.tabIndicatorLayout { measurable, constraints, tabPositions ->
-                                    if (tabPositions.isEmpty()) {
-                                        val placeable = measurable.measure(constraints.copy(minWidth = 0))
-                                        return@tabIndicatorLayout layout(constraints.maxWidth, placeable.height) {}
-                                    }
-                                    val currentPage = pagerState.currentPage.coerceIn(tabPositions.indices)
-                                    val offset = pagerState.currentPageOffsetFraction
-                                    val targetPage = (currentPage + sign(offset).toInt()).coerceIn(tabPositions.indices)
-                                    val fraction = abs(offset)
-                                    val left = lerp(tabPositions[currentPage].left, tabPositions[targetPage].left, fraction)
-                                    val right = lerp(tabPositions[currentPage].right, tabPositions[targetPage].right, fraction)
-                                    val width = (right - left).roundToPx()
-                                    val placeable = measurable.measure(
-                                        constraints.copy(minWidth = width, maxWidth = width),
-                                    )
-                                    layout(constraints.maxWidth, placeable.height) {
-                                        placeable.placeRelative(left.roundToPx(), 0)
-                                    }
-                                },
-                            )
-                        },
-                    ) {
-                        Tab(
-                            selected = selectedTab == UNIFIED_SOURCES_TAB_SOURCES,
-                            onClick = { onTabClick(UNIFIED_SOURCES_TAB_SOURCES, sourceListState) },
-                            text = { Text(stringResource(R.string.sources_tab_title, readyState.sources.size)) },
-                        )
-                        Tab(
-                            selected = selectedTab == UNIFIED_SOURCES_TAB_REPOSITORIES,
-                            onClick = { onTabClick(UNIFIED_SOURCES_TAB_REPOSITORIES, repositoryListState) },
-                            text = { Text(stringResource(R.string.repositories_tab_title, readyState.repositories.size)) },
-                        )
-                        Tab(
-                            selected = selectedTab == UNIFIED_SOURCES_TAB_PACKAGES,
-                            onClick = { onTabClick(UNIFIED_SOURCES_TAB_PACKAGES, packageListState) },
-                            text = {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                ) {
-                                    Text(stringResource(R.string.packages_tab_title, readyState.packages.size))
-                                    if (readyState.packageUpdateCount > 0) {
-                                        Badge(
-                                            containerColor = MaterialTheme.colorScheme.primary,
-                                            contentColor = MaterialTheme.colorScheme.onPrimary,
-                                        ) {
-                                            Text(readyState.packageUpdateCount.toString())
-                                        }
-                                    }
-                                }
-                            },
-                        )
-                    }
                     UnifiedSourcesContextualFilterTabs(
                         tab = selectedTab,
                         state = readyState,

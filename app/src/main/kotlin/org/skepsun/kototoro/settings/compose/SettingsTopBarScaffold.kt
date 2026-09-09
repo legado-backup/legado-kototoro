@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -67,7 +68,8 @@ private val SettingsTopBarBottomExtension = 6.dp
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsTopBarScaffold(
-    title: String?,
+    title: String? = null,
+    titleContent: (@Composable () -> Unit)? = null,
     onNavigateUp: (() -> Unit)?,
     modifier: Modifier = Modifier,
     searchContent: (@Composable () -> Unit)? = null,
@@ -93,6 +95,7 @@ fun SettingsTopBarScaffold(
             topBar = {
                 searchContent?.invoke() ?: SettingsSeparatedTopAppBar(
                     title = title,
+                    titleContent = titleContent,
                     onNavigateUp = onNavigateUp,
                     actions = actions,
                 )
@@ -253,6 +256,7 @@ internal fun SettingsCompactSearchField(
 @Composable
 private fun SettingsSeparatedTopAppBar(
     title: String?,
+    titleContent: (@Composable () -> Unit)? = null,
     onNavigateUp: (() -> Unit)?,
     actions: (@Composable BoxScope.() -> Unit)?,
 ) {
@@ -260,13 +264,15 @@ private fun SettingsSeparatedTopAppBar(
     val tokens = LocalInterfaceStyleTokens.current
     SettingsTopBarSurface {
         if (LocalInterfaceStyle.current == InterfaceStyle.IOS) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(tokens.secondaryTopBarHeight),
-            ) {
-                if (onNavigateUp != null) {
-                    Box(modifier = Modifier.align(Alignment.CenterStart)) {
+            if (titleContent != null) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(tokens.secondaryTopBarHeight),
+                    horizontalArrangement = Arrangement.spacedBy(CompactTopBarItemSpacing),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (onNavigateUp != null) {
                         SettingsTopBarIconButton(onClick = onNavigateUp) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
@@ -275,25 +281,56 @@ private fun SettingsSeparatedTopAppBar(
                             )
                         }
                     }
-                }
-                if (title != null) {
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier
-                            .align(Alignment.Center)
-                            .padding(horizontal = 64.dp),
-                    )
-                }
-                if (actions != null) {
                     Box(
-                        modifier = Modifier.align(Alignment.CenterEnd),
-                        contentAlignment = Alignment.CenterEnd,
-                        content = actions,
-                    )
+                        modifier = Modifier.weight(1f),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        titleContent()
+                    }
+                    if (actions != null) {
+                        Box(
+                            modifier = Modifier.wrapContentSize(),
+                            contentAlignment = Alignment.CenterEnd,
+                            content = actions,
+                        )
+                    }
+                }
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(tokens.secondaryTopBarHeight),
+                ) {
+                    if (onNavigateUp != null) {
+                        Box(modifier = Modifier.align(Alignment.CenterStart)) {
+                            SettingsTopBarIconButton(onClick = onNavigateUp) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(tokens.topBarIconSize),
+                                )
+                            }
+                        }
+                    }
+                    if (title != null) {
+                        Text(
+                            text = title,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier
+                                .align(Alignment.Center)
+                                .padding(horizontal = 64.dp),
+                        )
+                    }
+                    if (actions != null) {
+                        Box(
+                            modifier = Modifier.align(Alignment.CenterEnd),
+                            contentAlignment = Alignment.CenterEnd,
+                            content = actions,
+                        )
+                    }
                 }
             }
         } else {
@@ -313,7 +350,14 @@ private fun SettingsSeparatedTopAppBar(
                         )
                     }
                 }
-                if (title != null) {
+                if (titleContent != null) {
+                    Box(
+                        modifier = Modifier.weight(1f),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        titleContent()
+                    }
+                } else if (title != null) {
                     Text(
                         text = title,
                         style = MaterialTheme.typography.titleLarge,
@@ -327,6 +371,7 @@ private fun SettingsSeparatedTopAppBar(
                 }
                 if (actions != null) {
                     Box(
+                        modifier = Modifier.wrapContentSize(),
                         contentAlignment = Alignment.CenterEnd,
                         content = actions,
                     )

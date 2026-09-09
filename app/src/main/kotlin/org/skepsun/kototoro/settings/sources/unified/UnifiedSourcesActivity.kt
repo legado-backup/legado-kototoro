@@ -13,10 +13,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.launch
 import org.skepsun.kototoro.R
 import org.skepsun.kototoro.core.nav.router
 import org.skepsun.kototoro.core.ui.BaseComposeActivity
@@ -107,19 +110,38 @@ class UnifiedSourcesActivity : BaseComposeActivity() {
         var activePanel by remember { mutableStateOf<UnifiedToolbarFilterPanel?>(null) }
         val state by viewModel.uiState.collectAsStateWithLifecycle()
         val readyState = state as? UnifiedSourcesUiState.Ready
+        val pagerState = rememberPagerState(pageCount = { UNIFIED_SOURCES_TAB_COUNT })
+        val coroutineScope = rememberCoroutineScope()
+        var tabReselectTrigger by remember { mutableStateOf<Pair<Int, Long>?>(null) }
         val closeSearch = {
             searchActive = false
             viewModel.setSearchQuery("")
         }
-        val openLanguageFilter = {
-            activePanel = UnifiedToolbarFilterPanel.LANGUAGE
-        }
-        val openMoreFilters = {
-            activePanel = UnifiedToolbarFilterPanel.MORE
+        val openFilter = {
+            activePanel = UnifiedToolbarFilterPanel.FILTER
         }
 
         SettingsSectionScaffold(
-            title = stringResource(R.string.extension_management),
+            title = if (searchActive) null else stringResource(R.string.extension_management),
+            titleContent = if (!searchActive) {
+                {
+                    UnifiedSourcesTopBarTabs(
+                        pagerState = pagerState,
+                        onTabClick = { tabIndex ->
+                            if (pagerState.currentPage == tabIndex) {
+                                tabReselectTrigger = tabIndex to System.currentTimeMillis()
+                            } else {
+                                coroutineScope.launch {
+                                    pagerState.animateScrollToPage(tabIndex)
+                                }
+                            }
+                        },
+                        readyState = readyState,
+                    )
+                }
+            } else {
+                null
+            },
             onNavigateUp = ::finish,
             searchContent = if (searchActive) {
                 {
@@ -127,20 +149,17 @@ class UnifiedSourcesActivity : BaseComposeActivity() {
                         readyState = readyState,
                         onNavigateUp = closeSearch,
                         onSearchQueryChange = viewModel::setSearchQuery,
-                        onLanguageFilterClick = openLanguageFilter,
-                        onMoreFiltersClick = openMoreFilters,
+                        onFilterClick = openFilter,
                     )
                 }
             } else {
                 null
             },
             actions = {
-                UnifiedSourcesToolbarActions(
+                UnifiedSourcesActionCapsule(
                     readyState = readyState,
                     onSearchClick = { searchActive = true },
-                    onLanguageFilterClick = openLanguageFilter,
-                    onMoreFiltersClick = openMoreFilters,
-                    modifier = Modifier.fillMaxSize(),
+                    onFilterClick = openFilter,
                 )
             },
             modifier = modifier,
@@ -152,6 +171,8 @@ class UnifiedSourcesActivity : BaseComposeActivity() {
                 onActivePanelChange = { activePanel = it },
                 initialAddRepositoryKind = initialAddRepositoryKind,
                 initialAddRepositoryUrl = initialAddRepositoryUrl,
+                pagerState = pagerState,
+                tabReselectTrigger = tabReselectTrigger,
                 viewModel = viewModel,
                 onBrowseSource = { item -> router.openList(item.source, null, null) },
                 onOpenSourceSettings = { item -> router.openSourceSettings(item.source) },

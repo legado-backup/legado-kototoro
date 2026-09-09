@@ -2,33 +2,57 @@ package org.skepsun.kototoro.settings.sources.unified
 
 
 import android.util.Log
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items as gridItems
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import org.skepsun.kototoro.R
 import org.skepsun.kototoro.extensions.install.ExtensionInstallPolicy
 import org.skepsun.kototoro.extensions.repo.ExternalExtensionRepo
@@ -508,6 +532,290 @@ internal fun UnifiedLanguageFilterDialog(
                         text = language.displayLanguageLabel(),
                         modifier = Modifier.fillMaxWidth(),
                     )
+                }
+            }
+        },
+    )
+}
+
+@Composable
+internal fun UnifiedCombinedFilterDialog(
+    readyState: UnifiedSourcesUiState.Ready,
+    onDismiss: () -> Unit,
+    onClearAll: () -> Unit,
+    onLanguageClick: (String) -> Unit,
+    onApplyPreferredLanguages: () -> Unit,
+    onEnabledFilterChange: (UnifiedEnabledFilter) -> Unit,
+    onAvailabilityFilterChange: (UnifiedAvailabilityFilter) -> Unit,
+    onTestAvailabilityFilterChange: (UnifiedTestAvailabilityFilter) -> Unit,
+    onNsfwFilterChange: (UnifiedNsfwFilter) -> Unit,
+    onLocationTypeToggle: (UnifiedRepositoryLocationType) -> Unit,
+    initialTab: Int = 0,
+) {
+    var selectedTab by rememberSaveable { mutableIntStateOf(initialTab) }
+    val generalCount = readyState.filters.otherFilterCount()
+    val languageCount = readyState.filters.languages.size
+
+    SettingsAlertDialog(
+        title = stringResource(R.string.filter),
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            SettingsDialogActionButton(
+                text = stringResource(R.string.done),
+                onClick = onDismiss,
+            )
+        },
+        dismissButton = {
+            SettingsDialogActionButton(
+                text = stringResource(R.string.clear),
+                onClick = onClearAll,
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center,
+                ) {
+                    Surface(
+                        modifier = Modifier.height(36.dp),
+                        shape = RoundedCornerShape(18.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        border = BorderStroke(
+                            0.5.dp,
+                            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                        ),
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(2.dp),
+                            horizontalArrangement = Arrangement.spacedBy(2.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            val activeSurface = MaterialTheme.colorScheme.surface
+                            val baseBorderColor = MaterialTheme.colorScheme.outlineVariant
+                            val tabShape = RoundedCornerShape(16.dp)
+
+                            val tab0Selected = selectedTab == 0
+                            val tab0BgColor by animateColorAsState(
+                                targetValue = if (tab0Selected) activeSurface else activeSurface.copy(alpha = 0f),
+                                animationSpec = tween(durationMillis = 200),
+                                label = "dialogTab0Bg",
+                            )
+                            val tab0TextColor by animateColorAsState(
+                                targetValue = if (tab0Selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                                animationSpec = tween(durationMillis = 200),
+                                label = "dialogTab0Text",
+                            )
+                            val tab0BorderColor by animateColorAsState(
+                                targetValue = if (tab0Selected) baseBorderColor.copy(alpha = 0.35f) else baseBorderColor.copy(alpha = 0f),
+                                animationSpec = tween(durationMillis = 200),
+                                label = "dialogTab0Border",
+                            )
+
+                            Box(
+                                modifier = Modifier
+                                    .height(32.dp)
+                                    .clip(tabShape)
+                                    .background(tab0BgColor)
+                                    .border(BorderStroke(0.5.dp, tab0BorderColor), tabShape)
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null,
+                                        onClick = { selectedTab = 0 },
+                                    ),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                ) {
+                                    Text(
+                                        text = stringResource(R.string.filter_properties),
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = if (tab0Selected) FontWeight.SemiBold else FontWeight.Normal,
+                                        color = tab0TextColor,
+                                    )
+                                    if (generalCount > 0) {
+                                        Surface(
+                                            shape = RoundedCornerShape(percent = 50),
+                                            color = MaterialTheme.colorScheme.primary,
+                                            contentColor = MaterialTheme.colorScheme.onPrimary,
+                                        ) {
+                                            Text(
+                                                text = generalCount.toString(),
+                                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                                fontWeight = FontWeight.Bold,
+                                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 0.5.dp),
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            val tab1Selected = selectedTab == 1
+                            val tab1BgColor by animateColorAsState(
+                                targetValue = if (tab1Selected) activeSurface else activeSurface.copy(alpha = 0f),
+                                animationSpec = tween(durationMillis = 200),
+                                label = "dialogTab1Bg",
+                            )
+                            val tab1TextColor by animateColorAsState(
+                                targetValue = if (tab1Selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                                animationSpec = tween(durationMillis = 200),
+                                label = "dialogTab1Text",
+                            )
+                            val tab1BorderColor by animateColorAsState(
+                                targetValue = if (tab1Selected) baseBorderColor.copy(alpha = 0.35f) else baseBorderColor.copy(alpha = 0f),
+                                animationSpec = tween(durationMillis = 200),
+                                label = "dialogTab1Border",
+                            )
+
+                            Box(
+                                modifier = Modifier
+                                    .height(32.dp)
+                                    .clip(tabShape)
+                                    .background(tab1BgColor)
+                                    .border(BorderStroke(0.5.dp, tab1BorderColor), tabShape)
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null,
+                                        onClick = { selectedTab = 1 },
+                                    ),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                ) {
+                                    Text(
+                                        text = stringResource(R.string.filter_language),
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = if (tab1Selected) FontWeight.SemiBold else FontWeight.Normal,
+                                        color = tab1TextColor,
+                                    )
+                                    if (languageCount > 0) {
+                                        Surface(
+                                            shape = RoundedCornerShape(percent = 50),
+                                            color = MaterialTheme.colorScheme.primary,
+                                            contentColor = MaterialTheme.colorScheme.onPrimary,
+                                        ) {
+                                            Text(
+                                                text = languageCount.toString(),
+                                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                                fontWeight = FontWeight.Bold,
+                                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 0.5.dp),
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (selectedTab == 0) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 380.dp)
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        FilterSection(title = stringResource(R.string.status)) {
+                            items(UnifiedEnabledFilter.entries) { filter ->
+                                CompactFilterChip(
+                                    selected = readyState.filters.enabledFilter == filter,
+                                    onClick = { onEnabledFilterChange(filter) },
+                                    text = filter.displayLabel(),
+                                )
+                            }
+                        }
+                        FilterSection(title = stringResource(R.string.availability_filter_title)) {
+                            items(UnifiedAvailabilityFilter.entries) { filter ->
+                                CompactFilterChip(
+                                    selected = readyState.filters.availabilityFilter == filter,
+                                    onClick = { onAvailabilityFilterChange(filter) },
+                                    text = filter.displayLabel(),
+                                )
+                            }
+                        }
+                        FilterSection(title = stringResource(R.string.source_test_availability_filter_title)) {
+                            items(UnifiedTestAvailabilityFilter.entries) { filter ->
+                                CompactFilterChip(
+                                    selected = readyState.filters.testAvailabilityFilter == filter,
+                                    onClick = { onTestAvailabilityFilterChange(filter) },
+                                    text = filter.displayLabel(),
+                                )
+                            }
+                        }
+                        FilterSection(title = stringResource(R.string.nsfw_filter_title)) {
+                            items(UnifiedNsfwFilter.entries) { filter ->
+                                CompactFilterChip(
+                                    selected = readyState.filters.nsfwFilter == filter,
+                                    onClick = { onNsfwFilterChange(filter) },
+                                    text = filter.displayLabel(),
+                                )
+                            }
+                        }
+                        if (readyState.availableLocationTypes.isNotEmpty()) {
+                            FilterSection(title = stringResource(R.string.repository_source)) {
+                                items(readyState.availableLocationTypes) { type ->
+                                    CompactFilterChip(
+                                        selected = type in readyState.filters.locationTypes,
+                                        onClick = { onLocationTypeToggle(type) },
+                                        text = type.displayLabel(),
+                                    )
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 380.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End,
+                        ) {
+                            TextButton(
+                                onClick = onApplyPreferredLanguages,
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                            ) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_language),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = stringResource(R.string.use_setup_wizard_languages),
+                                    style = MaterialTheme.typography.labelMedium,
+                                )
+                            }
+                        }
+                        LazyVerticalGrid(
+                            columns = GridCells.Adaptive(minSize = 110.dp),
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            gridItems(readyState.availableLanguages, key = { it }) { language ->
+                                CompactFilterChip(
+                                    selected = language in readyState.filters.languages,
+                                    onClick = { onLanguageClick(language) },
+                                    text = language.displayLanguageLabel(),
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            }
+                        }
+                    }
                 }
             }
         },

@@ -3006,6 +3006,8 @@
     <string name="source_type_tsundoku_apk">Tsundoku APK</string>
     <string name="source_type_tvbox_json">TVBox JSON</string>
     <string name="sources_tab_title">源（%1$d）</string>
+    <string name="filter_properties">属性过滤</string>
+    <string name="filter_language">语言过滤</string>
     <string name="super_resolution_prepared">超分辨率已准备</string>
     <string name="super_resolution_processing_">超分辨率处理中…</string>
     <string name="sync_complete">已同步 %1$d 项</string>

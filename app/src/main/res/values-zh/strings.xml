@@ -2334,6 +2334,8 @@
     <string name="sources_pinned">图源已置顶</string>
     <string name="sources_reorder_tip">点击并按住项目排序</string>
     <string name="sources_tab_title">源（%1$d）</string>
+    <string name="filter_properties">属性过滤</string>
+    <string name="filter_language">语言过滤</string>
     <string name="sources_unpinned">图源置顶已取消</string>
     <string name="speed">速度</string>
     <string name="speed_value">x%.1f</string>

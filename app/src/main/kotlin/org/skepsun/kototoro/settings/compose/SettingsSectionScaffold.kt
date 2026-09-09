@@ -19,7 +19,8 @@ internal fun settingsContentTopInset(base: Dp = 0.dp): Dp = LocalSettingsContent
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsSectionScaffold(
-    title: String?,
+    title: String? = null,
+    titleContent: (@Composable () -> Unit)? = null,
     onNavigateUp: (() -> Unit)?,
     modifier: Modifier = Modifier,
     showTopBar: Boolean = true,
@@ -30,6 +31,7 @@ fun SettingsSectionScaffold(
     if (showTopBar) {
         SettingsTopBarScaffold(
             title = title,
+            titleContent = titleContent,
             onNavigateUp = onNavigateUp,
             modifier = modifier,
             searchContent = searchContent,
