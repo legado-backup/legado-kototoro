@@ -198,8 +198,8 @@ fun BoxScope.SpaceSidekick(
                     },
                 )
                 .then(if (isCentered) Modifier else Modifier.statusBarsPadding().padding(top = 72.dp)),
-            enter = fadeIn(),
-            exit = fadeOut(),
+            enter = fadeIn() + slideInHorizontally(initialOffsetX = { if (isLeft) -it else it }),
+            exit = fadeOut() + slideOutHorizontally(targetOffsetX = { if (isLeft) -it else it }),
         ) {
             SpaceSidekickHandle(
                 state = state,

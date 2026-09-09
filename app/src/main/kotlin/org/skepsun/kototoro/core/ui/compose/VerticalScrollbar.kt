@@ -11,6 +11,7 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.lazy.LazyListLayoutInfo
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.grid.LazyGridLayoutInfo
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -34,6 +35,7 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -111,15 +113,7 @@ fun BoxScope.VerticalScrollbar(
                 state.requestScrollToItem(totalItems - 1, Int.MAX_VALUE)
                 return@FastScrollbar
             }
-            val maxSections = estimator.getMaxSections().coerceAtLeast(1f)
-            val targetProgress = (fraction * maxSections).coerceIn(0f, maxSections)
-            val targetIndex = targetProgress.toInt().coerceIn(0, totalItems - 1)
-            val fractionalPart = targetProgress - targetIndex
-            val visibleItems = layoutInfo.visibleItemsInfo
-            val itemSize = visibleItems.find { it.index == targetIndex }?.size
-                ?: visibleItems.map { it.size }.average().takeIf { it > 0 }?.toInt()
-                ?: 100
-            val targetOffset = (fractionalPart * itemSize).roundToInt()
+            val (targetIndex, targetOffset) = estimator.findItemAndOffsetForFraction(fraction, layoutInfo)
             state.requestScrollToItem(targetIndex, targetOffset)
         },
     )
@@ -138,6 +132,7 @@ fun BoxScope.VerticalScrollbar(
     endInset: Dp = FastScrollInsetEnd,
     labelProvider: ((Int) -> String)? = null,
 ) {
+    val estimator = remember { GridScrollbarEstimator() }
     FastScrollbar(
         modifier = modifier,
         contentPadding = contentPadding,
@@ -150,7 +145,7 @@ fun BoxScope.VerticalScrollbar(
         labelProvider = labelProvider,
         totalItemsCount = { state.layoutInfo.totalItemsCount },
         visibleItemsCount = { state.layoutInfo.visibleItemsInfo.size },
-        scrollFraction = { state.smoothGridScrollFraction() },
+        scrollFraction = { estimator.computeFraction(state) },
         isScrollInProgress = { state.isScrollInProgress },
         onFastScrollToFraction = { fraction ->
             val layoutInfo = state.layoutInfo
@@ -164,25 +159,8 @@ fun BoxScope.VerticalScrollbar(
                 state.requestScrollToItem(totalItems - 1, Int.MAX_VALUE)
                 return@FastScrollbar
             }
-            val columnCount = state.calculateColumnCount()
-            val scrollRange = computeGridScrollRange(state, columnCount)
-            val viewportHeight = (layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset).toFloat()
-            val extraScrollRange = (scrollRange.toFloat() - viewportHeight).coerceAtLeast(1f)
-            val scrollAmt = fraction * extraScrollRange
-
-            val visibleItems = layoutInfo.visibleItemsInfo
-            if (visibleItems.isEmpty()) {
-                state.requestScrollToItem((fraction * (totalItems - 1)).toInt(), 0)
-                return@FastScrollbar
-            }
-            val laidOutArea = (visibleItems.last().offset.y + visibleItems.last().size.height) - visibleItems.first().offset.y
-            val laidOutRows = (1 + abs(visibleItems.last().index - visibleItems.first().index) / columnCount).coerceAtLeast(1)
-            val avgSizePerRow = (laidOutArea.toFloat() / laidOutRows).coerceAtLeast(1f)
-
-            val rowNumber = (scrollAmt / avgSizePerRow).toInt()
-            val rowOffset = (scrollAmt - rowNumber * avgSizePerRow).roundToInt()
-            val targetIndex = (columnCount * rowNumber).coerceIn(0, totalItems - 1)
-            state.requestScrollToItem(targetIndex, rowOffset)
+            val (_, targetOffset, targetIndex) = estimator.findRowAndOffsetForFraction(fraction, layoutInfo)
+            state.requestScrollToItem(targetIndex, targetOffset)
         },
     )
 }
@@ -454,9 +432,122 @@ private fun Modifier.fastScrollbarPointerInput(
     }
 }
 
+internal class ItemHeightTracker(initialCapacity: Int = 128) {
+    private var capacity = initialCapacity
+    private var treeHeight = LongArray(capacity + 1)
+    private var treeCount = IntArray(capacity + 1)
+    private var heights = IntArray(capacity)
+
+    var totalKnownCount: Int = 0
+        private set
+    var totalKnownHeight: Long = 0L
+        private set
+
+    fun reset(expectedCapacity: Int = 128) {
+        val newCap = maxOf(expectedCapacity, 16)
+        capacity = newCap
+        treeHeight = LongArray(newCap + 1)
+        treeCount = IntArray(newCap + 1)
+        heights = IntArray(newCap)
+        totalKnownCount = 0
+        totalKnownHeight = 0L
+    }
+
+    fun ensureCapacity(requiredSize: Int) {
+        if (requiredSize > capacity) {
+            val newCap = maxOf(requiredSize, capacity * 2)
+            val oldHeights = heights
+            val newHeights = IntArray(newCap)
+            System.arraycopy(oldHeights, 0, newHeights, 0, minOf(oldHeights.size, newCap))
+            heights = newHeights
+
+            val newTreeHeight = LongArray(newCap + 1)
+            val newTreeCount = IntArray(newCap + 1)
+            for (i in oldHeights.indices) {
+                val h = oldHeights[i]
+                if (h > 0) {
+                    addLong(newTreeHeight, i + 1, h.toLong(), newCap)
+                    addInt(newTreeCount, i + 1, 1, newCap)
+                }
+            }
+            treeHeight = newTreeHeight
+            treeCount = newTreeCount
+            capacity = newCap
+        }
+    }
+
+    fun setHeight(index: Int, height: Int) {
+        if (index < 0 || height <= 0) return
+        ensureCapacity(index + 1)
+        val oldHeight = heights[index]
+        if (oldHeight != height) {
+            val delta = (height - oldHeight).toLong()
+            heights[index] = height
+            addLong(treeHeight, index + 1, delta, capacity)
+            if (oldHeight == 0) {
+                totalKnownCount++
+                addInt(treeCount, index + 1, 1, capacity)
+            }
+            totalKnownHeight += delta
+        }
+    }
+
+    fun getHeight(index: Int): Int {
+        if (index < 0 || index >= capacity) return 0
+        return heights[index]
+    }
+
+    fun getKnownHeightBefore(untilIndex: Int): Long {
+        if (untilIndex <= 0) return 0L
+        return queryLong(treeHeight, minOf(untilIndex, capacity))
+    }
+
+    fun getKnownCountBefore(untilIndex: Int): Int {
+        if (untilIndex <= 0) return 0
+        return queryInt(treeCount, minOf(untilIndex, capacity))
+    }
+
+    private fun addLong(tree: LongArray, index: Int, delta: Long, cap: Int) {
+        var idx = index
+        while (idx <= cap) {
+            tree[idx] += delta
+            idx += idx and -idx
+        }
+    }
+
+    private fun addInt(tree: IntArray, index: Int, delta: Int, cap: Int) {
+        var idx = index
+        while (idx <= cap) {
+            tree[idx] += delta
+            idx += idx and -idx
+        }
+    }
+
+    private fun queryLong(tree: LongArray, index: Int): Long {
+        var sum = 0L
+        var idx = index
+        while (idx > 0) {
+            sum += tree[idx]
+            idx -= idx and -idx
+        }
+        return sum
+    }
+
+    private fun queryInt(tree: IntArray, index: Int): Int {
+        var sum = 0
+        var idx = index
+        while (idx > 0) {
+            sum += tree[idx]
+            idx -= idx and -idx
+        }
+        return sum
+    }
+}
+
 internal class ScrollbarSectionEstimator {
-    private var maxSections = 1f
+    private val tracker = ItemHeightTracker()
     private var lastTotalItems = 0
+    private var smoothedTotalHeight = 0f
 
     fun computeFraction(layoutInfo: LazyListLayoutInfo): Float {
         val visibleItems = layoutInfo.visibleItemsInfo
@@ -466,73 +557,250 @@ internal class ScrollbarSectionEstimator {
         }
         if (totalItems != lastTotalItems) {
             lastTotalItems = totalItems
-            maxSections = 1f
+            tracker.reset(totalItems)
+            smoothedTotalHeight = 0f
+        }
+
+        for (item in visibleItems) {
+            tracker.setHeight(item.index, item.size)
         }
 
         val topItem = visibleItems.first()
         val bottomItem = visibleItems.last()
         val viewportHeight = (layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset).toFloat()
 
-        val topHiddenProportion = (-topItem.offset.toFloat() / topItem.size.coerceAtLeast(1)).coerceAtLeast(0f)
-        val bottomHiddenProportion = ((bottomItem.offset + bottomItem.size - viewportHeight) / bottomItem.size.coerceAtLeast(1)).coerceAtLeast(0f)
-
-        val previousSections = topItem.index + topHiddenProportion
-        val remainingSections = (totalItems - (bottomItem.index + 1)).coerceAtLeast(0) + bottomHiddenProportion
-        val scrollableSections = (previousSections + remainingSections).coerceAtLeast(1f)
-
-        if (scrollableSections > maxSections) {
-            maxSections = scrollableSections
+        val avgItemHeight = if (tracker.totalKnownCount > 0) {
+            tracker.totalKnownHeight.toFloat() / tracker.totalKnownCount
+        } else {
+            visibleItems.map { it.size }.average().takeIf { it > 0 }?.toFloat() ?: 100f
         }
 
-        return (previousSections / maxSections).coerceIn(0f, 1f)
+        val knownBefore = tracker.getKnownHeightBefore(topItem.index)
+        val countBefore = tracker.getKnownCountBefore(topItem.index)
+        val unknownBefore = (topItem.index - countBefore).coerceAtLeast(0)
+        val scrolledPx = (knownBefore + unknownBefore * avgItemHeight - topItem.offset).coerceAtLeast(0f)
+
+        val unknownTotal = (totalItems - tracker.totalKnownCount).coerceAtLeast(0)
+        val estimatedTotalHeight = tracker.totalKnownHeight + unknownTotal * avgItemHeight
+        val maxScrollPx = (estimatedTotalHeight - viewportHeight).coerceAtLeast(1f)
+
+        smoothedTotalHeight = if (smoothedTotalHeight <= 0f) {
+            maxScrollPx
+        } else {
+            smoothedTotalHeight * 0.95f + maxScrollPx * 0.05f
+        }
+
+        if (topItem.index == 0 && topItem.offset >= 0) {
+            return 0f
+        }
+        if (bottomItem.index == totalItems - 1) {
+            val bottomOffset = (bottomItem.offset + bottomItem.size).toFloat()
+            if (bottomOffset <= viewportHeight) {
+                return 1f
+            }
+        }
+
+        return (scrolledPx / smoothedTotalHeight).coerceIn(0f, 1f)
     }
 
-    fun getMaxSections(): Float = maxSections
+    fun getTotalScrollRange(layoutInfo: LazyListLayoutInfo): Float {
+        val viewportHeight = (layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset).toFloat()
+        return if (smoothedTotalHeight > 0f) smoothedTotalHeight else viewportHeight
+    }
+
+    fun findItemAndOffsetForFraction(fraction: Float, layoutInfo: LazyListLayoutInfo): Pair<Int, Int> {
+        val totalItems = layoutInfo.totalItemsCount
+        if (totalItems <= 0) return 0 to 0
+        if (fraction <= 0.001f) return 0 to 0
+        if (fraction >= 0.999f) return (totalItems - 1) to Int.MAX_VALUE
+
+        val maxScrollPx = getTotalScrollRange(layoutInfo)
+        val targetPx = (fraction * maxScrollPx).coerceAtLeast(0f)
+
+        val avgItemHeight = if (tracker.totalKnownCount > 0) {
+            tracker.totalKnownHeight.toFloat() / tracker.totalKnownCount
+        } else {
+            100f
+        }
+
+        var low = 0
+        var high = totalItems - 1
+        var bestIndex = 0
+        var bestOffset = 0
+
+        while (low <= high) {
+            val mid = (low + high) ushr 1
+            val known = tracker.getKnownHeightBefore(mid)
+            val count = tracker.getKnownCountBefore(mid)
+            val unknown = (mid - count).coerceAtLeast(0)
+            val startOfMid = known + unknown * avgItemHeight
+
+            val midHeight = tracker.getHeight(mid).takeIf { it > 0 } ?: avgItemHeight.toInt().coerceAtLeast(1)
+            val endOfMid = startOfMid + midHeight
+
+            if (targetPx < startOfMid) {
+                high = mid - 1
+            } else if (targetPx >= endOfMid) {
+                low = mid + 1
+            } else {
+                bestIndex = mid
+                bestOffset = (targetPx - startOfMid).toInt().coerceAtLeast(0)
+                break
+            }
+            bestIndex = mid
+            bestOffset = (targetPx - startOfMid).toInt().coerceAtLeast(0)
+        }
+
+        return bestIndex.coerceIn(0, totalItems - 1) to bestOffset
+    }
+
+    fun getMaxSections(): Float {
+        val avg = if (tracker.totalKnownCount > 0) {
+            tracker.totalKnownHeight.toFloat() / tracker.totalKnownCount
+        } else {
+            100f
+        }
+        return (smoothedTotalHeight / avg.coerceAtLeast(1f)).coerceAtLeast(1f)
+    }
 }
 
-private fun LazyGridState.calculateColumnCount(): Int {
-    val visibleItems = layoutInfo.visibleItemsInfo
-    if (visibleItems.isEmpty()) return 1
-    val firstLineTop = visibleItems.minOf { it.offset.y }
-    return visibleItems.count { it.offset.y == firstLineTop }.coerceAtLeast(1)
-}
+internal class GridScrollbarEstimator {
+    private val tracker = ItemHeightTracker()
+    private var lastKnownColumns = 1
+    private var lastTotalItems = 0
+    private var smoothedTotalHeight = 0f
 
-private fun computeGridScrollOffset(state: LazyGridState, columnCount: Int): Int {
-    if (state.layoutInfo.totalItemsCount == 0) return 0
-    val visibleItems = state.layoutInfo.visibleItemsInfo
-    if (visibleItems.isEmpty()) return 0
-    val startChild = visibleItems.first()
-    val endChild = visibleItems.last()
-    val laidOutArea = (endChild.offset.y + endChild.size.height) - startChild.offset.y
-    val laidOutRows = (1 + abs(endChild.index - startChild.index) / columnCount).coerceAtLeast(1)
-    val avgSizePerRow = (laidOutArea.toFloat() / laidOutRows).coerceAtLeast(1f)
+    fun computeFraction(state: LazyGridState): Float = computeFraction(state.layoutInfo)
 
-    val rowsBefore = min(startChild.index, endChild.index).coerceAtLeast(0) / columnCount
-    return (rowsBefore * avgSizePerRow - startChild.offset.y).roundToInt()
-}
+    fun computeFraction(layoutInfo: androidx.compose.foundation.lazy.grid.LazyGridLayoutInfo): Float {
+        val visibleItems = layoutInfo.visibleItemsInfo
+        val totalItems = layoutInfo.totalItemsCount
+        if (visibleItems.isEmpty() || totalItems <= visibleItems.size) {
+            return 0f
+        }
+        if (totalItems != lastTotalItems) {
+            lastTotalItems = totalItems
+            tracker.reset(totalItems)
+            smoothedTotalHeight = 0f
+        }
 
-private fun computeGridScrollRange(state: LazyGridState, columnCount: Int): Int {
-    if (state.layoutInfo.totalItemsCount == 0) return 0
-    val visibleItems = state.layoutInfo.visibleItemsInfo
-    if (visibleItems.isEmpty()) return 0
-    val startChild = visibleItems.first()
-    val endChild = visibleItems.last()
-    val laidOutArea = (endChild.offset.y + endChild.size.height) - startChild.offset.y
-    val laidOutRows = (1 + abs(endChild.index - startChild.index) / columnCount).coerceAtLeast(1)
-    val avgSizePerRow = (laidOutArea.toFloat() / laidOutRows).coerceAtLeast(1f)
+        val rowsInView = visibleItems.groupBy { it.row }
+        for ((row, items) in rowsInView) {
+            val rowHeight = items.maxOf { it.size.height }
+            tracker.setHeight(row, rowHeight)
+        }
 
-    val totalRows = 1 + (state.layoutInfo.totalItemsCount - 1) / columnCount
-    val endSpacing = avgSizePerRow - endChild.size.height
-    return (endSpacing + (laidOutArea.toFloat() / laidOutRows) * totalRows).roundToInt()
-}
+        val maxColsInView = rowsInView.maxOfOrNull { it.value.size } ?: 1
+        if (maxColsInView > lastKnownColumns) {
+            lastKnownColumns = maxColsInView
+        }
 
-private fun LazyGridState.smoothGridScrollFraction(): Float {
-    val layoutInfo = layoutInfo
-    if (layoutInfo.totalItemsCount == 0 || layoutInfo.visibleItemsInfo.isEmpty()) return 0f
-    val columnCount = calculateColumnCount()
-    val scrollOffset = computeGridScrollOffset(this, columnCount)
-    val scrollRange = computeGridScrollRange(this, columnCount)
-    val viewportHeight = (layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset).toFloat()
-    val extraScrollRange = (scrollRange.toFloat() - viewportHeight).coerceAtLeast(1f)
-    return (scrollOffset.toFloat() / extraScrollRange).coerceIn(0f, 1f)
+        val startRow = visibleItems.minOf { it.row }
+        val startRowOffset = visibleItems.filter { it.row == startRow }.minOf { it.offset.y }
+        val endRow = visibleItems.maxOf { it.row }
+        val endRowBottom = visibleItems.filter { it.row == endRow }.maxOf { it.offset.y + it.size.height }
+        val lastVisibleItemIndex = visibleItems.maxOf { it.index }
+        val viewportHeight = (layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset).toFloat()
+
+        val avgRowHeight = if (tracker.totalKnownCount > 0) {
+            tracker.totalKnownHeight.toFloat() / tracker.totalKnownCount
+        } else {
+            rowsInView.values.map { it.maxOf { item -> item.size.height } }.average().takeIf { it > 0 }?.toFloat() ?: 200f
+        }
+
+        val knownBefore = tracker.getKnownHeightBefore(startRow)
+        val countBefore = tracker.getKnownCountBefore(startRow)
+        val unknownBefore = (startRow - countBefore).coerceAtLeast(0)
+        val scrolledPx = (knownBefore + unknownBefore * avgRowHeight - startRowOffset).coerceAtLeast(0f)
+
+        val columnCount = maxOf(lastKnownColumns, 1)
+        val remainingItems = (totalItems - 1 - lastVisibleItemIndex).coerceAtLeast(0)
+        val remainingRows = kotlin.math.ceil(remainingItems.toFloat() / columnCount).toInt()
+        val totalEstimatedRows = maxOf(endRow + 1 + remainingRows, tracker.totalKnownCount)
+
+        val unknownTotalRows = (totalEstimatedRows - tracker.totalKnownCount).coerceAtLeast(0)
+        val estimatedTotalHeight = tracker.totalKnownHeight + unknownTotalRows * avgRowHeight
+        val maxScrollPx = (estimatedTotalHeight - viewportHeight).coerceAtLeast(1f)
+
+        smoothedTotalHeight = if (smoothedTotalHeight <= 0f) {
+            maxScrollPx
+        } else {
+            smoothedTotalHeight * 0.95f + maxScrollPx * 0.05f
+        }
+
+        if (startRow == 0 && startRowOffset >= 0) {
+            return 0f
+        }
+        if (lastVisibleItemIndex == totalItems - 1 && endRowBottom <= viewportHeight) {
+            return 1f
+        }
+
+        return (scrolledPx / smoothedTotalHeight).coerceIn(0f, 1f)
+    }
+
+    fun getTotalScrollRange(layoutInfo: androidx.compose.foundation.lazy.grid.LazyGridLayoutInfo): Float {
+        val viewportHeight = (layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset).toFloat()
+        return if (smoothedTotalHeight > 0f) smoothedTotalHeight else viewportHeight
+    }
+
+    fun findRowAndOffsetForFraction(fraction: Float, layoutInfo: androidx.compose.foundation.lazy.grid.LazyGridLayoutInfo): Triple<Int, Int, Int> {
+        val totalItems = layoutInfo.totalItemsCount
+        if (totalItems <= 0) return Triple(0, 0, 0)
+        if (fraction <= 0.001f) return Triple(0, 0, 0)
+        if (fraction >= 0.999f) return Triple(Int.MAX_VALUE, Int.MAX_VALUE, totalItems - 1)
+
+        val maxScrollPx = getTotalScrollRange(layoutInfo)
+        val targetPx = (fraction * maxScrollPx).coerceAtLeast(0f)
+
+        val avgRowHeight = if (tracker.totalKnownCount > 0) {
+            tracker.totalKnownHeight.toFloat() / tracker.totalKnownCount
+        } else {
+            200f
+        }
+
+        val columnCount = maxOf(lastKnownColumns, 1)
+        val totalEstimatedRows = maxOf(tracker.totalKnownCount, (totalItems + columnCount - 1) / columnCount)
+
+        var low = 0
+        var high = totalEstimatedRows - 1
+        var bestRow = 0
+        var bestOffset = 0
+
+        while (low <= high) {
+            val mid = (low + high) ushr 1
+            val known = tracker.getKnownHeightBefore(mid)
+            val count = tracker.getKnownCountBefore(mid)
+            val unknown = (mid - count).coerceAtLeast(0)
+            val startOfMid = known + unknown * avgRowHeight
+
+            val midHeight = tracker.getHeight(mid).takeIf { it > 0 } ?: avgRowHeight.toInt().coerceAtLeast(1)
+            val endOfMid = startOfMid + midHeight
+
+            if (targetPx < startOfMid) {
+                high = mid - 1
+            } else if (targetPx >= endOfMid) {
+                low = mid + 1
+            } else {
+                bestRow = mid
+                bestOffset = (targetPx - startOfMid).toInt().coerceAtLeast(0)
+                break
+            }
+            bestRow = mid
+            bestOffset = (targetPx - startOfMid).toInt().coerceAtLeast(0)
+        }
+
+        val targetIndex = (bestRow * columnCount).coerceIn(0, totalItems - 1)
+        return Triple(bestRow, bestOffset, targetIndex)
+    }
+
+    fun getEstimatedTotalRows(): Float {
+        val avg = if (tracker.totalKnownCount > 0) {
+            tracker.totalKnownHeight.toFloat() / tracker.totalKnownCount
+        } else {
+            200f
+        }
+        return (smoothedTotalHeight / avg.coerceAtLeast(1f)).coerceAtLeast(1f)
+    }
+
+    fun getColumnCount(): Int = lastKnownColumns.coerceAtLeast(1)
 }

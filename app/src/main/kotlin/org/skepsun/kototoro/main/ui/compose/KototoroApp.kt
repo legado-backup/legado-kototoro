@@ -57,7 +57,9 @@ import org.skepsun.kototoro.core.ui.compose.ImmersiveEdgeGradient
 import org.skepsun.kototoro.core.ui.compose.ImmersiveBottomGradientStops
 import org.skepsun.kototoro.core.ui.compose.ImmersiveEdgeFeatherExtension
 import org.skepsun.kototoro.core.ui.compose.ImmersiveTopGradientStops
+import org.skepsun.kototoro.core.prefs.SpaceSwitcherPosition
 import org.skepsun.kototoro.core.ui.compose.CompactTopBarHorizontalPadding
+import org.skepsun.kototoro.core.ui.compose.LocalScrollbarActive
 import org.skepsun.kototoro.core.ui.compose.resolveTopImmersiveAlpha
 import org.skepsun.kototoro.core.ui.compose.toTransparentImmersiveColor
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -984,6 +986,7 @@ fun KototoroApp(
             animationSpec = tween(durationMillis = overlapTweenMillis),
             label = "chrome_scroll_overlap",
         )
+        val isScrollbarActive = remember { mutableStateOf(false) }
         CompositionLocalProvider(
             LocalLiquidGlassBackdrop provides activeLiquidGlassBackdrop,
             LocalLiquidGlassLayerBackdrop provides activeLiquidGlassBackdrop,
@@ -992,6 +995,7 @@ fun KototoroApp(
             LocalGlassPrefs provides glassPrefs,
             LocalRailAnimationFactor provides railAnimationFactor,
             LocalChromeScrollOverlap provides chromeScrollOverlap,
+            LocalScrollbarActive provides isScrollbarActive,
         ) {
             val immersiveStrength = ((LocalGlassPrefs.current?.immersiveStrengthPercent ?: 65).coerceIn(0, 100)) / 100f
             val immersiveBaseColor = MaterialTheme.colorScheme.surface.copy(alpha = 1f)
@@ -1417,6 +1421,8 @@ fun KototoroApp(
                         }
                     }
                 }
+                val isSidekickOnRight = sidekickPosition == SpaceSwitcherPosition.TOP_RIGHT ||
+                    sidekickPosition == SpaceSwitcherPosition.CENTER_RIGHT
                 SpaceSidekick(
                     state = spaceUiState,
                     onAction = onSpaceAction,
@@ -1424,6 +1430,7 @@ fun KototoroApp(
                     onResume = onSpaceResume,
                     position = sidekickPosition,
                     visible = spaceUiState.switcherEnabled &&
+                        (!isSidekickOnRight || !isScrollbarActive.value) &&
                         (shouldShowChrome || isImmersiveRoute || isSearchRoute) &&
                         (!isDetailsRoute ||
                             detailsBottomPanelRoute != currentDestinationRoute ||
