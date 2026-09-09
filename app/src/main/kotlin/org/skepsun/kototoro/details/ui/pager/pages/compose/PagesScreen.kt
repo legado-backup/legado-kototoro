@@ -316,6 +316,7 @@ fun PagesScreen(
             }
             VerticalScrollbar(
                 state = listState,
+                contentPadding = PaddingValues(16.dp),
                 labelProvider = { index -> "${index + 1}" },
             )
         }

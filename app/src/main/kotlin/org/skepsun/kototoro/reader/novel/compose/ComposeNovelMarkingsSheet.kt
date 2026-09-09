@@ -140,6 +140,7 @@ internal fun ComposeNovelNotesContent(
     onEditNote: (NovelMarkingEntity) -> Unit = {},
     onDelete: (NovelMarkingEntity) -> Unit = {},
     onDeleteBookmark: (Bookmark) -> Unit = {},
+    dragModifier: Modifier = Modifier,
     modifier: Modifier = Modifier,
     showTitle: Boolean = true,
 ) {
@@ -190,7 +191,7 @@ internal fun ComposeNovelNotesContent(
     ) {
         if (showTitle) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = dragModifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -218,6 +219,7 @@ internal fun ComposeNovelNotesContent(
                 NovelNotesBookSummary(
                     title = bookTitle,
                     itemCount = highlightCount + bookmarkCount,
+                    modifier = dragModifier,
                 )
             }
         } else {
@@ -230,11 +232,12 @@ internal fun ComposeNovelNotesContent(
                 ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = dragModifier,
             )
         }
 
         Row(
-            modifier = Modifier
+            modifier = dragModifier
                 .fillMaxWidth()
                 .horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -268,7 +271,7 @@ internal fun ComposeNovelNotesContent(
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.fillMaxWidth(),
+            modifier = dragModifier.fillMaxWidth(),
         ) {
             NovelReaderSearchField(
                 value = searchQuery,
@@ -391,11 +394,15 @@ internal fun ComposeNovelNotesContent(
 }
 
 @Composable
-private fun NovelNotesBookSummary(title: String, itemCount: Int) {
+private fun NovelNotesBookSummary(
+    title: String,
+    itemCount: Int,
+    modifier: Modifier = Modifier,
+) {
     Surface(
         shape = RoundedCornerShape(18.dp),
         color = MaterialTheme.colorScheme.surfaceContainerLow,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,

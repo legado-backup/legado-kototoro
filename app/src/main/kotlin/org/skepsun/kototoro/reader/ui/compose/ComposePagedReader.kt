@@ -19,7 +19,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -170,10 +169,6 @@ fun ComposePagedReader(
         pageCount = { displayedPages.size },
     )
     val isPagerDragged by pagerState.interactionSource.collectIsDraggedAsState()
-    val zoomedPages = remember { mutableStateMapOf<Long, Boolean>() }
-    val isCurrentPageZoomed = displayedPages.getOrNull(pagerState.currentPage)?.readerKey?.let {
-        zoomedPages[it]
-    } == true
     var isRestoringPageAnchor by remember { mutableStateOf(false) }
     var advancedAnchorPage by remember(pagerState) { mutableIntStateOf(pagerState.currentPage) }
     LaunchedEffect(pagerState, pageAnimation) {
@@ -363,14 +358,11 @@ fun ComposePagedReader(
                 zoomMode = zoomMode,
                 isCropEnabled = isCropEnabled,
                 isPageVisible = pagerState.settledPage == position,
-                    onZoomedChanged = { zoomed ->
-                        if (zoomed) zoomedPages[page.readerKey] = true else zoomedPages.remove(page.readerKey)
-                    },
-                    modifier = Modifier.fillMaxSize(),
-                )
-                when (pageAnimation) {
-                    ReaderAnimation.SIMULATION -> ComposeReaderSimulationPageShadow(transform)
-                    else -> Unit
+                modifier = Modifier.fillMaxSize(),
+            )
+            when (pageAnimation) {
+                ReaderAnimation.SIMULATION -> ComposeReaderSimulationPageShadow(transform)
+                else -> Unit
             }
         }
     }
@@ -384,7 +376,6 @@ fun ComposePagedReader(
                     .fillMaxSize()
                     .trackComposeReaderPageCurl(pageCurlState, pageAnimation == ReaderAnimation.SIMULATION),
                 key = { displayedPages[it].readerKey },
-                userScrollEnabled = !isCurrentPageZoomed,
                 pageContent = pageContent,
             )
         } else {
@@ -396,7 +387,6 @@ fun ComposePagedReader(
                     .trackComposeReaderPageCurl(pageCurlState, pageAnimation == ReaderAnimation.SIMULATION),
                 reverseLayout = reverseLayout,
                 key = { displayedPages[it].readerKey },
-                userScrollEnabled = !isCurrentPageZoomed,
                 pageContent = pageContent,
             )
         }
@@ -444,4 +434,3 @@ internal const val WEBTOON_PAGE_CONTENT_TYPE = "webtoon_page"
 internal const val WEBTOON_PULL_THRESHOLD = 0.3f
 internal const val READER_WINDOW_LOG_TAG = "ReaderWindow"
 internal const val AUTO_BACKGROUND_SAMPLE_SIZE = 64
-

@@ -27,7 +27,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -57,6 +56,7 @@ import org.skepsun.kototoro.reader.novel.ReadingMode
 import org.skepsun.kototoro.reader.novel.novelReaderPalette
 import org.skepsun.kototoro.core.prefs.ReaderAnimation
 import org.skepsun.kototoro.reader.ui.compose.ReaderAnimationIcon
+import org.skepsun.kototoro.reader.ui.compose.ReaderAnchoredBottomSheet
 import org.skepsun.kototoro.reader.ui.compose.design.ReaderOptionDivider
 import org.skepsun.kototoro.reader.ui.compose.design.ReaderOptionGroup
 import org.skepsun.kototoro.reader.ui.compose.design.ReaderOptionSwitchRow
@@ -97,18 +97,16 @@ internal fun ComposeNovelReaderOptionsSheet(
     val palette = novelReaderPalette(settings.themePreset, isSystemInDarkTheme())
     val sheetColor = Color(palette.backgroundColor)
     val sheetContentColor = Color(palette.textColor)
-    ModalBottomSheet(
+    ReaderAnchoredBottomSheet(
         onDismissRequest = onDismiss,
-        modifier = Modifier.fillMaxHeight(),
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
         containerColor = sheetColor,
         contentColor = sheetContentColor,
+        scrimColor = Color.Black.copy(alpha = if (palette.isDark) 0.58f else 0.42f),
         dragHandle = {
             BottomSheetDefaults.DragHandle(color = Color(palette.secondaryTextColor))
         },
-        tonalElevation = 0.dp,
-        contentWindowInsets = { androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0) },
-    ) {
+    ) { sheetDragModifier ->
         val readerColors = MaterialTheme.colorScheme.copy(
             primary = Color(palette.chromeTextColor),
             onPrimary = sheetColor,
@@ -126,13 +124,14 @@ internal fun ComposeNovelReaderOptionsSheet(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f)
+                    .fillMaxHeight()
                     .navigationBarsPadding(),
             ) {
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     modifier = Modifier
                         .fillMaxWidth()
+                        .then(sheetDragModifier)
                         .horizontalScroll(rememberScrollState())
                         .padding(horizontal = 12.dp, vertical = 2.dp),
                 ) {
@@ -140,12 +139,16 @@ internal fun ComposeNovelReaderOptionsSheet(
                         NovelOptionsTab(
                             page = page,
                             selected = pagerState.currentPage == index,
-                            onClick = { scope.launch { pagerState.animateScrollToPage(index) } },
+                            onClick = { scope.launch { pagerState.scrollToPage(index) } },
                             modifier = Modifier.widthIn(min = 68.dp),
                         )
                     }
                 }
-                HorizontalPager(state = pagerState, modifier = Modifier.fillMaxWidth().weight(1f)) { page ->
+                HorizontalPager(
+                    state = pagerState,
+                    overscrollEffect = null,
+                    modifier = Modifier.fillMaxWidth().weight(1f),
+                ) { page ->
                     when (page) {
                         0 -> NovelReaderReadingPage(settings = settings, update = ::update)
                         1 -> NovelReaderBrightnessPage(settings = settings, update = ::update)
@@ -361,6 +364,8 @@ private fun NovelReaderTranslationPage(
                     }
                 },
                 stackedTitle = true,
+                // Keep both display cards clear of the parent MD3 group's rounded clip.
+                modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
             )
         }
     }

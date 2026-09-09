@@ -191,7 +191,7 @@ fun KototoroContentListScreen(
     listMode: ListMode,
     isRefreshing: Boolean,
     pullRefreshEnabled: Boolean = true,
-    showScrollbar: Boolean = false,
+    showScrollbar: Boolean = true,
     showRemoveOption: Boolean = false,
     sharedTransitionEnabled: Boolean = true,
     sharedElementInstanceKey: String? = null,
@@ -451,7 +451,10 @@ fun KototoroContentListScreen(
                                 }
                             }
                             if (showScrollbar) {
-                                VerticalScrollbar(state = actualGridState)
+                                VerticalScrollbar(
+                                    state = actualGridState,
+                                    contentPadding = innerPadding,
+                                )
                             }
                         }
                     }
@@ -522,7 +525,10 @@ fun KototoroContentListScreen(
                             }
                         }
                         if (showScrollbar) {
-                            VerticalScrollbar(state = actualListState)
+                            VerticalScrollbar(
+                                state = actualListState,
+                                contentPadding = innerPadding,
+                            )
                         }
                     }
                     ListMode.DETAILED_LIST -> {
@@ -592,7 +598,10 @@ fun KototoroContentListScreen(
                             }
                         }
                         if (showScrollbar) {
-                            VerticalScrollbar(state = actualListState)
+                            VerticalScrollbar(
+                                state = actualListState,
+                                contentPadding = innerPadding,
+                            )
                         }
                     }
                 }

@@ -58,6 +58,8 @@ private enum class StableSheetAnchor {
     Hidden,
 }
 
+private const val StableSheetMaxScrimAlpha = 0.42f
+
 private val StableSheetAnimationSpec = spring<Float>(
     dampingRatio = Spring.DampingRatioNoBouncy,
     stiffness = Spring.StiffnessMedium,
@@ -78,9 +80,9 @@ private class StableSheetState(
 
     val scrimAlpha: Float
         get() = if (hostHeightPx <= 0f) {
-            MAX_SCRIM_ALPHA
+            StableSheetMaxScrimAlpha
         } else {
-            MAX_SCRIM_ALPHA * (1f - offset / hostHeightPx).coerceIn(0f, 1f)
+            StableSheetMaxScrimAlpha * (1f - offset / hostHeightPx).coerceIn(0f, 1f)
         }
 
     val isHidden: Boolean
@@ -165,7 +167,6 @@ private class StableSheetState(
         )
         const val THREE_QUARTER_OFFSET_FRACTION = 0.25f
         const val HALF_OFFSET_FRACTION = 0.5f
-        const val MAX_SCRIM_ALPHA = 0.42f
         const val DEFAULT_POSITIONAL_THRESHOLD_FRACTION = 0.28f
         val MAX_POSITIONAL_THRESHOLD = 48.dp
         const val HIDDEN_OFFSET_TOLERANCE_PX = 0.5f
@@ -219,6 +220,8 @@ fun StableAnchoredBottomSheet(
     modifier: Modifier = Modifier,
     shape: Shape = MaterialTheme.shapes.extraLarge,
     containerColor: Color = MaterialTheme.colorScheme.surfaceContainerLow,
+    contentColor: Color = Color.Unspecified,
+    scrimColor: Color = Color.Black.copy(alpha = StableSheetMaxScrimAlpha),
     dragHandle: (@Composable () -> Unit)? = { BottomSheetDefaults.DragHandle() },
     content: @Composable (dragModifier: Modifier) -> Unit,
 ) {
@@ -269,13 +272,19 @@ fun StableAnchoredBottomSheet(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = state.scrimAlpha))
+                    .background(
+                        scrimColor.copy(
+                            alpha = (scrimColor.alpha * state.scrimAlpha / StableSheetMaxScrimAlpha)
+                                .coerceIn(0f, 1f),
+                        ),
+                    )
                     .clickable(onClick = dismissWithAnimation),
             )
             val offset = state.offset.coerceAtLeast(0f)
             Surface(
                 shape = shape,
                 color = containerColor,
+                contentColor = contentColor,
                 modifier = Modifier
                     .fillMaxSize()
                     .offset { IntOffset(0, offset.roundToInt()) }

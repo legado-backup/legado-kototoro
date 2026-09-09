@@ -107,6 +107,7 @@ fun ChaptersPagesTabsContent(
     onChapterSelectionStateChange: (ChapterSelectionUiState?) -> Unit = {},
     onSelectedTabIdChange: ((Int) -> Unit)? = null,
     isMergeRepeatedChapters: Boolean = false,
+    dragModifier: Modifier = Modifier,
 ) {
     val mangaDetails by viewModel.mangaDetails.collectAsStateWithLifecycle()
     val source = mangaDetails?.toContent()?.source
@@ -186,9 +187,10 @@ fun ChaptersPagesTabsContent(
                 DetailsTabsRow(
                     selectedTabIndex = safeCurrentPage,
                     tabs = tabsList,
+                    dragModifier = dragModifier,
                     onTabClick = { index ->
                         coroutineScope.launch {
-                            pagerState.animateScrollToPage(index)
+                            pagerState.scrollToPage(index)
                         }
                     },
                 )
@@ -200,6 +202,7 @@ fun ChaptersPagesTabsContent(
                 onChapterQueryChange = onChapterQueryChange ?: {},
                 isChapterSearchVisible = isChapterSearchVisible,
                 isSearchVisible = emptyReason == null,
+                dragModifier = dragModifier,
             )
 
             HorizontalPager(
@@ -222,6 +225,7 @@ fun ChaptersPagesTabsContent(
                         handleSelectionBackPressInternally = handleSelectionBackPressInternally,
                         onChapterSelectionStateChange = onChapterSelectionStateChange,
                         isMergeRepeatedChapters = isMergeRepeatedChapters,
+                        dragModifier = dragModifier,
                     )
                     DETAILS_TAB_PAGES -> PagesScreenRoot(
                         activityViewModel = viewModel,
@@ -266,6 +270,7 @@ private fun DetailsChapterPanels(
     handleSelectionBackPressInternally: Boolean,
     onChapterSelectionStateChange: (ChapterSelectionUiState?) -> Unit,
     isMergeRepeatedChapters: Boolean,
+    dragModifier: Modifier,
 ) {
     val availableModes = remember(metadataChapterTabs, readingChapterTabs) {
         buildList {
@@ -300,6 +305,7 @@ private fun DetailsChapterPanels(
                 selectedMode = selectedMode,
                 readingChapterTitleRes = readingChapterTitleRes,
                 onSelectMode = { selectedModeName = it.name },
+                dragModifier = dragModifier,
             )
         }
 
@@ -310,6 +316,7 @@ private fun DetailsChapterPanels(
                 onSelectTab = onSelectMetadataChapterTab,
                 onOpenBrowser = { url -> router.openBrowser(url, null, null) },
                 isScrollEnabled = isScrollEnabled,
+                dragModifier = dragModifier,
             )
 
             ChapterPanelMode.READING -> {
@@ -317,6 +324,7 @@ private fun DetailsChapterPanels(
                     ChapterSourceTabsRow(
                         tabs = readingChapterTabs,
                         onSelectTab = onSelectReadingChapterTab,
+                        dragModifier = dragModifier,
                     )
                 }
                 ChaptersScreenRoot(
@@ -328,6 +336,7 @@ private fun DetailsChapterPanels(
                     detailsPaneState = detailsPaneState,
                     handleSelectionBackPressInternally = handleSelectionBackPressInternally,
                     onSelectionStateChange = onChapterSelectionStateChange,
+                    dragModifier = dragModifier,
                 )
             }
         }
@@ -339,11 +348,13 @@ private fun DetailsTabsRow(
     selectedTabIndex: Int,
     tabs: List<DetailsTabSpec>,
     onTabClick: (Int) -> Unit,
+    dragModifier: Modifier = Modifier,
 ) {
     val expressive = LocalMaterialExpressiveComponentsEnabled.current
     val shape = RoundedCornerShape(if (expressive) 24.dp else 0.dp)
     val modifier = Modifier
         .fillMaxWidth()
+        .then(dragModifier)
         .padding(horizontal = 12.dp, vertical = 8.dp)
         .then(
             if (expressive) {
@@ -381,6 +392,7 @@ private fun ChapterModeTabsRow(
     selectedMode: ChapterPanelMode,
     readingChapterTitleRes: Int,
     onSelectMode: (ChapterPanelMode) -> Unit,
+    dragModifier: Modifier = Modifier,
 ) {
     SecondaryTabRow(
         selectedTabIndex = availableModes.indexOf(selectedMode),
@@ -388,6 +400,7 @@ private fun ChapterModeTabsRow(
         contentColor = MaterialTheme.colorScheme.primary,
         modifier = Modifier
             .fillMaxWidth()
+            .then(dragModifier)
             .padding(horizontal = 12.dp, vertical = 8.dp),
     ) {
         availableModes.forEachIndexed { index, mode ->
@@ -419,6 +432,7 @@ private fun MetadataChapterPanel(
     onSelectTab: (DetailsChapterSourceTab) -> Unit,
     onOpenBrowser: (String) -> Unit,
     isScrollEnabled: Boolean,
+    dragModifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     val viewModel = remember { mutableStateOf<org.skepsun.kototoro.parsers.model.ContentChapter?>(null) }
@@ -454,6 +468,7 @@ private fun MetadataChapterPanel(
             ChapterSourceTabsRow(
                 tabs = tabs,
                 onSelectTab = onSelectTab,
+                dragModifier = dragModifier,
             )
         }
         ChaptersScreen(
@@ -492,10 +507,11 @@ private fun MetadataChapterPanel(
 private fun ChapterSourceTabsRow(
     tabs: List<DetailsChapterSourceTab>,
     onSelectTab: (DetailsChapterSourceTab) -> Unit,
+    dragModifier: Modifier = Modifier,
 ) {
     val expressive = LocalMaterialExpressiveComponentsEnabled.current
     LazyRow(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = dragModifier.fillMaxWidth(),
         contentPadding = PaddingValues(
             horizontal = if (expressive) 12.dp else 16.dp,
             vertical = if (expressive) 8.dp else 10.dp,
@@ -620,8 +636,9 @@ private fun ChaptersPagesToolbar(
     onChapterQueryChange: (String) -> Unit,
     isChapterSearchVisible: Boolean,
     isSearchVisible: Boolean,
+    dragModifier: Modifier = Modifier,
 ) {
-    Column(modifier = Modifier.fillMaxWidth()) {
+    Column(modifier = dragModifier.fillMaxWidth()) {
         if (currentTabId == DETAILS_TAB_CHAPTERS && isSearchVisible && isChapterSearchVisible) {
             OutlinedTextField(
                 value = chapterQuery,

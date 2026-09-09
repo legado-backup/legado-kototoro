@@ -7,7 +7,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -30,6 +32,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.skepsun.kototoro.R
@@ -144,7 +147,10 @@ fun ReaderSegmentedChoice(
     verticalOptions: Boolean = false,
 ) {
     Surface(
-        shape = MaterialTheme.shapes.medium,
+        // Stacked choices draw their own rounded option cards. Using the MD3 medium
+        // shape here as well clips the lower corners of those cards when the theme
+        // radius is larger than the card radius.
+        shape = if (stackedTitle) RoundedCornerShape(0.dp) else MaterialTheme.shapes.medium,
         color = if (stackedTitle) {
             androidx.compose.ui.graphics.Color.Transparent
         } else {
@@ -250,7 +256,13 @@ private fun ReaderSegmentedChoiceOptions(
                 },
                 modifier = Modifier
                     .then(if (equalWidth) Modifier.weight(1f) else Modifier)
-                    .heightIn(min = if (vertical) 64.dp else 36.dp)
+                    .then(
+                        if (vertical) {
+                            Modifier.height(84.dp)
+                        } else {
+                            Modifier.heightIn(min = 36.dp)
+                        },
+                    )
                     .selectable(
                         selected = selected,
                         role = Role.RadioButton,
@@ -261,8 +273,10 @@ private fun ReaderSegmentedChoiceOptions(
                 if (vertical) {
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(3.dp),
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 7.dp),
+                        verticalArrangement = Arrangement.Center,
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .padding(horizontal = 8.dp, vertical = 7.dp),
                     ) {
                         if (icon != null) {
                             Box(
@@ -277,8 +291,9 @@ private fun ReaderSegmentedChoiceOptions(
                                 text = options[index],
                                 style = MaterialTheme.typography.labelLarge,
                                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                                maxLines = 1,
+                                maxLines = 2,
                                 overflow = TextOverflow.Ellipsis,
+                                textAlign = TextAlign.Center,
                             )
                         }
                     }

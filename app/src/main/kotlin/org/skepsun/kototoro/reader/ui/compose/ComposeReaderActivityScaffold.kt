@@ -475,8 +475,12 @@ internal fun ComposeReaderActivityScaffold(
     infoBarEmbedded: Boolean = false,
     modifier: Modifier = Modifier,
     chapterPanelTabId: Int = DETAILS_TAB_CHAPTERS,
-    chaptersPanelContent: @Composable (Int, ReaderChapterPanelUiState, (ChapterSelectionUiState?) -> Unit) -> Unit =
-        { _, _, _ -> },
+    chaptersPanelContent: @Composable (
+        Int,
+        ReaderChapterPanelUiState,
+        (ChapterSelectionUiState?) -> Unit,
+        Modifier,
+    ) -> Unit = { _, _, _, _ -> },
     translationTaskPanelContent: @Composable () -> Unit = {},
     content: @Composable () -> Unit,
 ) {
@@ -689,6 +693,7 @@ internal fun ComposeReaderActivityScaffold(
                                 chapterPanelTabId,
                                 state.chapterPanel,
                                 { chapterSelectionState = it },
+                                sheetDragModifier,
                             )
                         }
                     }

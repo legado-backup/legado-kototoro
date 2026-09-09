@@ -37,7 +37,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -70,6 +69,7 @@ import org.skepsun.kototoro.parsers.model.ContentChapter
 import org.skepsun.kototoro.reader.novel.NovelReaderThemePreset
 import org.skepsun.kototoro.reader.novel.novelReaderPalette
 import org.skepsun.kototoro.reader.novel.annotation.NovelMarkingEntity
+import org.skepsun.kototoro.reader.ui.compose.ReaderAnchoredBottomSheet
 
 internal sealed interface NovelChapterListItem {
     val key: String
@@ -126,9 +126,8 @@ internal fun ComposeNovelChaptersSheet(
     val sheetColor = Color(palette.backgroundColor)
     val sheetContentColor = Color(palette.textColor)
 
-    ModalBottomSheet(
+    ReaderAnchoredBottomSheet(
         onDismissRequest = onDismiss,
-        modifier = Modifier.fillMaxHeight(),
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
         containerColor = sheetColor,
         contentColor = sheetContentColor,
@@ -136,9 +135,7 @@ internal fun ComposeNovelChaptersSheet(
         dragHandle = {
             BottomSheetDefaults.DragHandle(color = Color(palette.secondaryTextColor))
         },
-        tonalElevation = 0.dp,
-        contentWindowInsets = { androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0) },
-    ) {
+    ) { sheetDragModifier ->
         val readerColors = MaterialTheme.colorScheme.copy(
             primary = Color(palette.chromeTextColor),
             onPrimary = sheetColor,
@@ -167,13 +164,14 @@ internal fun ComposeNovelChaptersSheet(
                         chaptersCount = chapters.size,
                         notesCount = markings.size + bookmarks.size,
                         onPageSelected = { index ->
-                            coroutineScope.launch { pagerState.animateScrollToPage(index) }
+                            coroutineScope.launch { pagerState.scrollToPage(index) }
                         },
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+                        modifier = sheetDragModifier.padding(horizontal = 16.dp, vertical = 6.dp),
                     )
 
                     HorizontalPager(
                         state = pagerState,
+                        overscrollEffect = null,
                         modifier = Modifier.fillMaxWidth().weight(1f),
                     ) { pageIndex ->
                         when (NovelChaptersSheetTab.entries[pageIndex]) {
@@ -182,6 +180,7 @@ internal fun ComposeNovelChaptersSheet(
                                     chapters = chapters,
                                     currentIndex = currentIndex,
                                     onChapterSelected = onChapterSelected,
+                                    dragModifier = sheetDragModifier,
                                     modifier = Modifier.fillMaxSize(),
                                 )
                             }
@@ -197,6 +196,7 @@ internal fun ComposeNovelChaptersSheet(
                                     onDelete = onDeleteMarking,
                                     onDeleteBookmark = onDeleteBookmark,
                                     showTitle = false,
+                                    dragModifier = sheetDragModifier,
                                     modifier = Modifier.fillMaxSize(),
                                 )
                             }
@@ -206,6 +206,7 @@ internal fun ComposeNovelChaptersSheet(
                                     documents = searchDocuments,
                                     onChapterSelected = onChapterSelected,
                                     onSearchResultSelected = onSearchResultSelected,
+                                    dragModifier = sheetDragModifier,
                                     modifier = Modifier.fillMaxSize(),
                                 )
                             }
@@ -289,6 +290,7 @@ internal fun ComposeNovelChaptersContent(
     chapters: List<ContentChapter>,
     currentIndex: Int,
     onChapterSelected: (Int) -> Unit,
+    dragModifier: Modifier = Modifier,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -316,7 +318,7 @@ internal fun ComposeNovelChaptersContent(
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = dragModifier.fillMaxWidth(),
         ) {
             Column {
                 Text(
@@ -378,7 +380,7 @@ internal fun ComposeNovelChaptersContent(
             onValueChange = { query = it },
             placeholder = stringResource(R.string.search_chapters),
             clearContentDescription = stringResource(R.string.clear),
-            modifier = Modifier.fillMaxWidth(),
+            modifier = dragModifier.fillMaxWidth(),
         )
         LazyColumn(
             state = listState,
@@ -585,6 +587,7 @@ internal fun ComposeNovelChapterSearchContent(
     documents: List<NovelComposeChapterContent>,
     onChapterSelected: (Int) -> Unit,
     onSearchResultSelected: (NovelMarkingTarget) -> Unit,
+    dragModifier: Modifier = Modifier,
     modifier: Modifier = Modifier,
 ) {
     var query by remember { mutableStateOf("") }
@@ -603,7 +606,7 @@ internal fun ComposeNovelChapterSearchContent(
             onValueChange = { query = it },
             placeholder = stringResource(R.string.novel_reader_content_search_hint),
             clearContentDescription = stringResource(R.string.clear),
-            modifier = Modifier.fillMaxWidth(),
+            modifier = dragModifier.fillMaxWidth(),
         )
 
         when {
@@ -626,7 +629,7 @@ internal fun ComposeNovelChapterSearchContent(
                     text = stringResource(R.string.novel_reader_content_search_result_count, results.size),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 4.dp),
+                    modifier = dragModifier.padding(horizontal = 4.dp),
                 )
                 LazyColumn(
                     verticalArrangement = Arrangement.spacedBy(8.dp),

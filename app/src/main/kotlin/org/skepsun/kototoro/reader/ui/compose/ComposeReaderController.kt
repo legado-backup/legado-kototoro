@@ -39,7 +39,8 @@ internal class ComposeReaderController(
         Int,
         ReaderChapterPanelUiState,
         (ChapterSelectionUiState?) -> Unit,
-    ) -> Unit = { _, _, _ -> },
+        Modifier,
+    ) -> Unit = { _, _, _, _ -> },
 ) : ReaderNavigator {
 
     private var currentPageKey: Long? = null
@@ -81,8 +82,8 @@ internal class ComposeReaderController(
                     showFloatingControlLabels = showFloatingControlLabels,
                     infoBarEmbedded = infoBarEmbedded,
                     chapterPanelTabId = chaptersTabId,
-                    chaptersPanelContent = { selectedTabId, panelState, onSelectionStateChange ->
-                        chaptersPanelContent(selectedTabId, panelState, onSelectionStateChange)
+                    chaptersPanelContent = { selectedTabId, panelState, onSelectionStateChange, dragModifier ->
+                        chaptersPanelContent(selectedTabId, panelState, onSelectionStateChange, dragModifier)
                     },
                     translationTaskPanelContent = {
                         ComposeTranslationTaskPanelContent(viewModel = viewModel, modifier = Modifier.fillMaxSize())

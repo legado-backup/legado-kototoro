@@ -278,7 +278,10 @@ fun FeedScreen(
                 }
             }
         }
-        VerticalScrollbar(state = listState)
+        VerticalScrollbar(
+            state = listState,
+            contentPadding = contentPadding,
+        )
     }
 }
 

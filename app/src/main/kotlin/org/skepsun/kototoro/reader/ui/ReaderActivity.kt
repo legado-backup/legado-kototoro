@@ -277,7 +277,7 @@ class ReaderActivity :
             imagePipeline = composeReaderImagePipeline,
             errorHost = this,
             initialEInkModeEnabled = settings.isEInkModeEnabled,
-            chaptersPanelContent = { selectedTabId, panelState, onSelectionStateChange ->
+            chaptersPanelContent = { selectedTabId, panelState, onSelectionStateChange, dragModifier ->
                 ChaptersPagesTabsContent(
                     viewModel = viewModel,
                     pagesViewModel = pagesViewModel,
@@ -294,6 +294,7 @@ class ReaderActivity :
                     onChapterQueryChange = { query -> viewModel.performChapterSearch(query) },
                     onChapterSelectionStateChange = onSelectionStateChange,
                     onSelectedTabIdChange = composeReaderController::selectChaptersTab,
+                    dragModifier = dragModifier,
                 )
             },
             chromeCallbacks = ComposeReaderChromeCallbacks(
@@ -358,12 +359,21 @@ class ReaderActivity :
                 ),
                 options = ComposeReaderOptionsCallbacks(
                     onModeChanged = { mode ->
-                        composeReaderController.updateOptions { copy(mode = mode) }
+                        composeReaderController.updateOptions {
+                            copy(
+                                mode = mode,
+                                cropPages = settings.isPagesCropEnabled(mode),
+                            )
+                        }
                         onReaderModeChanged(mode)
                     },
                     onAnimationChanged = { animation ->
                         settings.readerAnimation = animation
                         composeReaderController.updateOptions { copy(animation = animation) }
+                    },
+                    onZoomModeChanged = { zoomMode ->
+                        settings.zoomMode = zoomMode
+                        composeReaderController.updateOptions { copy(zoomMode = zoomMode) }
                     },
                     onDoublePageChanged = { enabled ->
                         settings.isReaderDoubleOnLandscape = enabled
@@ -387,6 +397,27 @@ class ReaderActivity :
                     onDoublePageSensitivityChanged = { value ->
                         settings.readerDoublePagesSensitivity = value
                         composeReaderController.updateOptions { copy(doublePageSensitivity = value) }
+                    },
+                    onFullscreenChanged = { enabled ->
+                        settings.isReaderFullscreenEnabled = enabled
+                        composeReaderController.updateOptions { copy(fullscreen = enabled) }
+                        setUiIsVisible(areControlsVisible)
+                    },
+                    onPageNumbersChanged = { enabled ->
+                        settings.isPagesNumbersEnabled = enabled
+                        composeReaderController.updateOptions { copy(pageNumbers = enabled) }
+                    },
+                    onCropPagesChanged = { enabled ->
+                        settings.setPagesCropEnabled(composeReaderController.readerMode, enabled)
+                        composeReaderController.updateOptions { copy(cropPages = enabled) }
+                    },
+                    onOptimizationChanged = { enabled ->
+                        settings.isReaderOptimizationEnabled = enabled
+                        composeReaderController.updateOptions { copy(optimization = enabled) }
+                    },
+                    onPreloadReductionChanged = { enabled ->
+                        settings.isReaderPreloadReductionEnabled = enabled
+                        composeReaderController.updateOptions { copy(preloadReduction = enabled) }
                     },
                     onChapterTitleAtBottomChanged = { enabled ->
                         settings.isReaderChapterTitleAtBottom = enabled
@@ -434,6 +465,20 @@ class ReaderActivity :
                     },
                     onOpenBrowser = ::openCurrentChapterInBrowser,
                     onTranslationSettings = router::openTranslationSettings,
+                    onTranslationShowTranslatedChanged = { enabled ->
+                        if (!settings.isReaderTranslationEnabled && enabled) {
+                            toggleTranslationLayer()
+                        } else {
+                            settings.isReaderTranslationShowTranslated = enabled
+                        }
+                        composeReaderController.updateOptions { copy(translationShowTranslated = enabled) }
+                        updateTranslationToggleButton()
+                    },
+                    onTranslationOcrModeChanged = { mode ->
+                        settings.readerTranslationOcrMode = mode
+                        composeReaderController.updateOptions { copy(translationOcrMode = mode) }
+                    },
+                    onTranslationLanguageActions = ::showTranslationLanguageQuickActions,
                     onRetranslatePage = viewModel::retranslateCurrent,
                     onRetryFailedTranslations = viewModel::retranslateFailedInCurrentChapter,
                     onRetranslateChapter = viewModel::retranslateCurrentChapter,
@@ -696,6 +741,9 @@ class ReaderActivity :
             if (enabled) {
                 translationShortcutVisibleForSession = true
             }
+            composeReaderController.updateOptions {
+                copy(translationEnabled = enabled)
+            }
             composeReaderController.updateActions {
                 copy(translateContextualVisible = translationShortcutVisibleForSession)
             }
@@ -705,7 +753,10 @@ class ReaderActivity :
         }.launchIn(lifecycleScope)
         settings.observeAsFlow(AppSettings.KEY_READER_TRANSLATION_SHOW_TRANSLATED) {
             isReaderTranslationShowTranslated
-        }.onEach {
+        }.onEach { enabled ->
+            composeReaderController.updateOptions {
+                copy(translationShowTranslated = enabled)
+            }
             updateTranslationToggleButton()
             viewModel.refreshTranslationDisplay()
         }.launchIn(lifecycleScope)
@@ -1052,15 +1103,26 @@ class ReaderActivity :
             ComposeReaderOptionsState(
                 mode = composeReaderController.readerMode,
                 animation = settings.readerAnimation,
+                zoomMode = settings.zoomMode,
                 doublePage = settings.isReaderDoubleOnLandscape,
                 doublePageFoldable = settings.isReaderDoubleOnFoldable,
                 doublePageCover = settings.isReaderDoubleCoverPage,
                 splitPages = settings.isReaderSplitPagesEnabled,
                 doublePageSensitivity = settings.readerDoublePagesSensitivity,
+                fullscreen = settings.isReaderFullscreenEnabled,
+                pageNumbers = settings.isPagesNumbersEnabled,
+                cropPages = settings.isPagesCropEnabled(composeReaderController.readerMode),
+                optimization = settings.isReaderOptimizationEnabled,
+                preloadReduction = settings.isReaderPreloadReductionEnabled,
                 chapterTitleAtBottom = settings.isReaderChapterTitleAtBottom,
                 superResolution = settings.isReaderSuperResolutionEnabled,
                 background = settings.readerBackground,
                 colorFilter = viewModel.readerSettingsProducer.value.colorFilter,
+                translationEnabled = settings.isReaderTranslationEnabled,
+                translationShowTranslated = settings.isReaderTranslationShowTranslated,
+                translationSourceLanguage = settings.readerTranslationSourceLanguage,
+                translationTargetLanguage = settings.readerTranslationTargetLanguage,
+                translationOcrMode = settings.readerTranslationOcrMode,
             ),
         )
         loadImageServerOptions()

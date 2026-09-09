@@ -54,6 +54,7 @@ fun ChaptersScreenRoot(
     detailsPaneState: DetailsPaneState? = null,
     handleSelectionBackPressInternally: Boolean = true,
     onSelectionStateChange: (ChapterSelectionUiState?) -> Unit = {},
+    dragModifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     val isGridView by viewModel.isChaptersInGridView.collectAsStateWithLifecycle(initialValue = false)
@@ -340,7 +341,8 @@ fun ChaptersScreenRoot(
             }
         },
         onSelectionActionClick = handleSelectionAction,
-        onClearSelection = { selectedItemIds.clear() }
+        onClearSelection = { selectedItemIds.clear() },
+        dragModifier = dragModifier,
     )
 }
 

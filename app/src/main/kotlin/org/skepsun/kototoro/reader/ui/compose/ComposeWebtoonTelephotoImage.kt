@@ -198,19 +198,22 @@ private fun ComposeTelephotoSubsamplingImage(
         }
     }
     LaunchedEffect(uri, pageKey, split, initialZoomMode, imageSize, viewportSize) {
-        if (!initialZoomApplied && initialZoomMode == ZoomMode.KEEP_START && imageSize != null &&
-            viewportSize.width > 0 && viewportSize.height > 0
-        ) {
-            zoomableState.zoomBy(
-                zoomFactor = initialReaderScale(
-                    mode = initialZoomMode,
-                    viewportWidth = viewportSize.width,
-                    viewportHeight = viewportSize.height,
-                    imageWidth = imageSize.width,
-                    imageHeight = imageSize.height,
-                ),
-                animationSpec = snap(),
-            )
+        if (!initialZoomApplied && imageSize != null && viewportSize.width > 0 && viewportSize.height > 0) {
+            // The zoomable state survives a scale-mode recomposition. Reset it before applying
+            // the new baseline, otherwise switching back to Keep at start compounds the scale.
+            zoomableState.resetZoom(animationSpec = snap())
+            if (initialZoomMode == ZoomMode.KEEP_START) {
+                zoomableState.zoomBy(
+                    zoomFactor = initialReaderScale(
+                        mode = initialZoomMode,
+                        viewportWidth = viewportSize.width,
+                        viewportHeight = viewportSize.height,
+                        imageWidth = imageSize.width,
+                        imageHeight = imageSize.height,
+                    ),
+                    animationSpec = snap(),
+                )
+            }
             initialZoomApplied = true
         }
     }

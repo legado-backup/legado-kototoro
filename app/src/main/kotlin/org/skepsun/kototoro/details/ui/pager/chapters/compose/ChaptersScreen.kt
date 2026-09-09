@@ -71,6 +71,7 @@ fun ChaptersScreen(
     onFilterChipClick: (ChipModel) -> Unit,
     onSelectionActionClick: (Int) -> Unit,
     onClearSelection: () -> Unit,
+    dragModifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     val hapticFeedback = LocalHapticFeedback.current
@@ -126,7 +127,7 @@ fun ChaptersScreen(
         Column(modifier = Modifier.fillMaxSize()) {
             if (filterChips.isNotEmpty()) {
                 LazyRow(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = dragModifier.fillMaxWidth(),
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
@@ -243,6 +244,7 @@ fun ChaptersScreen(
                         VerticalScrollbar(
                             state = gridState,
                             draggable = isScrollEnabled,
+                            contentPadding = PaddingValues(16.dp),
                             labelProvider = fastScrollLabelProvider,
                         )
                     }
@@ -294,7 +296,7 @@ fun ChaptersScreen(
                     VerticalScrollbar(
                         state = listState,
                         draggable = isScrollEnabled,
-                        endInset = 16.dp,
+                        contentPadding = PaddingValues(vertical = 16.dp),
                         labelProvider = fastScrollLabelProvider,
                     )
                 }

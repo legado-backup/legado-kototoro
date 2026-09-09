@@ -203,6 +203,7 @@ internal fun VideoChapterDialog(
                                 color = Color.White.copy(alpha = 0.90f),
                                 trackColor = Color.White.copy(alpha = 0.18f),
                                 alwaysVisible = true,
+                                contentPadding = PaddingValues(vertical = 8.dp),
                                 endInset = 4.dp,
                             )
                         } else {

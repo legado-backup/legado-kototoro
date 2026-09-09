@@ -71,6 +71,7 @@ import org.skepsun.kototoro.core.ui.compose.AppLayoutTokens
 import org.skepsun.kototoro.core.ui.compose.CompactTopBarHorizontalPadding
 import org.skepsun.kototoro.core.ui.compose.KototoroPullToRefreshBox
 import org.skepsun.kototoro.core.ui.compose.VerticalRailAnimatedVisibility
+import org.skepsun.kototoro.core.ui.compose.VerticalScrollbar
 import org.skepsun.kototoro.core.ui.compose.clearFailedContentSourceIcons
 import org.skepsun.kototoro.core.ui.compose.compactPosterRailCardStyle
 import org.skepsun.kototoro.core.ui.compose.contentCoverSharedKey
@@ -902,6 +903,10 @@ fun KototoroExploreHostRoute(
                 )
             }
 
+            VerticalScrollbar(
+                state = listState,
+                contentPadding = contentPadding,
+            )
         }
     }
 }

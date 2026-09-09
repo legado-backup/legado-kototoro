@@ -117,6 +117,13 @@ fun ComposeDoublePageReader(
         initialPage = spreadModel.spreadIndexForPage(initialDisplayPosition),
         pageCount = spreads::size,
     )
+    LaunchedEffect(zoomMode) {
+        // The scale mode changes the fitted image bounds. Discard the old spread transform so
+        // switching modes cannot compound a previous gesture zoom or keep the pager locked.
+        spreadZoomJob?.cancel()
+        spreadFlingJob?.cancel()
+        spreadTransforms.clear()
+    }
     val isPagerDragged by pagerState.interactionSource.collectIsDraggedAsState()
     var advancedAnchorSpread by remember(pagerState) { mutableIntStateOf(pagerState.currentPage) }
     LaunchedEffect(pagerState, pageAnimation) {
@@ -570,7 +577,6 @@ fun ComposeDoublePageReader(
             state = pagerState,
             beyondViewportPageCount = resolveReaderBeyondViewportPageCount(isPreloadReductionEnabled),
             reverseLayout = reverseLayout,
-            userScrollEnabled = spreadTransform(pagerState.currentPage).scale <= 1f + PAGED_ZOOM_EPSILON,
             modifier = Modifier
                 .fillMaxSize()
                 .trackComposeReaderPageCurl(pageCurlState, pageAnimation == ReaderAnimation.SIMULATION),
@@ -743,4 +749,3 @@ private fun DoublePageTransform.isFinite(): Boolean =
     scale.isFinite() && scale > 0f && offsetX.isFinite() && offsetY.isFinite()
 
 private fun Offset.isFinite(): Boolean = x.isFinite() && y.isFinite()
-

@@ -132,6 +132,11 @@
     <string name="reader_translation_long_press_hint">Long press Translation for language shortcuts</string>
     <string name="reader_translation_status_compact">Translating %1$d/%2$d</string>
     <string name="reader_page_turning_mode">Page turning mode</string>
+    <string name="reader_more_tab_reading">Reading</string>
+    <string name="reader_more_tab_display">Display</string>
+    <string name="reader_more_tab_page">Page</string>
+    <string name="reader_more_tab_translation">Translation</string>
+    <string name="reader_more_tab_tools">Tools</string>
     <string name="double_page_mode">Two-page mode</string>
     <string name="double_page_landscape">Two pages in landscape</string>
     <string name="double_page_foldable">Two pages on foldables</string>

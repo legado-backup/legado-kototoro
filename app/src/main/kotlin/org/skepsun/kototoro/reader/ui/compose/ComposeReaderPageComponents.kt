@@ -524,19 +524,23 @@ internal fun TelephotoCoilReaderImage(
             .build()
     }
     LaunchedEffect(uri, pageKey, zoomMode, imageSize, viewportSize) {
-        if (!initialZoomApplied && zoomMode == ZoomMode.KEEP_START &&
-            imageSize != IntSize.Zero && viewportSize != IntSize.Zero
-        ) {
-            zoomableState.zoomBy(
-                zoomFactor = initialReaderScale(
-                    zoomMode,
-                    viewportSize.width,
-                    viewportSize.height,
-                    imageSize.width,
-                    imageSize.height,
-                ),
-                animationSpec = snap(),
-            )
+        if (!initialZoomApplied && imageSize != IntSize.Zero && viewportSize != IntSize.Zero) {
+            // A scale mode changes the fitted content bounds while the Telephoto state is
+            // intentionally retained for smooth recomposition. Reset the old transform first;
+            // otherwise returning to Keep at start multiplies the previous zoom again.
+            zoomableState.resetZoom(animationSpec = snap())
+            if (zoomMode == ZoomMode.KEEP_START) {
+                zoomableState.zoomBy(
+                    zoomFactor = initialReaderScale(
+                        zoomMode,
+                        viewportSize.width,
+                        viewportSize.height,
+                        imageSize.width,
+                        imageSize.height,
+                    ),
+                    animationSpec = snap(),
+                )
+            }
             initialZoomApplied = true
         }
     }
@@ -683,7 +687,7 @@ private fun ZoomableReaderImage(
             .then(
                 if (isZoomEnabled) {
                     Modifier
-                        .pointerInput(uri) {
+                        .pointerInput(uri, zoomMode) {
                             detectTapGestures(
                                 onDoubleTap = {
                                     zoomAnimationJob?.cancel()
@@ -693,7 +697,7 @@ private fun ZoomableReaderImage(
                                 },
                             )
                         }
-                        .pointerInput(uri) {
+                        .pointerInput(uri, zoomMode) {
                             awaitEachGesture {
                                 awaitFirstDown(requireUnconsumed = false)
                                 zoomAnimationJob?.cancel()
@@ -717,4 +721,3 @@ private fun ZoomableReaderImage(
             ),
     )
 }
-

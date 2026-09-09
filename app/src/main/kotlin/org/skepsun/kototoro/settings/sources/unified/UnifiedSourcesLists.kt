@@ -342,6 +342,7 @@ internal fun UnifiedSourceList(
         VerticalScrollbar(
             state = listState,
             alwaysVisible = true,
+            contentPadding = PaddingValues(vertical = 4.dp),
             endInset = 4.dp,
         )
     }
@@ -879,6 +880,7 @@ internal fun UnifiedRepositoryList(
         VerticalScrollbar(
             state = listState,
             alwaysVisible = true,
+            contentPadding = unifiedCardListPadding,
             endInset = 4.dp,
         )
     }
@@ -1179,6 +1181,7 @@ internal fun UnifiedPackageList(
         VerticalScrollbar(
             state = listState,
             alwaysVisible = true,
+            contentPadding = unifiedCardListPadding,
             endInset = 4.dp,
         )
     }

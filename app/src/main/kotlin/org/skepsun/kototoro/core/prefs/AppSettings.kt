@@ -957,14 +957,17 @@ class AppSettings @Inject constructor(@ApplicationContext private val context: C
     val isReaderNavigationInverted: Boolean
         get() = prefs.getBoolean(KEY_READER_NAVIGATION_INVERTED, false)
 
-    val isReaderFullscreenEnabled: Boolean
+    var isReaderFullscreenEnabled: Boolean
         get() = prefs.getBoolean(KEY_READER_FULLSCREEN, true)
+        set(value) = prefs.edit { putBoolean(KEY_READER_FULLSCREEN, value) }
 
-    val isReaderOptimizationEnabled: Boolean
+    var isReaderOptimizationEnabled: Boolean
         get() = prefs.getBoolean(KEY_READER_OPTIMIZE, false)
+        set(value) = prefs.edit { putBoolean(KEY_READER_OPTIMIZE, value) }
 
-    val isReaderPreloadReductionEnabled: Boolean
+    var isReaderPreloadReductionEnabled: Boolean
         get() = prefs.getBoolean(KEY_READER_REDUCE_PRELOAD, false)
+        set(value) = prefs.edit { putBoolean(KEY_READER_REDUCE_PRELOAD, value) }
 
     val readerControls: Set<ReaderControl>
         get() = prefs.getStringSet(KEY_READER_CONTROLS, null)
@@ -1468,8 +1471,9 @@ class AppSettings @Inject constructor(@ApplicationContext private val context: C
         get() = prefs.getBoolean(KEY_MERGE_REPEATED_CHAPTERS, false)
         set(value) = prefs.edit { putBoolean(KEY_MERGE_REPEATED_CHAPTERS, value) }
 
-    val zoomMode: ZoomMode
+    var zoomMode: ZoomMode
         get() = prefs.getEnumValue(KEY_ZOOM_MODE, ZoomMode.FIT_CENTER)
+        set(value) = prefs.edit { putEnumValue(KEY_ZOOM_MODE, value) }
 
     var trackSources: Set<String>
         get() = prefs.getStringSet(KEY_TRACK_SOURCES, null) ?: setOf(TRACK_FAVOURITES)
@@ -1633,8 +1637,9 @@ class AppSettings @Inject constructor(@ApplicationContext private val context: C
         get() = prefs.getBoolean(KEY_SHOW_BROKEN_SOURCES, false)
         set(value) = prefs.edit { putBoolean(KEY_SHOW_BROKEN_SOURCES, value) }
 
-    val isPagesNumbersEnabled: Boolean
+    var isPagesNumbersEnabled: Boolean
         get() = prefs.getBoolean(KEY_PAGES_NUMBERS, false)
+        set(value) = prefs.edit { putBoolean(KEY_PAGES_NUMBERS, value) }
 
     var isReaderTranslationEnabled: Boolean
         get() = prefs.getBoolean(KEY_READER_TRANSLATION_ENABLED, false)
@@ -2475,6 +2480,23 @@ class AppSettings @Inject constructor(@ApplicationContext private val context: C
         }
         val needle = if (mode == ReaderMode.WEBTOON) READER_CROP_WEBTOON else READER_CROP_PAGED
         return needle.toString() in rawValue
+    }
+
+    fun setPagesCropEnabled(mode: ReaderMode, enabled: Boolean) {
+        val needle = if (mode == ReaderMode.WEBTOON) READER_CROP_WEBTOON else READER_CROP_PAGED
+        val values = prefs.getStringSet(KEY_READER_CROP, emptySet()).orEmpty().toMutableSet()
+        if (enabled) {
+            values += needle.toString()
+        } else {
+            values -= needle.toString()
+        }
+        prefs.edit {
+            if (values.isEmpty()) {
+                remove(KEY_READER_CROP)
+            } else {
+                putStringSet(KEY_READER_CROP, values)
+            }
+        }
     }
 
     fun isTipEnabled(tip: String): Boolean {

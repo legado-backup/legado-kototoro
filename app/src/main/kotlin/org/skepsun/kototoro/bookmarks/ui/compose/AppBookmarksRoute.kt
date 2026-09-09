@@ -276,7 +276,10 @@ fun AppBookmarksRoute(
                         }
                     }
                 }
-                VerticalScrollbar(state = gridState)
+                VerticalScrollbar(
+                    state = gridState,
+                    contentPadding = contentPadding,
+                )
             }
         }
 

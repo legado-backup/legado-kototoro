@@ -1151,6 +1151,7 @@ internal fun SuggestionsTopLevelRouteContent(
             appRouter = appRouter,
             onTopBarOverrideChanged = { suggestionsContextualTopBarOverride = it },
             showRemoveOption = false,
+            showScrollbar = true,
             sharedElementInstanceKey = "main_suggestions",
             isContentTypeFilterVisible = false,
             isSourceTagFilterVisible = false,
