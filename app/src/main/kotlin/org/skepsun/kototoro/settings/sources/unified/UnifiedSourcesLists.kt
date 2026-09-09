@@ -212,6 +212,13 @@ internal fun UnifiedSourceList(
                         CompactActionChip(
                             onClick = onEnableAllSources,
                             enabled = sources.isNotEmpty(),
+                            leadingIcon = {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_check),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            },
                             label = { Text(stringResource(R.string.unified_sources_enable_all)) },
                         )
                     }
@@ -219,6 +226,13 @@ internal fun UnifiedSourceList(
                         CompactActionChip(
                             onClick = onDisableAllSources,
                             enabled = sources.isNotEmpty(),
+                            leadingIcon = {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_disable),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            },
                             label = { Text(stringResource(R.string.unified_sources_disable_all)) },
                         )
                     }
@@ -226,6 +240,13 @@ internal fun UnifiedSourceList(
                         CompactActionChip(
                             onClick = { expandedPackageIds = collapsiblePackageIds },
                             enabled = collapsiblePackageIds.isNotEmpty(),
+                            leadingIcon = {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_expand_more),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            },
                             label = { Text(stringResource(R.string.unified_sources_expand_all)) },
                         )
                     }
@@ -233,6 +254,13 @@ internal fun UnifiedSourceList(
                         CompactActionChip(
                             onClick = { expandedPackageIds = emptySet() },
                             enabled = collapsiblePackageIds.isNotEmpty(),
+                            leadingIcon = {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_expand_more),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp).rotate(180f),
+                                )
+                            },
                             label = { Text(stringResource(R.string.unified_sources_collapse_all)) },
                         )
                     }
@@ -1094,6 +1122,13 @@ internal fun UnifiedPackageList(
                     item(key = "update_all_packages") {
                         CompactActionChip(
                             onClick = onUpdateAllPackages,
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Filled.AutoAwesome,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            },
                             label = {
                                 Text(
                                     stringResource(
@@ -1110,6 +1145,13 @@ internal fun UnifiedPackageList(
                     item(key = "import_local_jar") {
                         CompactActionChip(
                             onClick = onImportLocalJar,
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Filled.Add,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            },
                             label = { Text(stringResource(R.string.import_local_jar)) },
                         )
                     }

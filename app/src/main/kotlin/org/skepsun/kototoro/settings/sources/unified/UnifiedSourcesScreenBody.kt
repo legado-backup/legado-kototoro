@@ -28,14 +28,16 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Badge
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SecondaryTabRow
@@ -43,7 +45,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRowDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -63,6 +66,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import org.skepsun.kototoro.R
 import org.skepsun.kototoro.core.model.titleResId
 import org.skepsun.kototoro.core.ui.compose.KototoroPullToRefreshBox
+import org.skepsun.kototoro.settings.compose.SettingsContentHorizontalPadding
 import org.skepsun.kototoro.settings.compose.settingsContentTopInset
 import org.skepsun.kototoro.parsers.model.ContentType
 import kotlinx.coroutines.launch
@@ -348,27 +352,37 @@ private fun UnifiedSourcesContextualFilterTabs(
             .sortedWith(compareBy({ it.name.lowercase() }, { it.id }))
     }
     Column(
-        modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 4.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         when (tab) {
             UNIFIED_SOURCES_TAB_SOURCES -> {
                 if (repositoryOptions.isNotEmpty()) {
-                    UnifiedRepositoryFilterDropdown(
+                    UnifiedRepositoryFilterRow(
                         repositories = repositoryOptions,
                         selectedRepositoryId = state.filters.repositoryId,
                         onRepositorySelected = onRepositoryFilterClick,
                     )
                 }
                 LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    contentPadding = PaddingValues(horizontal = 1.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(horizontal = SettingsContentHorizontalPadding, vertical = 2.dp),
                 ) {
                     item(key = "content_all") {
                         CompactFilterChip(
                             selected = state.filters.contentTypes.isEmpty(),
                             onClick = { onContentTypeClick(null) },
                             text = stringResource(R.string.all_content),
+                            leadingIcon = {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_filter_content_type),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            },
                         )
                     }
                     items(state.availableContentTypes, key = { it.name }) { type ->
@@ -376,18 +390,33 @@ private fun UnifiedSourcesContextualFilterTabs(
                             selected = type in state.filters.contentTypes,
                             onClick = { onContentTypeClick(type) },
                             text = stringResource(type.titleResId),
+                            leadingIcon = {
+                                Icon(
+                                    painter = painterResource(type.contentIconRes()),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            },
                         )
                     }
                 }
                 LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    contentPadding = PaddingValues(horizontal = 1.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(horizontal = SettingsContentHorizontalPadding, vertical = 2.dp),
                 ) {
                     item(key = "kind_all") {
                         CompactFilterChip(
                             selected = state.filters.kinds.isEmpty(),
                             onClick = { onKindClick(null) },
                             text = stringResource(R.string.all_sources),
+                            leadingIcon = {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_extension),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            },
                         )
                     }
                     items(state.availableKinds, key = { it.name }) { kind ->
@@ -395,20 +424,35 @@ private fun UnifiedSourcesContextualFilterTabs(
                             selected = kind in state.filters.kinds,
                             onClick = { onKindClick(kind) },
                             text = kind.displayLabel(),
+                            leadingIcon = {
+                                Icon(
+                                    painter = painterResource(kind.packageIconRes()),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            },
                         )
                     }
                 }
             }
             UNIFIED_SOURCES_TAB_REPOSITORIES -> {
                 LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    contentPadding = PaddingValues(horizontal = 1.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(horizontal = SettingsContentHorizontalPadding, vertical = 2.dp),
                 ) {
                     item(key = "repo_kind_all") {
                         CompactFilterChip(
                             selected = state.filters.kinds.isEmpty(),
                             onClick = { onKindClick(null) },
                             text = stringResource(R.string.all_sources),
+                            leadingIcon = {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_extension),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            },
                         )
                     }
                     items(state.availableKinds, key = { it.name }) { kind ->
@@ -416,39 +460,75 @@ private fun UnifiedSourcesContextualFilterTabs(
                             selected = kind in state.filters.kinds,
                             onClick = { onKindClick(kind) },
                             text = kind.displayLabel(),
+                            leadingIcon = {
+                                Icon(
+                                    painter = painterResource(kind.packageIconRes()),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            },
                         )
                     }
                 }
             }
             UNIFIED_SOURCES_TAB_PACKAGES -> {
                 if (repositoryOptions.isNotEmpty()) {
-                    UnifiedRepositoryFilterDropdown(
+                    UnifiedRepositoryFilterRow(
                         repositories = repositoryOptions,
                         selectedRepositoryId = state.filters.repositoryId,
                         onRepositorySelected = onRepositoryFilterClick,
                     )
                 }
                 LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    contentPadding = PaddingValues(horizontal = 1.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(horizontal = SettingsContentHorizontalPadding, vertical = 2.dp),
                 ) {
                     item(key = "package_status_all") {
                         CompactFilterChip(
                             selected = state.filters.packageStatusFilter == UnifiedPackageStatusFilter.ALL,
                             onClick = { onPackageStatusClick(UnifiedPackageStatusFilter.ALL) },
                             text = stringResource(R.string.all),
+                            leadingIcon = {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_extension),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            },
                         )
                     }
                     item(key = "package_status_updates") {
-                        val label = if (state.packageUpdateCount > 0) {
-                            "${stringResource(R.string.package_filter_updates)} (${state.packageUpdateCount})"
-                        } else {
-                            stringResource(R.string.package_filter_updates)
-                        }
+                        val isSelected = state.filters.packageStatusFilter == UnifiedPackageStatusFilter.UPDATE_AVAILABLE
                         CompactFilterChip(
-                            selected = state.filters.packageStatusFilter == UnifiedPackageStatusFilter.UPDATE_AVAILABLE,
+                            selected = isSelected,
                             onClick = { onPackageStatusClick(UnifiedPackageStatusFilter.UPDATE_AVAILABLE) },
-                            text = label,
+                            text = stringResource(R.string.package_filter_updates),
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Filled.AutoAwesome,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            },
+                            trailingBadge = if (state.packageUpdateCount > 0) {
+                                {
+                                    Badge(
+                                        containerColor = if (isSelected) {
+                                            MaterialTheme.colorScheme.primary
+                                        } else {
+                                            MaterialTheme.colorScheme.primaryContainer
+                                        },
+                                        contentColor = if (isSelected) {
+                                            MaterialTheme.colorScheme.onPrimary
+                                        } else {
+                                            MaterialTheme.colorScheme.onPrimaryContainer
+                                        },
+                                    ) {
+                                        Text(state.packageUpdateCount.toString())
+                                    }
+                                }
+                            } else null,
                         )
                     }
                     item(key = "package_status_installed") {
@@ -456,6 +536,13 @@ private fun UnifiedSourcesContextualFilterTabs(
                             selected = state.filters.packageStatusFilter == UnifiedPackageStatusFilter.INSTALLED,
                             onClick = { onPackageStatusClick(UnifiedPackageStatusFilter.INSTALLED) },
                             text = stringResource(R.string.package_filter_installed),
+                            leadingIcon = {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_check),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            },
                         )
                     }
                     item(key = "package_status_not_installed") {
@@ -463,18 +550,33 @@ private fun UnifiedSourcesContextualFilterTabs(
                             selected = state.filters.packageStatusFilter == UnifiedPackageStatusFilter.NOT_INSTALLED,
                             onClick = { onPackageStatusClick(UnifiedPackageStatusFilter.NOT_INSTALLED) },
                             text = stringResource(R.string.package_filter_available),
+                            leadingIcon = {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_cloud_download),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            },
                         )
                     }
                 }
                 LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    contentPadding = PaddingValues(horizontal = 1.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(horizontal = SettingsContentHorizontalPadding, vertical = 2.dp),
                 ) {
                     item(key = "pkg_kind_all") {
                         CompactFilterChip(
                             selected = state.filters.kinds.isEmpty(),
                             onClick = { onKindClick(null) },
                             text = stringResource(R.string.all_sources),
+                            leadingIcon = {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_extension),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            },
                         )
                     }
                     items(state.availableKinds, key = { it.name }) { kind ->
@@ -482,6 +584,13 @@ private fun UnifiedSourcesContextualFilterTabs(
                             selected = kind in state.filters.kinds,
                             onClick = { onKindClick(kind) },
                             text = kind.displayLabel(),
+                            leadingIcon = {
+                                Icon(
+                                    painter = painterResource(kind.packageIconRes()),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            },
                         )
                     }
                 }
@@ -490,82 +599,48 @@ private fun UnifiedSourcesContextualFilterTabs(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun UnifiedRepositoryFilterDropdown(
+private fun UnifiedRepositoryFilterRow(
     repositories: List<UnifiedSourceRepositoryItem>,
     selectedRepositoryId: String?,
     onRepositorySelected: (String?) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    var expanded by remember { mutableStateOf(false) }
-    val style = rememberUnifiedSourcesVisualStyle()
-    val selectedRepository = repositories.firstOrNull { it.id == selectedRepositoryId }
-
-    androidx.compose.foundation.layout.Box {
-        FilterChip(
-            selected = selectedRepository != null,
-            onClick = { expanded = true },
-            shape = style.chipShape,
-            label = {
-                Text(
-                    text = selectedRepository?.name ?: stringResource(R.string.repository_source),
-                    style = MaterialTheme.typography.labelSmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            },
-            trailingIcon = {
-                Icon(
-                    painter = painterResource(R.drawable.ic_expand_more),
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp),
-                )
-            },
-        )
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-        ) {
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.all)) },
-                onClick = {
-                    expanded = false
-                    onRepositorySelected(null)
-                },
+    LazyRow(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        contentPadding = PaddingValues(horizontal = SettingsContentHorizontalPadding, vertical = 2.dp),
+    ) {
+        item(key = "repo_all") {
+            CompactFilterChip(
+                selected = selectedRepositoryId == null,
+                onClick = { onRepositorySelected(null) },
+                text = stringResource(R.string.all),
                 leadingIcon = {
-                    if (selectedRepositoryId == null) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_check),
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                        )
-                    }
+                    Icon(
+                        painter = painterResource(R.drawable.ic_storage),
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                    )
                 },
             )
-            repositories.forEach { repository ->
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            text = repository.name,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    },
-                    onClick = {
-                        expanded = false
-                        onRepositorySelected(repository.id)
-                    },
-                    leadingIcon = {
-                        if (repository.id == selectedRepositoryId) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_check),
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                            )
-                        }
-                    },
-                )
-            }
+        }
+        items(repositories, key = { it.id }) { repository ->
+            val isSelected = repository.id == selectedRepositoryId
+            CompactFilterChip(
+                selected = isSelected,
+                onClick = {
+                    onRepositorySelected(if (isSelected) null else repository.id)
+                },
+                text = repository.name,
+                leadingIcon = {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_storage),
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                    )
+                },
+            )
         }
     }
 }
@@ -582,8 +657,8 @@ internal fun FilterSection(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            contentPadding = PaddingValues(horizontal = 1.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            contentPadding = PaddingValues(horizontal = SettingsContentHorizontalPadding, vertical = 2.dp),
             content = content,
         )
     }
@@ -595,22 +670,45 @@ internal fun CompactFilterChip(
     onClick: () -> Unit,
     text: String,
     modifier: Modifier = Modifier,
+    leadingIcon: (@Composable () -> Unit)? = null,
+    trailingBadge: (@Composable () -> Unit)? = null,
 ) {
     val style = rememberUnifiedSourcesVisualStyle()
-    FilterChip(
-        selected = selected,
-        onClick = onClick,
-        modifier = modifier.defaultMinSize(minHeight = 30.dp),
-        shape = style.chipShape,
-        label = {
-            Text(
-                text = text,
-                style = MaterialTheme.typography.labelSmall,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        },
-    )
+    CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 32.dp) {
+        FilterChip(
+            selected = selected,
+            onClick = onClick,
+            modifier = modifier.defaultMinSize(minHeight = 32.dp),
+            shape = style.chipShape,
+            leadingIcon = leadingIcon,
+            trailingIcon = trailingBadge,
+            colors = FilterChipDefaults.filterChipColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                iconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                selectedLeadingIconColor = MaterialTheme.colorScheme.primary,
+            ),
+            border = FilterChipDefaults.filterChipBorder(
+                enabled = true,
+                selected = selected,
+                borderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                selectedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f),
+                borderWidth = 1.dp,
+                selectedBorderWidth = 1.dp,
+            ),
+            label = {
+                Text(
+                    text = text,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            },
+        )
+    }
 }
 
 @Composable

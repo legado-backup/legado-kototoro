@@ -7,15 +7,20 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
+import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.skepsun.kototoro.R
@@ -152,23 +157,58 @@ internal fun UnifiedSourcePackageItem.primaryActionLabel(): String {
     }
 }
 
+internal fun ContentType.contentIconRes(): Int {
+    return when (this) {
+        ContentType.MANGA,
+        ContentType.MANHWA,
+        ContentType.MANHUA,
+        ContentType.COMICS,
+        ContentType.DOUJINSHI,
+        ContentType.ONE_SHOT,
+        ContentType.HENTAI_MANGA -> R.drawable.ic_content_manga
+        ContentType.NOVEL,
+        ContentType.HENTAI_NOVEL -> R.drawable.ic_content_novel
+        ContentType.VIDEO,
+        ContentType.HENTAI_VIDEO -> R.drawable.ic_content_video
+        else -> R.drawable.ic_filter_content_type
+    }
+}
+
 @Composable
 internal fun CompactActionChip(
     onClick: () -> Unit,
     label: @Composable () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    leadingIcon: (@Composable () -> Unit)? = null,
 ) {
-    AssistChip(
-        onClick = onClick,
-        enabled = enabled,
-        modifier = modifier.defaultMinSize(minHeight = 30.dp),
-        label = {
-            Box(modifier = Modifier.padding(horizontal = 2.dp)) {
-                label()
-            }
-        },
-    )
+    val style = rememberUnifiedSourcesVisualStyle()
+    CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 32.dp) {
+        AssistChip(
+            onClick = onClick,
+            enabled = enabled,
+            modifier = modifier.defaultMinSize(minHeight = 32.dp),
+            shape = style.chipShape,
+            leadingIcon = leadingIcon,
+            colors = AssistChipDefaults.assistChipColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                labelColor = MaterialTheme.colorScheme.onSurface,
+                leadingIconContentColor = MaterialTheme.colorScheme.primary,
+            ),
+            border = AssistChipDefaults.assistChipBorder(
+                enabled = enabled,
+                borderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                borderWidth = 1.dp,
+            ),
+            label = {
+                Box(modifier = Modifier.padding(horizontal = 2.dp)) {
+                    ProvideTextStyle(MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Medium)) {
+                        label()
+                    }
+                }
+            },
+        )
+    }
 }
 
 internal enum class CompactTagTone {
