@@ -38,6 +38,7 @@ import org.skepsun.kototoro.core.ui.theme.tokens
 import org.skepsun.kototoro.core.prefs.ProgressIndicatorMode
 import org.skepsun.kototoro.core.prefs.ScreenshotsPolicy
 import org.skepsun.kototoro.core.prefs.SearchSuggestionType
+import org.skepsun.kototoro.core.prefs.TabletListPreviewMode
 import org.skepsun.kototoro.core.prefs.TabletUiMode
 import org.skepsun.kototoro.core.ui.glass.GlassCustomPreset
 import org.skepsun.kototoro.core.ui.glass.GlassTuningParam
@@ -67,7 +68,7 @@ data class AppearanceSettingsUiState(
     val railAnimationIntensityPercent: Int,
     val isRailAnimationSettingsEnabled: Boolean,
     val isQuickFilterEnabled: Boolean,
-    val isTabletListPreviewEnabled: Boolean,
+    val tabletListPreviewMode: TabletListPreviewMode,
     val isTabletListFilterPanelDefaultOpen: Boolean,
     val progressIndicatorMode: ProgressIndicatorMode,
     val badgesTopLeft: Set<String>,
@@ -120,6 +121,7 @@ data class AppearanceSettingsOptions(
     val themes: List<SettingsChoiceOption<Int>>,
     val backgroundStyles: List<SettingsChoiceOption<BackgroundStyle>>,
     val fontPresets: List<SettingsChoiceOption<AppFontPreset>>,
+    val tabletListPreviewModes: List<SettingsChoiceOption<TabletListPreviewMode>>,
     val tabletUiModes: List<SettingsChoiceOption<TabletUiMode>>,
     val appLocales: List<SettingsChoiceOption<String>>,
     val loadingCircleStyles: List<SettingsChoiceOption<AppSettings.LoadingCircleStyle>>,
@@ -178,7 +180,7 @@ fun AppearanceSettingsScreen(
     onGridSizeChange: (Int) -> Unit,
     onRailAnimationIntensityChange: (Int) -> Unit,
     onQuickFilterChange: (Boolean) -> Unit,
-    onTabletListPreviewChange: (Boolean) -> Unit,
+    onTabletListPreviewModeChange: (TabletListPreviewMode) -> Unit,
     onTabletListFilterPanelDefaultChange: (Boolean) -> Unit,
     onProgressIndicatorModeChange: (ProgressIndicatorMode) -> Unit,
     onBadgesTopLeftChange: (Set<String>) -> Unit,
@@ -454,12 +456,13 @@ fun AppearanceSettingsScreen(
                 title = stringResource(R.string.appearance_group_tablet_list),
             ) {
                 item {
-                    SettingsSwitchPreference(
+                    SettingsChoicePreference(
                         title = stringResource(R.string.pref_tablet_list_preview),
                         iconRes = R.drawable.ic_view_column,
-                        checked = state.isTabletListPreviewEnabled,
+                        value = state.tabletListPreviewMode,
+                        options = options.tabletListPreviewModes,
                         summary = stringResource(R.string.pref_tablet_list_preview_summary),
-                        onCheckedChange = onTabletListPreviewChange,
+                        onValueChange = onTabletListPreviewModeChange,
                     )
                 }
                 item {

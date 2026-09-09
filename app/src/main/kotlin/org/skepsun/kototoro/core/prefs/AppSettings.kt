@@ -571,9 +571,31 @@ class AppSettings @Inject constructor(@ApplicationContext private val context: C
         get() = prefs.getBoolean(KEY_QUICK_FILTER, true)
         set(value) = prefs.edit { putBoolean(KEY_QUICK_FILTER, value) }
 
+    var tabletListPreviewMode: TabletListPreviewMode
+        get() {
+            if (!prefs.contains(KEY_TABLET_LIST_PREVIEW_MODE)) {
+                val legacyEnabled = prefs.getBoolean(KEY_TABLET_LIST_PREVIEW, true)
+                val migratedMode = if (legacyEnabled) {
+                    TabletListPreviewMode.SIDE_PANE
+                } else {
+                    TabletListPreviewMode.OFF
+                }
+                prefs.edit { putEnumValue(KEY_TABLET_LIST_PREVIEW_MODE, migratedMode) }
+                return migratedMode
+            }
+            return prefs.getEnumValue(KEY_TABLET_LIST_PREVIEW_MODE, TabletListPreviewMode.SIDE_PANE)
+        }
+        set(value) = prefs.edit { putEnumValue(KEY_TABLET_LIST_PREVIEW_MODE, value) }
+
     var isTabletListPreviewEnabled: Boolean
-        get() = prefs.getBoolean(KEY_TABLET_LIST_PREVIEW, true)
-        set(value) = prefs.edit { putBoolean(KEY_TABLET_LIST_PREVIEW, value) }
+        get() = tabletListPreviewMode != TabletListPreviewMode.OFF
+        set(value) {
+            tabletListPreviewMode = if (value) {
+                TabletListPreviewMode.SIDE_PANE
+            } else {
+                TabletListPreviewMode.OFF
+            }
+        }
 
     var isTabletListFilterPanelDefaultOpen: Boolean
         get() = prefs.getBoolean(KEY_TABLET_LIST_FILTER_PANEL_DEFAULT, true)
@@ -2806,6 +2828,7 @@ class AppSettings @Inject constructor(@ApplicationContext private val context: C
         const val KEY_EXPRESSIVE_APP_FONT_PRESET = "expressive_app_font_preset"
         const val KEY_TABLET_UI_MODE = "tablet_ui_mode"
         const val KEY_TABLET_LIST_PREVIEW = "tablet_list_preview"
+        const val KEY_TABLET_LIST_PREVIEW_MODE = "tablet_list_preview_mode"
         const val KEY_TABLET_LIST_FILTER_PANEL_DEFAULT = "tablet_list_filter_panel_default"
         const val KEY_OFFLINE_DISABLED = "no_offline"
         const val KEY_PAGES_CACHE_CLEAR = "pages_cache_clear"

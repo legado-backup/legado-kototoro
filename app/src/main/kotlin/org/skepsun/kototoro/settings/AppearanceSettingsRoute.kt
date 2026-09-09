@@ -42,6 +42,7 @@ import org.skepsun.kototoro.core.prefs.NavItem
 import org.skepsun.kototoro.core.prefs.ProgressIndicatorMode
 import org.skepsun.kototoro.core.prefs.ScreenshotsPolicy
 import org.skepsun.kototoro.core.prefs.SearchSuggestionType
+import org.skepsun.kototoro.core.prefs.TabletListPreviewMode
 import org.skepsun.kototoro.core.prefs.TabletUiMode
 import org.skepsun.kototoro.core.ui.glass.GlassCustomPreset
 import org.skepsun.kototoro.core.ui.glass.GlassTuning
@@ -141,8 +142,9 @@ fun AppearanceSettingsRoute(
     val railAnimationIntensityPercent =
         settings.observeAsState(AppSettings.KEY_RAIL_ANIMATION_INTENSITY) { railAnimationIntensityPercent }.value
     val isQuickFilterEnabled = settings.observeAsState(AppSettings.KEY_QUICK_FILTER) { isQuickFilterEnabled }.value
-    val isTabletListPreviewEnabled =
-        settings.observeAsState(AppSettings.KEY_TABLET_LIST_PREVIEW) { isTabletListPreviewEnabled }.value
+    val tabletListPreviewMode = settings.observeAsState(AppSettings.KEY_TABLET_LIST_PREVIEW_MODE) {
+        tabletListPreviewMode
+    }.value
     val isTabletListFilterPanelDefaultOpen = settings.observeAsState(
         AppSettings.KEY_TABLET_LIST_FILTER_PANEL_DEFAULT,
     ) { isTabletListFilterPanelDefaultOpen }.value
@@ -291,6 +293,7 @@ fun AppearanceSettingsRoute(
         themes = coordinator.buildThemeOptions(),
         backgroundStyles = backgroundStyleOptions,
         fontPresets = coordinator.buildFontPresetOptions(),
+        tabletListPreviewModes = coordinator.buildTabletListPreviewModeOptions(),
         tabletUiModes = coordinator.buildTabletUiModeOptions(),
         appLocales = coordinator.buildLocaleOptions(),
         loadingCircleStyles = coordinator.buildLoadingCircleStyleOptions(),
@@ -342,7 +345,7 @@ fun AppearanceSettingsRoute(
         railAnimationIntensityPercent = railAnimationIntensityPercent,
         isRailAnimationSettingsEnabled = !isReducedVisualEffectsEnabled,
         isQuickFilterEnabled = isQuickFilterEnabled,
-        isTabletListPreviewEnabled = isTabletListPreviewEnabled,
+        tabletListPreviewMode = tabletListPreviewMode,
         isTabletListFilterPanelDefaultOpen = isTabletListFilterPanelDefaultOpen,
         progressIndicatorMode = progressIndicatorMode,
         badgesTopLeft = settings.observeAsState(AppSettings.KEY_BADGES_TOP_LEFT) { badgesTopLeft }.value,
@@ -420,7 +423,7 @@ fun AppearanceSettingsRoute(
         onGridSizeChange = { settings.gridSize = it },
         onRailAnimationIntensityChange = { settings.railAnimationIntensityPercent = it },
         onQuickFilterChange = { settings.isQuickFilterEnabled = it },
-        onTabletListPreviewChange = { settings.isTabletListPreviewEnabled = it },
+        onTabletListPreviewModeChange = { settings.tabletListPreviewMode = it },
         onTabletListFilterPanelDefaultChange = { settings.isTabletListFilterPanelDefaultOpen = it },
         onProgressIndicatorModeChange = { settings.progressIndicatorMode = it },
         onBadgesTopLeftChange = { settings.badgesTopLeft = it },
@@ -655,6 +658,23 @@ private class AppearanceSettingsCoordinator(
             SettingsChoiceOption(TabletUiMode.DISABLED, context.getString(R.string.tablet_ui_mode_disabled)),
             SettingsChoiceOption(TabletUiMode.RELAXED, context.getString(R.string.tablet_ui_mode_relaxed)),
             SettingsChoiceOption(TabletUiMode.STRICT, context.getString(R.string.tablet_ui_mode_strict)),
+        )
+    }
+
+    fun buildTabletListPreviewModeOptions(): List<SettingsChoiceOption<TabletListPreviewMode>> {
+        return listOf(
+            SettingsChoiceOption(
+                TabletListPreviewMode.OFF,
+                context.getString(R.string.pref_tablet_list_preview_off),
+            ),
+            SettingsChoiceOption(
+                TabletListPreviewMode.SIDE_PANE,
+                context.getString(R.string.pref_tablet_list_preview_side_pane),
+            ),
+            SettingsChoiceOption(
+                TabletListPreviewMode.FLOATING,
+                context.getString(R.string.pref_tablet_list_preview_floating),
+            ),
         )
     }
 

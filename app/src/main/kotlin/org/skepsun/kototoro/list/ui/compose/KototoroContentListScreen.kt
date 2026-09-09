@@ -222,6 +222,7 @@ fun KototoroContentListScreen(
     gridState: LazyGridState? = null,
     listState: LazyListState? = null,
     detailedListState: LazyListState? = null,
+    highlightedItemId: Long? = null,
 ) {
     val leadingItemCount = if (pagingItems == null) 0 else items.size
     val pagingItemCount = pagingItems?.itemCount ?: 0
@@ -418,6 +419,7 @@ fun KototoroContentListScreen(
                                             KototoroContentCardGrid(
                                                 item = listModel,
                                                 isSelected = listModel.id in selectedItemsIds,
+                                                isHighlighted = listModel.id == highlightedItemId,
                                                 onClick = { coverBounds ->
                                                     onPrepareItemTransition(listModel, coverBounds)
                                                     onItemClick(listModel)
@@ -497,6 +499,7 @@ fun KototoroContentListScreen(
                                         KototoroContentCardList(
                                             item = listModel,
                                             isSelected = listModel.id in selectedItemsIds,
+                                            isHighlighted = listModel.id == highlightedItemId,
                                             sharedTransitionEnabled = sharedTransitionEnabled,
                                             sharedElementInstanceKey = sharedElementInstanceKey,
                                             uiPrefs = cardUiPrefs,
@@ -570,6 +573,7 @@ fun KototoroContentListScreen(
                                         KototoroContentCardDetailedList(
                                             item = listModel,
                                             isSelected = listModel.id in selectedItemsIds,
+                                            isHighlighted = listModel.id == highlightedItemId,
                                             sharedTransitionEnabled = sharedTransitionEnabled,
                                             sharedElementInstanceKey = sharedElementInstanceKey,
                                             uiPrefs = cardUiPrefs,

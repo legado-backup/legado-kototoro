@@ -4,6 +4,7 @@ import android.net.Uri
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
@@ -196,6 +197,7 @@ fun KototoroContentCard(
     model: ContentListModel,
     isListLayout: Boolean = false,
     isSelected: Boolean = false,
+    isHighlighted: Boolean = false,
     selectionModeActive: Boolean = false,
     sharedTransitionEnabled: Boolean = true,
     sharedElementInstanceKey: String? = null,
@@ -210,6 +212,7 @@ fun KototoroContentCard(
             KototoroContentCardDetailedList(
                 item = model,
                 isSelected = isSelected,
+                isHighlighted = isHighlighted,
                 sharedTransitionEnabled = sharedTransitionEnabled,
                 sharedElementInstanceKey = sharedElementInstanceKey,
                 uiPrefs = uiPrefs,
@@ -221,6 +224,7 @@ fun KototoroContentCard(
             KototoroContentCardList(
                 item = model,
                 isSelected = isSelected,
+                isHighlighted = isHighlighted,
                 sharedTransitionEnabled = sharedTransitionEnabled,
                 sharedElementInstanceKey = sharedElementInstanceKey,
                 uiPrefs = uiPrefs,
@@ -234,6 +238,7 @@ fun KototoroContentCard(
             KototoroContentCardGrid(
                 item = model,
                 isSelected = isSelected,
+                isHighlighted = isHighlighted,
                 sharedTransitionEnabled = sharedTransitionEnabled,
                 sharedElementInstanceKey = sharedElementInstanceKey,
                 cardStyle = cardStyle,
@@ -251,6 +256,7 @@ fun KototoroContentCard(
 fun KototoroContentCardGrid(
     item: ContentGridModel,
     isSelected: Boolean = false,
+    isHighlighted: Boolean = false,
     showSourceInfo: Boolean = false, // Ignored in favor of new badge settings
     gridScale: Float = 1f,
     sharedTransitionEnabled: Boolean = true,
@@ -309,7 +315,21 @@ fun KototoroContentCardGrid(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .background(if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f) else Color.Transparent)
+            .background(
+                color = when {
+                    isSelected -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                    isHighlighted -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.24f)
+                    else -> Color.Transparent
+                },
+                shape = cardShape,
+            )
+            .then(
+                if (isHighlighted) {
+                    Modifier.border(2.dp, MaterialTheme.colorScheme.primary, cardShape)
+                } else {
+                    Modifier
+                },
+            )
             .combinedClickable(
                 onClick = { onClick(coverBounds.currentBounds()) },
                 onLongClick = onLongClick,
@@ -635,6 +655,7 @@ fun ContentCardReadingProgressIndicator(
 fun KototoroContentCardList(
     item: org.skepsun.kototoro.list.ui.model.ContentCompactListModel,
     isSelected: Boolean = false,
+    isHighlighted: Boolean = false,
     sharedTransitionEnabled: Boolean = true,
     sharedElementInstanceKey: String? = null,
     uiPrefs: ContentCardUiPrefs? = null,
@@ -681,10 +702,25 @@ fun KototoroContentCardList(
             }
         }
     }
+    val cardShape = RoundedCornerShape(16.dp)
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .background(if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f) else Color.Transparent)
+            .background(
+                color = when {
+                    isSelected -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                    isHighlighted -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.24f)
+                    else -> Color.Transparent
+                },
+                shape = cardShape,
+            )
+            .then(
+                if (isHighlighted) {
+                    Modifier.border(2.dp, MaterialTheme.colorScheme.primary, cardShape)
+                } else {
+                    Modifier
+                },
+            )
             .combinedClickable(
                 onClick = { onClick(coverBounds.currentBounds()) },
                 onLongClick = onLongClick,
@@ -1053,6 +1089,7 @@ private fun ContentCardCornerBadges(
 fun KototoroContentCardDetailedList(
     item: org.skepsun.kototoro.list.ui.model.ContentDetailedListModel,
     isSelected: Boolean = false,
+    isHighlighted: Boolean = false,
     sharedTransitionEnabled: Boolean = true,
     sharedElementInstanceKey: String? = null,
     uiPrefs: ContentCardUiPrefs? = null,
@@ -1099,10 +1136,25 @@ fun KototoroContentCardDetailedList(
             }
         }
     }
+    val cardShape = RoundedCornerShape(16.dp)
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .background(if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f) else Color.Transparent)
+            .background(
+                color = when {
+                    isSelected -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                    isHighlighted -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.24f)
+                    else -> Color.Transparent
+                },
+                shape = cardShape,
+            )
+            .then(
+                if (isHighlighted) {
+                    Modifier.border(2.dp, MaterialTheme.colorScheme.primary, cardShape)
+                } else {
+                    Modifier
+                },
+            )
             .combinedClickable(
                 onClick = { onClick(coverBounds.currentBounds()) },
                 onLongClick = onLongClick,

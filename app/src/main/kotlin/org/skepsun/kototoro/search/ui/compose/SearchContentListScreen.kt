@@ -5,6 +5,7 @@ import android.app.Activity
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -58,6 +59,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -76,6 +78,7 @@ import org.skepsun.kototoro.parsers.network.CloudFlareHelper
 import org.skepsun.kototoro.core.nav.AppRouter
 import org.skepsun.kototoro.core.prefs.AppSettings
 import org.skepsun.kototoro.core.prefs.ListMode
+import org.skepsun.kototoro.core.prefs.TabletListPreviewMode
 import org.skepsun.kototoro.core.prefs.observeAsState
 import org.skepsun.kototoro.core.util.FoldableUtils
 import org.skepsun.kototoro.core.ui.compose.contentCoverSharedKey
@@ -110,11 +113,13 @@ import org.skepsun.kototoro.list.ui.compose.KototoroContentListScreen
 import org.skepsun.kototoro.list.ui.model.ContentListModel
 import org.skepsun.kototoro.list.ui.model.ErrorState
 import org.skepsun.kototoro.list.ui.model.ListModel
+import org.skepsun.kototoro.list.ui.model.LoadingState
 import org.skepsun.kototoro.list.ui.model.QuickFilter
 import org.skepsun.kototoro.details.ui.model.DetailsOrigin
 import org.skepsun.kototoro.space.domain.SpaceId
 import org.skepsun.kototoro.remotelist.ui.RemoteListViewModel
 import org.skepsun.kototoro.parsers.model.Content
+import org.skepsun.kototoro.parsers.util.runCatchingCancellable
 
 internal val SearchPinnedChipHeight = 32.dp
 private val SearchPinnedRowVisualHeight = SearchPinnedChipHeight + 8.dp
@@ -122,6 +127,7 @@ private val SearchFilterSheetLightMinAlpha = 0.88f
 private val SearchFilterSheetLightMaxAlpha = 0.92f
 private val SearchFilterSheetDarkMinAlpha = 0.82f
 private val SearchFilterSheetDarkMaxAlpha = 0.88f
+private const val ExpandedListDetailMinWidthDp = 840
 
 private enum class SearchSidePaneMode {
     Filter,
@@ -311,8 +317,8 @@ fun AppSearchContentListRoute(
     val gridSize = settings.observeAsState(AppSettings.KEY_GRID_SIZE) { gridSize }.value
     val gridScale = gridSize / 100f
     val tabletUiMode by settings.observeAsState(AppSettings.KEY_TABLET_UI_MODE) { tabletUiMode }
-    val isTabletListPreviewEnabled by settings.observeAsState(AppSettings.KEY_TABLET_LIST_PREVIEW) {
-        isTabletListPreviewEnabled
+    val tabletListPreviewMode by settings.observeAsState(AppSettings.KEY_TABLET_LIST_PREVIEW_MODE) {
+        tabletListPreviewMode
     }
     val isTabletListFilterPanelDefaultOpen by settings.observeAsState(
         AppSettings.KEY_TABLET_LIST_FILTER_PANEL_DEFAULT,
@@ -325,6 +331,16 @@ fun AppSearchContentListRoute(
     val isWideAdaptiveLayout = remember(context, configuration.orientation, configuration.screenWidthDp, tabletUiMode) {
         FoldableUtils.shouldUseTabletLayout(context, settings, configuration)
     }
+    // A 600dp width is enough for a tablet-aware filter panel, but not enough for a
+    // comfortable persistent list/detail experience in landscape. Keep the preview
+    // interaction for the Expanded window size so phones do not get a cramped second step.
+    val isExpandedListDetailLayout = isWideAdaptiveLayout &&
+        configuration.screenWidthDp >= ExpandedListDetailMinWidthDp
+    val isSidePanePreviewAvailable = tabletListPreviewMode == TabletListPreviewMode.SIDE_PANE &&
+        isExpandedListDetailLayout
+    val isFloatingPreviewAvailable = tabletListPreviewMode == TabletListPreviewMode.FLOATING &&
+        isWideAdaptiveLayout &&
+        configuration.screenWidthDp >= 600
 
     val preparedItems = remember(items) { prepareSearchContentItems(items) }
     val quickFilter = preparedItems.quickFilter
@@ -371,7 +387,54 @@ fun AppSearchContentListRoute(
         mutableStateOf(isWideAdaptiveLayout && isTabletListFilterPanelDefaultOpen)
     }
     var sidePaneMode by rememberSaveable(isWideAdaptiveLayout) { mutableStateOf(SearchSidePaneMode.Filter) }
+    var previewContentId by rememberSaveable { mutableStateOf<Long?>(null) }
     var previewContent by remember { mutableStateOf<Content?>(null) }
+    var isPreviewDetailsLoading by remember { mutableStateOf(false) }
+    var hasPreviewDetailsError by remember { mutableStateOf(false) }
+    fun clearPreview() {
+        previewContentId = null
+        previewContent = null
+        isPreviewDetailsLoading = false
+        hasPreviewDetailsError = false
+        sidePaneMode = SearchSidePaneMode.Filter
+    }
+    fun openContentOrPreview(item: ContentListModel) {
+        val content = item.toContentWithOverride()
+        if (viewModel.onContentClick(content)) return
+
+        val sharedElementKey = contentListSharedElementKey(item, null)
+        when {
+            isSidePanePreviewAvailable -> {
+                if (previewContent?.id == content.id) {
+                    openDetailsHandler(previewContent ?: content, sharedElementKey)
+                } else {
+                    previewContentId = content.id
+                    previewContent = content
+                    sidePaneMode = SearchSidePaneMode.Preview
+                    // The persistent preview owns the second pane, regardless of
+                    // whether the filter pane was previously visible.
+                    showFilterPanel = true
+                }
+            }
+
+            isFloatingPreviewAvailable -> {
+                if (previewContent?.id == content.id) {
+                    openDetailsHandler(previewContent ?: content, sharedElementKey)
+                } else {
+                    previewContentId = content.id
+                    previewContent = content
+                    sidePaneMode = SearchSidePaneMode.Filter
+                    // The floating card is most useful when the list remains full-width.
+                    showFilterPanel = false
+                }
+            }
+
+            else -> {
+                clearPreview()
+                openDetailsHandler(content, sharedElementKey)
+            }
+        }
+    }
     var selectedItemsIds by rememberSaveable { mutableStateOf<Set<Long>>(emptySet()) }
     val hapticFeedback = LocalHapticFeedback.current
     val focusRequester = remember { FocusRequester() }
@@ -439,22 +502,81 @@ fun AppSearchContentListRoute(
         }
     }
 
-    LaunchedEffect(isWideAdaptiveLayout, isTabletListFilterPanelDefaultOpen) {
-        if (isWideAdaptiveLayout) {
-            sidePaneMode = SearchSidePaneMode.Filter
-            showFilterPanel = isTabletListFilterPanelDefaultOpen
-        } else {
-            previewContent = null
-            sidePaneMode = SearchSidePaneMode.Filter
-            showFilterPanel = false
+    LaunchedEffect(
+        isWideAdaptiveLayout,
+        isExpandedListDetailLayout,
+        tabletListPreviewMode,
+        isTabletListFilterPanelDefaultOpen,
+    ) {
+        when {
+            !isWideAdaptiveLayout -> {
+                clearPreview()
+                showFilterPanel = false
+            }
+
+            tabletListPreviewMode == TabletListPreviewMode.OFF -> {
+                clearPreview()
+                showFilterPanel = isTabletListFilterPanelDefaultOpen
+            }
+
+            tabletListPreviewMode == TabletListPreviewMode.SIDE_PANE -> {
+                if (isSidePanePreviewAvailable) {
+                    if (sidePaneMode != SearchSidePaneMode.Preview) {
+                        sidePaneMode = SearchSidePaneMode.Filter
+                        showFilterPanel = isTabletListFilterPanelDefaultOpen
+                    }
+                } else {
+                    clearPreview()
+                    showFilterPanel = isTabletListFilterPanelDefaultOpen
+                }
+            }
+
+            tabletListPreviewMode == TabletListPreviewMode.FLOATING -> {
+                if (isFloatingPreviewAvailable) {
+                    sidePaneMode = SearchSidePaneMode.Filter
+                    showFilterPanel = if (previewContentId == null) {
+                        isTabletListFilterPanelDefaultOpen
+                    } else {
+                        false
+                    }
+                } else {
+                    clearPreview()
+                    showFilterPanel = isTabletListFilterPanelDefaultOpen
+                }
+            }
         }
     }
 
-    LaunchedEffect(contentItems) {
-        val previewId = previewContent?.id ?: return@LaunchedEffect
-        if (contentListItems.none { it.id == previewId }) {
-            previewContent = null
-            sidePaneMode = SearchSidePaneMode.Filter
+    LaunchedEffect(contentItems, contentListItems, previewContentId) {
+        val previewId = previewContentId ?: return@LaunchedEffect
+        val restoredContent = contentListItems
+            .firstOrNull { it.id == previewId }
+            ?.toContentWithOverride()
+        if (restoredContent != null) {
+            previewContent = restoredContent
+        } else if (contentItems.none { it === LoadingState }) {
+            clearPreview()
+        }
+    }
+
+    LaunchedEffect(previewContentId, contentListItems) {
+        val previewId = previewContentId ?: return@LaunchedEffect
+        val previewItem = contentListItems.firstOrNull { it.id == previewId } ?: return@LaunchedEffect
+        isPreviewDetailsLoading = true
+        hasPreviewDetailsError = false
+        runCatchingCancellable { viewModel.loadPreviewDetails(previewItem) }
+            .onSuccess { details ->
+                if (previewContentId == previewId) {
+                    previewContent = details
+                }
+            }
+            .onFailure {
+                if (previewContentId == previewId) {
+                    hasPreviewDetailsError = true
+                }
+            }
+        if (previewContentId == previewId) {
+            isPreviewDetailsLoading = false
         }
     }
 
@@ -509,13 +631,19 @@ fun AppSearchContentListRoute(
     }
 
     fun restoreFilterPane() {
-        previewContent = null
-        sidePaneMode = SearchSidePaneMode.Filter
+        clearPreview()
         showFilterPanel = true
     }
 
-    BackHandler(enabled = isWideSplitLayout && sidePaneMode == SearchSidePaneMode.Preview) {
-        restoreFilterPane()
+    val isFloatingPreviewVisible = isFloatingPreviewAvailable && previewContent != null
+    BackHandler(
+        enabled = (isWideSplitLayout && sidePaneMode == SearchSidePaneMode.Preview) || isFloatingPreviewVisible,
+    ) {
+        if (sidePaneMode == SearchSidePaneMode.Preview) {
+            restoreFilterPane()
+        } else {
+            clearPreview()
+        }
     }
 
     val nestedScrollConnection = remember(maxCollapsePx, searchMode) {
@@ -703,20 +831,7 @@ fun AppSearchContentListRoute(
                                         hapticFeedback.performSelectionHapticFeedback()
                                         selectedItemsIds = if (item.id in selectedItemsIds) selectedItemsIds - item.id else selectedItemsIds + item.id
                                     } else {
-                                        val content = item.toContentWithOverride()
-                                        if (viewModel.onContentClick(content)) return@itemClick
-                                        if (isTabletListPreviewEnabled) {
-                                            previewContent = content
-                                            sidePaneMode = SearchSidePaneMode.Preview
-                                        } else {
-                                            previewContent = null
-                                            sidePaneMode = SearchSidePaneMode.Filter
-                                            val sharedElementKey = contentListSharedElementKey(item, null)
-                                            openDetailsHandler(
-                                                content,
-                                                sharedElementKey,
-                                            )
-                                        }
+                                        openContentOrPreview(item)
                                     }
                                 },
                                 onItemLongClick = { item ->
@@ -756,6 +871,7 @@ fun AppSearchContentListRoute(
                                 showInlineSelectionTopBar = false,
                                 onRetry = ::resolveErrorAndRetry,
                                 onSecondaryAction = ::openErrorInBrowser,
+                                highlightedItemId = previewContent?.id,
                                 gridState = if (listMode == ListMode.GRID || listMode == ListMode.COMPACT_GRID) {
                                     wideGridState
                                 } else {
@@ -787,18 +903,24 @@ fun AppSearchContentListRoute(
                             .fillMaxHeight(),
                     ) {
                         if (sidePaneMode == SearchSidePaneMode.Preview && previewContent != null) {
-                            SearchPreviewPane(
-                                content = requireNotNull(previewContent),
-                                onBackToFilters = ::restoreFilterPane,
-                                onOpenDetails = {
-                                    val content = requireNotNull(previewContent)
-                                    val sharedElementKey = contentCoverSharedKey(content, content.coverUrl)
-                                    openDetailsHandler(
-                                        content,
-                                        sharedElementKey,
-                                    )
-                                },
-                            )
+                            Crossfade(
+                                targetState = requireNotNull(previewContent),
+                                label = "search-preview-content",
+                            ) { content ->
+                                SearchPreviewPane(
+                                    content = content,
+                                    isLoading = isPreviewDetailsLoading,
+                                    hasLoadError = hasPreviewDetailsError,
+                                    onAddToFavorites = { appRouter.showFavoriteDialog(content) },
+                                    onOpenDetails = {
+                                        val sharedElementKey = contentCoverSharedKey(content, content.coverUrl)
+                                        openDetailsHandler(
+                                            content,
+                                            sharedElementKey,
+                                        )
+                                    },
+                                )
+                            }
                         } else {
                             SearchFilterPanel(
                                 sourceName = viewModel.source.name,
@@ -879,13 +1001,7 @@ fun AppSearchContentListRoute(
                                     hapticFeedback.performSelectionHapticFeedback()
                                     selectedItemsIds = if (item.id in selectedItemsIds) selectedItemsIds - item.id else selectedItemsIds + item.id
                                 } else {
-                                    val content = item.toContentWithOverride()
-                                    if (viewModel.onContentClick(content)) return@itemClick
-                                    val sharedElementKey = contentListSharedElementKey(item, null)
-                                    openDetailsHandler(
-                                        content,
-                                        sharedElementKey,
-                                    )
+                                    openContentOrPreview(item)
                                 }
                             },
                             onItemLongClick = { item ->
@@ -925,6 +1041,7 @@ fun AppSearchContentListRoute(
                             showInlineSelectionTopBar = false,
                             onRetry = ::resolveErrorAndRetry,
                             onSecondaryAction = ::openErrorInBrowser,
+                            highlightedItemId = previewContent?.id,
                         )
                     }
                     Box(
@@ -933,6 +1050,30 @@ fun AppSearchContentListRoute(
                             .align(Alignment.TopStart),
                     ) {
                         topBarContent()
+                    }
+                    if (isFloatingPreviewVisible && previewContent != null) {
+                        val content = requireNotNull(previewContent)
+                        SearchFloatingPreviewCard(
+                            content = content,
+                            isLoading = isPreviewDetailsLoading,
+                            hasLoadError = hasPreviewDetailsError,
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(
+                                    top = topOverlayHeight + 12.dp,
+                                    end = 16.dp,
+                                )
+                                .fillMaxWidth(0.86f)
+                                .widthIn(max = 420.dp),
+                            onDismiss = ::clearPreview,
+                            onAddToFavorites = { appRouter.showFavoriteDialog(content) },
+                            onOpenDetails = {
+                                openDetailsHandler(
+                                    content,
+                                    contentCoverSharedKey(content, content.coverUrl),
+                                )
+                            },
+                        )
                     }
                 }
             }

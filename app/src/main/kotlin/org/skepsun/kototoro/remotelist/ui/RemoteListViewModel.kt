@@ -29,6 +29,7 @@ import org.skepsun.kototoro.core.model.GlobalTagBlacklist
 import org.skepsun.kototoro.parsers.model.ContentSource as ParserContentSource
 import org.skepsun.kototoro.core.model.distinctById
 import org.skepsun.kototoro.core.model.isLocal
+import org.skepsun.kototoro.core.model.withOverride
 import org.skepsun.kototoro.core.parser.ContentActionRepository
 import org.skepsun.kototoro.core.parser.ContentDataRepository
 import org.skepsun.kototoro.core.parser.ContentRepository
@@ -48,6 +49,7 @@ import org.skepsun.kototoro.list.domain.ContentListMapper
 import org.skepsun.kototoro.list.ui.ContentListViewModel
 import org.skepsun.kototoro.list.ui.ContentActionHostRequest
 import org.skepsun.kototoro.list.ui.model.ButtonFooter
+import org.skepsun.kototoro.list.ui.model.ContentListModel
 import org.skepsun.kototoro.list.ui.model.EmptyState
 import org.skepsun.kototoro.list.ui.model.ListModel
 import org.skepsun.kototoro.list.ui.model.LoadingFooter
@@ -59,6 +61,7 @@ import org.skepsun.kototoro.local.domain.model.LocalContent
 import org.skepsun.kototoro.parsers.model.Content
 
 import org.skepsun.kototoro.parsers.util.sizeOrZero
+import org.skepsun.kototoro.parsers.util.runCatchingCancellable
 import javax.inject.Inject
 
 private const val FILTER_MIN_INTERVAL = 250L
@@ -74,7 +77,7 @@ open class RemoteListViewModel @Inject constructor(
     private val exploreRepository: ExploreRepository,
     sourcesRepository: ContentSourcesRepository,
     private val sourceAvailabilityRepository: SourceAvailabilityRepository,
-    mangaDataRepository: ContentDataRepository,
+    private val mangaDataRepository: ContentDataRepository,
     private val captchaAutoResolveCoordinator: CaptchaAutoResolveCoordinator,
     @LocalStorageChanges localStorageChanges: SharedFlow<LocalContent?>,
 ) : ContentListViewModel(settings, mangaDataRepository, localStorageChanges), FilterCoordinator.Owner {
@@ -204,6 +207,15 @@ open class RemoteListViewModel @Inject constructor(
         }
         executeContentAction(actionRepository, content)
         return true
+    }
+
+    suspend fun loadPreviewDetails(item: ContentListModel): Content {
+        return kotlinx.coroutines.withContext(Dispatchers.Default) {
+            val details = repository.getDetails(item.manga)
+            runCatchingCancellable { mangaDataRepository.updateProjectionSnapshot(details) }
+                .getOrDefault(details)
+                .withOverride(item.override)
+        }
     }
 
     private fun executeContentAction(
