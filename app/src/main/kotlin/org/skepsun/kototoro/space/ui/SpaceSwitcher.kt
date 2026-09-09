@@ -12,6 +12,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -61,7 +63,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalDensity
@@ -99,6 +103,38 @@ import org.skepsun.kototoro.space.domain.SpaceId
 import org.skepsun.kototoro.core.util.ext.mangaExtra
 
 private const val SPACE_SWITCHER_FAB_MIN_ALPHA = 0.60f
+
+internal class SpacePanelDragDirection {
+
+    enum class Value {
+        UNDECIDED,
+        HORIZONTAL,
+        VERTICAL,
+    }
+
+    private var totalX = 0f
+    private var totalY = 0f
+
+    var value: Value = Value.UNDECIDED
+        private set
+
+    fun update(deltaX: Float, deltaY: Float, touchSlop: Float): Value {
+        if (value != Value.UNDECIDED) return value
+
+        totalX += deltaX
+        totalY += deltaY
+        if (kotlin.math.abs(totalX) < touchSlop && kotlin.math.abs(totalY) < touchSlop) {
+            return value
+        }
+
+        value = if (kotlin.math.abs(totalX) >= kotlin.math.abs(totalY)) {
+            Value.HORIZONTAL
+        } else {
+            Value.VERTICAL
+        }
+        return value
+    }
+}
 
 @Composable
 fun BoxScope.SpaceSidekick(
@@ -285,20 +321,39 @@ private fun SpaceSidekickPanel(
             .widthIn(max = 280.dp)
             .graphicsLayer { translationX = horizontalDragOffset }
             .pointerInput(isLeft, onDismiss) {
-                detectHorizontalDragGestures(
-                    onHorizontalDrag = { change, amount ->
-                        val isOutwardDrag = (isLeft && amount < 0f) || (!isLeft && amount > 0f)
-                        if (isOutwardDrag || horizontalDragOffset != 0f) {
-                            change.consume()
-                            horizontalDragOffset = if (isLeft) {
-                                (horizontalDragOffset + amount).coerceAtMost(0f)
-                            } else {
-                                (horizontalDragOffset + amount).coerceAtLeast(0f)
+                var dismissed = false
+                try {
+                    awaitEachGesture {
+                        awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                        val dragDirection = SpacePanelDragDirection()
+                        do {
+                            val event = awaitPointerEvent(PointerEventPass.Initial)
+                            val change = event.changes.firstOrNull() ?: break
+                            val delta = change.positionChange()
+                            if (
+                                dragDirection.update(
+                                    deltaX = delta.x,
+                                    deltaY = delta.y,
+                                    touchSlop = viewConfiguration.touchSlop,
+                                ) == SpacePanelDragDirection.Value.HORIZONTAL
+                            ) {
+                                change.consume()
+                                val isOutwardDrag = (isLeft && delta.x < 0f) || (!isLeft && delta.x > 0f)
+                                if (isOutwardDrag || horizontalDragOffset != 0f) {
+                                    horizontalDragOffset = if (isLeft) {
+                                        (horizontalDragOffset + delta.x).coerceAtMost(0f)
+                                    } else {
+                                        (horizontalDragOffset + delta.x).coerceAtLeast(0f)
+                                    }
+                                }
                             }
+                        } while (event.changes.any { it.pressed })
+
+                        if (dragDirection.value != SpacePanelDragDirection.Value.HORIZONTAL) {
+                            return@awaitEachGesture
                         }
-                    },
-                    onDragEnd = {
                         if (kotlin.math.abs(horizontalDragOffset) >= dismissThreshold) {
+                            dismissed = true
                             onDismiss()
                             // Keep the dragged offset: the drawer is still composed
                             // during its slide-out exit, and this box's graphicsLayer
@@ -308,9 +363,10 @@ private fun SpaceSidekickPanel(
                         } else {
                             horizontalDragOffset = 0f
                         }
-                    },
-                    onDragCancel = { horizontalDragOffset = 0f },
-                )
+                    }
+                } finally {
+                    if (!dismissed) horizontalDragOffset = 0f
+                }
             },
         style = GlassDefaults.topBarChromeStyle().copy(
             containerAlpha = 0.94f,
