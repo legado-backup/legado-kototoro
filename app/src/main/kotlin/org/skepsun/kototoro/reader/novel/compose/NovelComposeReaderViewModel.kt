@@ -23,6 +23,7 @@ import javax.inject.Inject
 enum class NovelChaptersSheetTab {
     CHAPTERS,
     NOTES,
+    SEARCH,
 }
 
 data class NovelComposeReaderUiState(

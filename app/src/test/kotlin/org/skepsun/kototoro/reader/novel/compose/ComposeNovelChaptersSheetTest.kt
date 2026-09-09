@@ -1,6 +1,7 @@
 package org.skepsun.kototoro.reader.novel.compose
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.skepsun.kototoro.core.model.UnknownContentSource
 import org.skepsun.kototoro.parsers.model.ContentChapter
@@ -26,6 +27,25 @@ class ComposeNovelChaptersSheetTest {
 			.filterIsInstance<NovelChapterListItem.Chapter>()
 
 		assertEquals(listOf(1), result.map(NovelChapterListItem.Chapter::originalIndex))
+	}
+
+	@Test
+	fun `current chapter position includes inserted section headers`() {
+		val chapters = listOf(
+			chapter(10, "First", volume = 1, branch = "Original"),
+			chapter(20, "Second", volume = 1, branch = "Original"),
+			chapter(30, "Third", volume = 2, branch = "Original"),
+		)
+		val items = buildChapterItems(chapters, reversed = false, query = "")
+
+		assertEquals(5, chapterListPositionForCurrent(items, currentIndex = 2))
+	}
+
+	@Test
+	fun `missing current chapter does not resolve to the first row`() {
+		val items = buildChapterItems(listOf(chapter(10, "First")), reversed = false, query = "")
+
+		assertEquals(-1, chapterListPositionForCurrent(items, currentIndex = 4))
 	}
 
 	@Test
@@ -77,8 +97,117 @@ class ComposeNovelChaptersSheetTest {
 	@Test
 	fun `novel chapters sheet tab enum has expected entries and order`() {
 		val entries = NovelChaptersSheetTab.entries
-		assertEquals(2, entries.size)
+		assertEquals(3, entries.size)
 		assertEquals(NovelChaptersSheetTab.CHAPTERS, entries[0])
 		assertEquals(NovelChaptersSheetTab.NOTES, entries[1])
+		assertEquals(NovelChaptersSheetTab.SEARCH, entries[2])
+	}
+
+	@Test
+	fun `content search returns chapter and matching excerpt`() {
+		val chapters = listOf(chapter(10, "Arrival"), chapter(20, "Departure"))
+		val documents = listOf(
+			NovelComposeChapterContent(
+				chapterId = 10,
+				chapterIndex = 0,
+				chapterTitle = "Arrival",
+				content = "The quiet arrival changed everything.\nThe room fell silent.",
+				translation = null,
+			),
+			NovelComposeChapterContent(
+				chapterId = 20,
+				chapterIndex = 1,
+				chapterTitle = "Departure",
+				content = "A final signal marked the departure.",
+				translation = null,
+			),
+		)
+
+		val results = searchNovelChapterContent(chapters, documents, "ARRIVAL")
+
+		assertEquals(1, results.size)
+		assertEquals(0, results.single().chapterIndex)
+		assertEquals("Arrival", results.single().chapterTitle)
+		assertTrue(results.single().excerpt.contains("arrival", ignoreCase = true))
+	}
+
+	@Test
+	fun `content search limits repeated matches within one chapter`() {
+		val chapters = listOf(chapter(10, "Arrival"))
+		val documents = listOf(
+			NovelComposeChapterContent(
+				chapterId = 10,
+				chapterIndex = 0,
+				chapterTitle = "Arrival",
+				content = "signal one; signal two; signal three",
+				translation = null,
+			),
+		)
+
+		val results = searchNovelChapterContent(
+			chapters = chapters,
+			documents = documents,
+			query = "signal",
+			maxResultsPerChapter = 2,
+		)
+
+		assertEquals(2, results.size)
+	}
+
+	@Test
+	fun `content search reports keyword ranges inside the excerpt`() {
+		val chapters = listOf(chapter(10, "Arrival"))
+		val documents = listOf(
+			NovelComposeChapterContent(
+				chapterId = 10,
+				chapterIndex = 0,
+				chapterTitle = "Arrival",
+				content = "The quiet arrival changed everything. Arrival was all that mattered.",
+				translation = null,
+			),
+		)
+
+		val result = searchNovelChapterContent(chapters, documents, "ARRIVAL").first()
+
+		assertTrue(result.matchRanges.isNotEmpty())
+		assertTrue(
+			result.matchRanges.all { range ->
+				result.excerpt.substring(range.first, range.last + 1).equals("arrival", ignoreCase = true)
+			},
+		)
+	}
+
+	@Test
+	fun `content search reports keyword ranges after whitespace collapsing`() {
+		val chapters = listOf(chapter(10, "Arrival"))
+		val documents = listOf(
+			NovelComposeChapterContent(
+				chapterId = 10,
+				chapterIndex = 0,
+				chapterTitle = "Arrival",
+				content = "They waited   for the arrival of dawn.",
+				translation = null,
+			),
+		)
+
+		val result = searchNovelChapterContent(chapters, documents, "for the arrival").first()
+
+		assertEquals(1, result.matchRanges.size)
+		assertEquals(
+			"for the arrival",
+			result.excerpt.substring(result.matchRanges.single().first, result.matchRanges.single().last + 1),
+		)
+	}
+
+	@Test
+	fun `findSearchMatchRanges finds all case-insensitive matches`() {
+		val ranges = findSearchMatchRanges("aXa XA xab", "xa")
+
+		assertEquals(listOf(1..2, 4..5, 7..8), ranges)
+	}
+
+	@Test
+	fun `findSearchMatchRanges returns empty for blank needle`() {
+		assertTrue(findSearchMatchRanges("anything", "").isEmpty())
 	}
 }

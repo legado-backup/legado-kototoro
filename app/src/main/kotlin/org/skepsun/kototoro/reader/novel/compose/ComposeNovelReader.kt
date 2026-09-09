@@ -93,6 +93,7 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.delay
 import org.skepsun.kototoro.reader.novel.NovelPage
+import org.skepsun.kototoro.reader.novel.NovelReaderThemePreset
 import org.skepsun.kototoro.reader.novel.NovelPageTurnAnimation
 import org.skepsun.kototoro.reader.novel.NovelReaderSettings
 import org.skepsun.kototoro.reader.novel.NovelChapterTranslation
@@ -655,6 +656,7 @@ fun ComposeNovelReaderRoute(
     onToggleTranslation: () -> Unit = {},
     onToggleReplaceRules: () -> Unit = {},
     onShowReplaceRules: () -> Unit = {},
+    onShowMarkings: () -> Unit = {},
     onDismissReplaceRules: () -> Unit = {},
     onReplaceRuleToggle: (org.skepsun.kototoro.core.replace.ReplaceRule, Boolean) -> Unit = { _, _ -> },
     onDismissMarkings: () -> Unit = {},
@@ -666,6 +668,7 @@ fun ComposeNovelReaderRoute(
     onTts: () -> Unit = {},
     onClearTranslationCache: () -> Unit = {},
     onChapterSelected: (Int) -> Unit = {},
+    onSearchResultSelected: (NovelMarkingTarget) -> Unit = { target -> onChapterSelected(target.chapterIndex) },
     onModalDismissed: () -> Unit = {},
     onTtsPrevious: () -> Unit = {},
     onTtsPlayPause: () -> Unit = {},
@@ -936,23 +939,21 @@ fun ComposeNovelReaderRoute(
             replaceRulesEnabled = state.replaceRulesEnabled,
             onToggleReplaceRules = onToggleReplaceRules,
             onShowReplaceRules = { viewModel.showReplaceRules(); onShowReplaceRules() },
+            onShowMarkings = { viewModel.showMarkings(); onShowMarkings() },
+            onBookmark = onBookmark,
             onTts = onTts,
             onClearTranslationCache = onClearTranslationCache,
-            workTitle = state.workTitle,
-            chapterTitle = state.chapterTitle,
-            progressLabel = state.progressLabel,
-            progressFraction = state.progressMax.takeIf { it > 0f }?.let {
-                (state.progressValue / it).coerceIn(0f, 1f)
-            },
         )
     }
     if (!state.chromeEnabled && state.chaptersSheetVisible) {
         ComposeNovelChaptersSheet(
             chapters = state.chapters,
             currentIndex = state.currentChapterIndex,
+            searchDocuments = state.continuousChapters,
             markings = state.novelMarkings,
             bookmarks = state.novelBookmarks,
             initialTab = state.chaptersSheetInitialTab,
+            themePreset = settings?.themePreset ?: NovelReaderThemePreset.PAPER,
             onDismiss = {
                 viewModel.dismissChapters()
                 onModalDismissed()
@@ -961,6 +962,11 @@ fun ComposeNovelReaderRoute(
                 viewModel.dismissChapters()
                 onModalDismissed()
                 onChapterSelected(it)
+            },
+            onSearchResultSelected = { target ->
+                viewModel.dismissChapters()
+                onModalDismissed()
+                onSearchResultSelected(target)
             },
             onJumpToMarking = {
                 viewModel.dismissChapters()
@@ -997,6 +1003,7 @@ fun ComposeNovelReaderRoute(
             markings = state.novelMarkings,
             chapters = state.chapters,
             bookTitle = state.workTitle,
+            themePreset = settings?.themePreset ?: NovelReaderThemePreset.PAPER,
             onDismiss = {
                 viewModel.dismissMarkings()
                 onDismissMarkings()

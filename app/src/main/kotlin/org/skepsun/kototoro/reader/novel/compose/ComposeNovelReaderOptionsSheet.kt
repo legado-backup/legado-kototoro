@@ -5,32 +5,32 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.mutableStateOf
@@ -43,7 +43,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import kotlin.math.roundToInt
 import org.skepsun.kototoro.R
 import org.skepsun.kototoro.reader.novel.NovelPageTurnAnimation
 import org.skepsun.kototoro.reader.novel.NovelReaderSettings
@@ -60,7 +64,9 @@ import org.skepsun.kototoro.reader.ui.compose.design.ReaderOptionValueRow
 import org.skepsun.kototoro.reader.ui.compose.design.ReaderSegmentedChoice
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+private const val DEFAULT_READER_BRIGHTNESS = 0.8f
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun ComposeNovelReaderOptionsSheet(
     settings: NovelReaderSettings,
@@ -70,12 +76,10 @@ internal fun ComposeNovelReaderOptionsSheet(
     replaceRulesEnabled: Boolean = true,
     onToggleReplaceRules: () -> Unit = {},
     onShowReplaceRules: () -> Unit = {},
+    onShowMarkings: () -> Unit = {},
+    onBookmark: () -> Unit = {},
     onTts: () -> Unit,
     onClearTranslationCache: () -> Unit,
-    workTitle: String = "",
-    chapterTitle: String = "",
-    progressLabel: String = "",
-    progressFraction: Float? = null,
 ) {
     var sliderEditor by remember { mutableStateOf<SliderEditor?>(null) }
     fun update(transform: NovelReaderSettings.() -> NovelReaderSettings) {
@@ -83,54 +87,89 @@ internal fun ComposeNovelReaderOptionsSheet(
     }
     val pages = listOf(
         NovelOptionsPage(R.drawable.ic_book_page, R.string.novel_reader_tab_reading),
-        NovelOptionsPage(R.drawable.ic_translate, R.string.novel_reader_tab_tools),
-        NovelOptionsPage(R.drawable.ic_more_vert, R.string.novel_reader_tab_page),
+        NovelOptionsPage(R.drawable.ic_lightbulb, R.string.novel_reader_tab_brightness),
+        NovelOptionsPage(R.drawable.ic_format_size, R.string.novel_reader_tab_typography),
+        NovelOptionsPage(R.drawable.ic_translate, R.string.novel_reader_tab_translation),
+        NovelOptionsPage(R.drawable.ic_more_vert, R.string.novel_reader_tab_tools),
     )
     val pagerState = rememberPagerState(pageCount = pages::size)
     val scope = rememberCoroutineScope()
-    ModalBottomSheet(onDismissRequest = onDismiss, modifier = Modifier.fillMaxHeight()) {
-        Column(modifier = Modifier.fillMaxWidth().weight(1f)) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
+    val palette = novelReaderPalette(settings.themePreset, isSystemInDarkTheme())
+    val sheetColor = Color(palette.backgroundColor)
+    val sheetContentColor = Color(palette.textColor)
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        modifier = Modifier.fillMaxHeight(),
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        containerColor = sheetColor,
+        contentColor = sheetContentColor,
+        dragHandle = {
+            BottomSheetDefaults.DragHandle(color = Color(palette.secondaryTextColor))
+        },
+        tonalElevation = 0.dp,
+        contentWindowInsets = { androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0) },
+    ) {
+        val readerColors = MaterialTheme.colorScheme.copy(
+            primary = Color(palette.chromeTextColor),
+            onPrimary = sheetColor,
+            primaryContainer = Color(palette.placeholderColor),
+            onPrimaryContainer = Color(palette.textColor),
+            secondaryContainer = Color(palette.highlightColor),
+            onSecondaryContainer = Color(palette.textColor),
+            background = sheetColor,
+            surface = sheetColor,
+            surfaceVariant = Color(palette.placeholderColor),
+            onSurface = sheetContentColor,
+            onSurfaceVariant = Color(palette.secondaryTextColor),
+        )
+        MaterialTheme(colorScheme = readerColors) {
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 4.dp),
+                    .weight(1f)
+                    .navigationBarsPadding(),
             ) {
-                pages.forEachIndexed { index, page ->
-                    NovelOptionsTab(
-                        page = page,
-                        selected = pagerState.currentPage == index,
-                        onClick = { scope.launch { pagerState.animateScrollToPage(index) } },
-                        modifier = Modifier.weight(1f),
-                    )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 12.dp, vertical = 2.dp),
+                ) {
+                    pages.forEachIndexed { index, page ->
+                        NovelOptionsTab(
+                            page = page,
+                            selected = pagerState.currentPage == index,
+                            onClick = { scope.launch { pagerState.animateScrollToPage(index) } },
+                            modifier = Modifier.widthIn(min = 68.dp),
+                        )
+                    }
                 }
-            }
-            HorizontalPager(state = pagerState, modifier = Modifier.fillMaxWidth().weight(1f)) { page ->
-                when (page) {
-                    0 -> NovelReaderReadingPage(
-                        workTitle = workTitle,
-                        chapterTitle = chapterTitle,
-                        progressLabel = progressLabel,
-                        progressFraction = progressFraction,
-                        settings = settings,
-                        update = ::update,
-                        onEditSlider = { sliderEditor = it },
-                    )
-                    1 -> NovelReaderToolsPage(
-                        settings = settings,
-                        update = ::update,
-                        onToggleTranslation = { onToggleTranslation(); onDismiss() },
-                        onClearTranslationCache = onClearTranslationCache,
-                        onTts = { onTts(); onDismiss() },
-                        replaceRulesEnabled = replaceRulesEnabled,
-                        onToggleReplaceRules = { onToggleReplaceRules(); onDismiss() },
-                        onShowReplaceRules = { onShowReplaceRules(); onDismiss() },
-                    )
-                    else -> NovelReaderPageActionsPage(
-                        settings = settings,
-                        update = ::update,
-                        onReset = { onSettingsChanged(NovelReaderSettings()) },
-                    )
+                HorizontalPager(state = pagerState, modifier = Modifier.fillMaxWidth().weight(1f)) { page ->
+                    when (page) {
+                        0 -> NovelReaderReadingPage(settings = settings, update = ::update)
+                        1 -> NovelReaderBrightnessPage(settings = settings, update = ::update)
+                        2 -> NovelReaderTypographyPage(
+                            settings = settings,
+                            update = ::update,
+                            onEditSlider = { sliderEditor = it },
+                        )
+                        3 -> NovelReaderTranslationPage(
+                            settings = settings,
+                            update = ::update,
+                            onToggleTranslation = onToggleTranslation,
+                            onClearTranslationCache = onClearTranslationCache,
+                        )
+                        else -> NovelReaderToolsPage(
+                            onShowMarkings = { onShowMarkings(); onDismiss() },
+                            onBookmark = { onBookmark(); onDismiss() },
+                            onTts = { onTts(); onDismiss() },
+                            replaceRulesEnabled = replaceRulesEnabled,
+                            onToggleReplaceRules = onToggleReplaceRules,
+                            onShowReplaceRules = { onShowReplaceRules(); onDismiss() },
+                            onReset = { onSettingsChanged(NovelReaderSettings()) },
+                        )
+                    }
                 }
             }
         }
@@ -149,146 +188,371 @@ private fun NovelOptionsTab(
     modifier: Modifier = Modifier,
 ) {
     Surface(
+        onClick = onClick,
         shape = RoundedCornerShape(18.dp),
-        color = if (selected) MaterialTheme.colorScheme.surfaceContainerHigh else Color.Transparent,
+        color = if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.82f) else Color.Transparent,
+        contentColor = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = modifier,
     ) {
-        TextButton(
-            onClick = onClick,
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp),
-            modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp),
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
         ) {
             Icon(
                 painter = painterResource(page.icon),
                 contentDescription = stringResource(page.label),
-                tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(18.dp),
+                modifier = Modifier.size(20.dp),
             )
-            Spacer(Modifier.size(4.dp))
             Text(
                 text = stringResource(page.label),
-                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.labelSmall,
                 maxLines = 1,
+                modifier = Modifier.semantics { role = Role.Tab },
             )
-        }
-    }
-}
-
-private fun androidx.compose.foundation.lazy.LazyListScope.novelReaderOverviewContent(
-    workTitle: String,
-    chapterTitle: String,
-    progressLabel: String,
-    progressFraction: Float?,
-) {
-    item {
-        Surface(
-            shape = RoundedCornerShape(24.dp),
-            color = MaterialTheme.colorScheme.surfaceContainerLow,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.padding(20.dp),
-            ) {
-                Text(
-                    text = stringResource(R.string.novel_reader_overview),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-                Text(
-                    text = workTitle.ifBlank { stringResource(R.string.novel_reader_untitled) },
-                    style = MaterialTheme.typography.titleLarge,
-                    maxLines = 2,
-                )
-                if (chapterTitle.isNotBlank()) {
-                    Text(
-                        text = chapterTitle,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2,
-                    )
-                }
-                if (progressFraction != null) {
-                    LinearProgressIndicator(
-                        progress = { progressFraction.coerceIn(0f, 1f) },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-                Row(
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.Bottom,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(
-                        text = stringResource(R.string.progress),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Text(
-                        text = progressLabel.ifBlank { "—" },
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                }
-            }
         }
     }
 }
 
 @Composable
 private fun NovelReaderReadingPage(
-    workTitle: String,
-    chapterTitle: String,
-    progressLabel: String,
-    progressFraction: Float?,
+    settings: NovelReaderSettings,
+    update: (NovelReaderSettings.() -> NovelReaderSettings) -> Unit,
+) = NovelOptionsPageList {
+    item {
+        Text(
+            text = stringResource(R.string.novel_reader_tab_reading),
+            style = MaterialTheme.typography.titleMedium,
+        )
+    }
+    novelReadingOptionsContent(settings, update)
+}
+
+@Composable
+private fun NovelReaderBrightnessPage(
+    settings: NovelReaderSettings,
+    update: (NovelReaderSettings.() -> NovelReaderSettings) -> Unit,
+) = NovelOptionsPageList {
+    item {
+        Text(
+            text = stringResource(R.string.novel_reader_brightness_section),
+            style = MaterialTheme.typography.titleMedium,
+        )
+    }
+    item {
+        ReaderOptionGroup {
+            NovelReaderSliderRow(
+                label = stringResource(R.string.brightness),
+                valueLabel = settings.screenBrightness?.let { "${(it * 100f).roundToInt()}%" }
+                    ?: stringResource(R.string.follow_system),
+                value = settings.screenBrightness ?: DEFAULT_READER_BRIGHTNESS,
+                valueRange = NovelReaderSettings.SCREEN_BRIGHTNESS_RANGE,
+                enabled = settings.screenBrightness != null,
+                onValueChange = { value -> update { copy(screenBrightness = value) } },
+                icon = R.drawable.ic_lightbulb,
+            )
+            ReaderOptionDivider()
+            ReaderOptionSwitchRow(
+                label = stringResource(R.string.novel_reader_follow_system_brightness),
+                checked = settings.screenBrightness == null,
+                onCheckedChange = { followSystem ->
+                    update {
+                        copy(screenBrightness = if (followSystem) {
+                            null
+                        } else {
+                            screenBrightness ?: DEFAULT_READER_BRIGHTNESS
+                        })
+                    }
+                },
+            )
+        }
+    }
+    item {
+        Text(
+            text = stringResource(R.string.novel_reader_palette_section),
+            style = MaterialTheme.typography.titleMedium,
+        )
+    }
+    item {
+        ReaderSegmentedChoice(
+            title = null,
+            options = NovelReaderThemePreset.entries.map { stringResource(it.label) },
+            selectedIndex = NovelReaderThemePreset.entries.indexOf(settings.themePreset),
+            onSelected = { index -> update { copy(themePreset = NovelReaderThemePreset.entries[index]) } },
+            icon = { NovelThemeSwatch(NovelReaderThemePreset.entries[it]) },
+            stackedTitle = true,
+            verticalOptions = true,
+        )
+    }
+}
+
+@Composable
+private fun NovelReaderTypographyPage(
     settings: NovelReaderSettings,
     update: (NovelReaderSettings.() -> NovelReaderSettings) -> Unit,
     onEditSlider: (SliderEditor) -> Unit,
 ) = NovelOptionsPageList {
-    novelReaderOverviewContent(workTitle, chapterTitle, progressLabel, progressFraction)
     item {
         Text(
-            text = stringResource(R.string.novel_reader_display_section),
+            text = stringResource(R.string.novel_reader_typography_section),
             style = MaterialTheme.typography.titleMedium,
         )
     }
-    novelAppearanceOptionsContent(settings, update, onEditSlider)
+    item {
+        ReaderOptionGroup {
+            NovelReaderFontOptionRow(
+                selected = settings.font,
+                onSelected = { update { copy(font = it) } },
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            )
+            ReaderOptionDivider()
+            NovelTypographyRows(settings, update, onEditSlider)
+            ReaderOptionDivider()
+            ReaderOptionSwitchRow(
+                label = stringResource(R.string.novel_first_line_indent),
+                checked = settings.enableParagraphIndent,
+                onCheckedChange = { update { copy(enableParagraphIndent = it) } },
+            )
+        }
+    }
 }
 
 @Composable
-private fun NovelReaderToolsPage(
+private fun NovelReaderTranslationPage(
     settings: NovelReaderSettings,
     update: (NovelReaderSettings.() -> NovelReaderSettings) -> Unit,
     onToggleTranslation: () -> Unit,
     onClearTranslationCache: () -> Unit,
+) = NovelOptionsPageList {
+    item {
+        Text(
+            text = stringResource(R.string.novel_reader_translation_section),
+            style = MaterialTheme.typography.titleMedium,
+        )
+    }
+    item {
+        ReaderOptionGroup {
+            ReaderOptionSwitchRow(
+                label = stringResource(R.string.novel_reader_translation_enabled),
+                checked = settings.isTranslationEnabled,
+                onCheckedChange = { onToggleTranslation() },
+            )
+            ReaderOptionDivider()
+            ReaderSegmentedChoice(
+                title = stringResource(R.string.novel_translation_display_mode),
+                options = listOf(
+                    stringResource(R.string.novel_translation_only),
+                    stringResource(R.string.novel_translation_bilingual),
+                ),
+                selectedIndex = if (settings.translationDisplayMode == NovelTranslationDisplayMode.TRANSLATION_ONLY) {
+                    0
+                } else {
+                    1
+                },
+                onSelected = { index ->
+                    update {
+                        copy(
+                            translationDisplayMode = if (index == 0) {
+                                NovelTranslationDisplayMode.TRANSLATION_ONLY
+                            } else {
+                                NovelTranslationDisplayMode.BILINGUAL
+                            },
+                        )
+                    }
+                },
+                stackedTitle = true,
+            )
+        }
+    }
+    item {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilledTonalButton(
+                onClick = onToggleTranslation,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Icon(painterResource(R.drawable.ic_translate), contentDescription = null)
+                Text(stringResource(R.string.novel_reader_translation_start), modifier = Modifier.padding(start = 8.dp))
+            }
+            FilledTonalButton(
+                onClick = onClearTranslationCache,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Icon(painterResource(R.drawable.ic_delete), contentDescription = null)
+                Text(stringResource(R.string.clear_translation_cache), modifier = Modifier.padding(start = 8.dp))
+            }
+            Text(
+                text = stringResource(R.string.novel_reader_translation_cache_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 4.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun NovelReaderToolsPage(
+    onShowMarkings: () -> Unit,
+    onBookmark: () -> Unit,
     onTts: () -> Unit,
     replaceRulesEnabled: Boolean,
     onToggleReplaceRules: () -> Unit,
     onShowReplaceRules: () -> Unit,
+    onReset: () -> Unit,
 ) = NovelOptionsPageList {
     item {
         Text(
-            text = stringResource(R.string.novel_reader_tools_section),
+            text = stringResource(R.string.novel_reader_tab_tools),
             style = MaterialTheme.typography.titleMedium,
         )
     }
-    novelTranslationOptionsContent(settings, update, onToggleTranslation, onClearTranslationCache)
     item {
         ReaderOptionGroup {
-            Text(
-                text = stringResource(R.string.novel_reader_assistance_section),
-                style = MaterialTheme.typography.titleSmall,
+            NovelToolActionRow(
+                icon = R.drawable.ic_voice_input,
+                title = stringResource(R.string.tts_settings_title),
+                supporting = stringResource(R.string.novel_reader_tts_summary),
+                onClick = onTts,
             )
-            Spacer(Modifier.size(4.dp))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Action(R.drawable.ic_voice_input, R.string.tts_settings_title, onTts)
-                Action(R.drawable.ic_replace, R.string.replace_rule_effective_title, onShowReplaceRules)
-            }
+            ReaderOptionDivider()
+            NovelToolActionRow(
+                icon = R.drawable.ic_replace,
+                title = stringResource(R.string.replace_rule_effective_title),
+                supporting = stringResource(R.string.novel_reader_replace_summary),
+                onClick = onShowReplaceRules,
+            )
             ReaderOptionDivider()
             ReaderOptionSwitchRow(
                 label = stringResource(R.string.replace_rule_book_toggle),
                 checked = replaceRulesEnabled,
                 onCheckedChange = { onToggleReplaceRules() },
+            )
+            ReaderOptionDivider()
+            NovelToolActionRow(
+                icon = R.drawable.ic_bookmark,
+                title = stringResource(R.string.novel_reader_bookmarks_notes),
+                supporting = stringResource(R.string.novel_reader_bookmarks_notes_summary),
+                onClick = onShowMarkings,
+            )
+            ReaderOptionDivider()
+            NovelToolActionRow(
+                icon = R.drawable.ic_bookmark_added,
+                title = stringResource(R.string.novel_reader_bookmark_current),
+                supporting = stringResource(R.string.bookmark_add),
+                onClick = onBookmark,
+            )
+        }
+    }
+    item {
+        ReaderOptionGroup {
+            NovelToolActionRow(
+                icon = R.drawable.ic_backup_restore,
+                title = stringResource(R.string.novel_reset),
+                supporting = stringResource(R.string.novel_reader_reset_confirm),
+                onClick = onReset,
+            )
+        }
+    }
+}
+
+@Composable
+private fun NovelReaderSliderRow(
+    label: String,
+    valueLabel: String,
+    value: Float,
+    valueRange: ClosedFloatingPointRange<Float>,
+    enabled: Boolean,
+    onValueChange: (Float) -> Unit,
+    icon: Int? = null,
+) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            icon?.let {
+                Icon(
+                    painter = painterResource(it),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(end = 8.dp).size(20.dp),
+                )
+            }
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                text = valueLabel,
+                style = MaterialTheme.typography.labelLarge,
+                color = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Slider(
+            value = value.coerceIn(valueRange),
+            onValueChange = onValueChange,
+            valueRange = valueRange,
+            enabled = enabled,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}
+
+@Composable
+private fun NovelToolActionRow(
+    icon: Int,
+    title: String,
+    supporting: String,
+    onClick: () -> Unit,
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(14.dp),
+        color = Color.Transparent,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+        ) {
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.62f),
+                modifier = Modifier.size(36.dp),
+            ) {
+                Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                    Icon(
+                        painter = painterResource(icon),
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+            }
+            Column(
+                verticalArrangement = Arrangement.spacedBy(1.dp),
+                modifier = Modifier.weight(1f).padding(horizontal = 12.dp),
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Text(
+                    text = supporting,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                )
+            }
+            Icon(
+                painter = painterResource(R.drawable.ic_arrow_forward),
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp),
             )
         }
     }
@@ -304,8 +568,9 @@ private fun androidx.compose.foundation.lazy.LazyListScope.novelReadingOptionsCo
             options = listOf(stringResource(R.string.novel_mode_paged), stringResource(R.string.novel_mode_scroll)),
             selectedIndex = if (settings.readingMode == ReadingMode.PAGED) 0 else 1,
             onSelected = { update { copy(readingMode = if (it == 0) ReadingMode.PAGED else ReadingMode.SCROLL) } },
-            iconOnly = true,
             icon = { NovelReadingModeIcon(it) },
+            stackedTitle = true,
+            verticalOptions = true,
         )
     }
     if (settings.readingMode == ReadingMode.PAGED) {
@@ -315,102 +580,15 @@ private fun androidx.compose.foundation.lazy.LazyListScope.novelReadingOptionsCo
                 options = NovelPageTurnAnimation.entries.map { stringResource(it.label) },
                 selectedIndex = NovelPageTurnAnimation.entries.indexOf(settings.pageTurnAnimation),
                 onSelected = { update { copy(pageTurnAnimation = NovelPageTurnAnimation.entries[it]) } },
-                iconOnly = true,
                 icon = { NovelPageAnimationIcon(NovelPageTurnAnimation.entries[it]) },
+                stackedTitle = true,
+                verticalOptions = true,
             )
         }
     }
     item {
         ReaderOptionGroup {
-            NovelSwitchRows(settings, update)
-        }
-    }
-}
-
-private fun androidx.compose.foundation.lazy.LazyListScope.novelAppearanceOptionsContent(
-    settings: NovelReaderSettings,
-    update: (NovelReaderSettings.() -> NovelReaderSettings) -> Unit,
-    onEditSlider: (SliderEditor) -> Unit,
-) {
-    item {
-        NovelReaderFontOptionRow(
-            selected = settings.font,
-            onSelected = { update { copy(font = it) } },
-        )
-    }
-    item {
-        ReaderSegmentedChoice(
-            title = stringResource(R.string.novel_theme_preset),
-            options = NovelReaderThemePreset.entries.map { stringResource(it.label) },
-            selectedIndex = NovelReaderThemePreset.entries.indexOf(settings.themePreset),
-            onSelected = { update { copy(themePreset = NovelReaderThemePreset.entries[it]) } },
-            iconOnly = true,
-            icon = { NovelThemeSwatch(NovelReaderThemePreset.entries[it]) },
-        )
-    }
-    item {
-        ReaderOptionGroup {
-            NovelTypographyRows(settings, update, onEditSlider)
-        }
-    }
-}
-
-private fun androidx.compose.foundation.lazy.LazyListScope.novelTranslationOptionsContent(
-    settings: NovelReaderSettings,
-    update: (NovelReaderSettings.() -> NovelReaderSettings) -> Unit,
-    onToggleTranslation: () -> Unit,
-    onClearTranslationCache: () -> Unit,
-) {
-    item {
-        ReaderSegmentedChoice(
-            title = stringResource(R.string.novel_translation_display_mode),
-            options = listOf(
-                stringResource(R.string.novel_translation_only),
-                stringResource(R.string.novel_translation_bilingual),
-            ),
-            selectedIndex = if (settings.translationDisplayMode == NovelTranslationDisplayMode.TRANSLATION_ONLY) 0 else 1,
-            onSelected = {
-                update {
-                    copy(
-                        translationDisplayMode = if (it == 0) {
-                            NovelTranslationDisplayMode.TRANSLATION_ONLY
-                        } else {
-                            NovelTranslationDisplayMode.BILINGUAL
-                        },
-                    )
-                }
-            },
-        )
-    }
-    item {
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Action(R.drawable.ic_translate, R.string.reader_translation_action, onToggleTranslation)
-            Action(R.drawable.ic_delete, R.string.clear_translation_cache, onClearTranslationCache)
-        }
-    }
-}
-
-@Composable
-private fun NovelReaderPageActionsPage(
-    settings: NovelReaderSettings,
-    update: (NovelReaderSettings.() -> NovelReaderSettings) -> Unit,
-    onReset: () -> Unit,
-) = NovelOptionsPageList {
-    item {
-        Text(
-            text = stringResource(R.string.novel_reader_page_section),
-            style = MaterialTheme.typography.titleMedium,
-        )
-    }
-    novelReadingOptionsContent(settings, update)
-    item {
-        ReaderOptionGroup {
-            Text(
-                text = stringResource(R.string.novel_reader_page_reset_section),
-                style = MaterialTheme.typography.titleSmall,
-            )
-            Spacer(Modifier.size(4.dp))
-            Action(R.drawable.ic_backup_restore, R.string.novel_reset, onReset)
+            NovelSwitchRows(settings, update, includeParagraphIndent = false)
         }
     }
 }
@@ -425,7 +603,6 @@ private fun NovelOptionsPageList(content: androidx.compose.foundation.lazy.LazyL
     )
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun ComposeNovelReaderOptionsPanel(
     settings: NovelReaderSettings,
@@ -499,6 +676,7 @@ private fun NovelSwitchRows(
     settings: NovelReaderSettings,
     update: (NovelReaderSettings.() -> NovelReaderSettings) -> Unit,
     includeTransparentStatusBar: Boolean = true,
+    includeParagraphIndent: Boolean = true,
 ) {
     ReaderOptionSwitchRow(
         label = stringResource(R.string.novel_dual_page_mode),
@@ -531,12 +709,14 @@ private fun NovelSwitchRows(
             onCheckedChange = { update { copy(isReadingStatusTransparent = it) } },
         )
     }
-    ReaderOptionDivider()
-    ReaderOptionSwitchRow(
-        label = stringResource(R.string.novel_first_line_indent),
-        checked = settings.enableParagraphIndent,
-        onCheckedChange = { update { copy(enableParagraphIndent = it) } },
-    )
+    if (includeParagraphIndent) {
+        ReaderOptionDivider()
+        ReaderOptionSwitchRow(
+            label = stringResource(R.string.novel_first_line_indent),
+            checked = settings.enableParagraphIndent,
+            onCheckedChange = { update { copy(enableParagraphIndent = it) } },
+        )
+    }
 }
 
 @Composable

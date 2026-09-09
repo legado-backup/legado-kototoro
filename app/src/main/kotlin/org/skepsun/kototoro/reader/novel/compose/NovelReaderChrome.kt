@@ -92,6 +92,7 @@ internal data class NovelReaderChromeCallbacks(
     val onNextChapter: () -> Unit = {},
     val onSettingsChanged: (NovelReaderSettings) -> Unit = {},
     val onChapterSelected: (Int) -> Unit = {},
+    val onSearchResultSelected: (NovelMarkingTarget) -> Unit = {},
     val onDismissSettings: () -> Unit = {},
     val onDismissChapters: () -> Unit = {},
     val onDismissTools: () -> Unit = {},
@@ -476,11 +477,14 @@ internal fun NovelReaderBottomChrome(
         ComposeNovelChaptersSheet(
             chapters = state.chapters,
             currentIndex = state.currentChapterIndex,
+            searchDocuments = state.continuousChapters,
             markings = state.novelMarkings,
             bookmarks = state.novelBookmarks,
             initialTab = state.chaptersSheetInitialTab,
+            themePreset = state.settings?.themePreset ?: NovelReaderThemePreset.PAPER,
             onDismiss = callbacks.onDismissChapters,
             onChapterSelected = callbacks.onChapterSelected,
+            onSearchResultSelected = callbacks.onSearchResultSelected,
             onJumpToMarking = callbacks.onJumpToMarking,
             onOpenBookmark = callbacks.onOpenBookmark,
             onEditMarkingNote = callbacks.onEditMarkingNote,
@@ -504,6 +508,7 @@ internal fun NovelReaderBottomChrome(
             markings = state.novelMarkings,
             chapters = state.chapters,
             bookTitle = state.workTitle,
+            themePreset = state.settings?.themePreset ?: NovelReaderThemePreset.PAPER,
             onDismiss = callbacks.onDismissMarkings,
             onEditNote = callbacks.onEditMarkingNote,
             onDelete = callbacks.onDeleteMarking,
@@ -522,14 +527,10 @@ internal fun NovelReaderBottomChrome(
                 replaceRulesEnabled = state.replaceRulesEnabled,
                 onToggleReplaceRules = callbacks.onToggleReplaceRules,
                 onShowReplaceRules = callbacks.onShowReplaceRules,
+                onShowMarkings = callbacks.onShowMarkings,
+                onBookmark = callbacks.onBookmark,
                 onTts = callbacks.onTts,
                 onClearTranslationCache = callbacks.onClearTranslationCache,
-                workTitle = state.workTitle,
-                chapterTitle = state.chapterTitle,
-                progressLabel = state.progressLabel,
-                progressFraction = state.progressMax.takeIf { it > 0f }?.let {
-                    (state.progressValue / it).coerceIn(0f, 1f)
-                },
             )
         }
     }

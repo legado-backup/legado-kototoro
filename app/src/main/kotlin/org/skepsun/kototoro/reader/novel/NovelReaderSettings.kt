@@ -29,6 +29,8 @@ data class NovelReaderSettings(
     val chapterTitleAtBottom: Boolean = false,
     val isReadingStatusTransparent: Boolean = true,
     val enableParagraphIndent: Boolean = true, // 段首缩进两个全角空格
+    /** Screen brightness override; null keeps the system brightness. */
+    val screenBrightness: Float? = null,
     val isTranslationEnabled: Boolean = false,
     val translationDisplayMode: NovelTranslationDisplayMode = NovelTranslationDisplayMode.TRANSLATION_ONLY,
 ) {
@@ -66,6 +68,7 @@ data class NovelReaderSettings(
                 MARGIN_RANGE.last,
                 MARGIN_STEP,
             ),
+            screenBrightness = screenBrightness?.coerceIn(SCREEN_BRIGHTNESS_RANGE),
         )
     }
 
@@ -89,6 +92,11 @@ data class NovelReaderSettings(
             putBoolean(KEY_CHAPTER_TITLE_AT_BOTTOM, normalized.chapterTitleAtBottom)
             putBoolean(KEY_READING_STATUS_TRANSPARENT, normalized.isReadingStatusTransparent)
             putBoolean(KEY_PARAGRAPH_INDENT, normalized.enableParagraphIndent)
+            if (normalized.screenBrightness == null) {
+                remove(KEY_SCREEN_BRIGHTNESS)
+            } else {
+                putFloat(KEY_SCREEN_BRIGHTNESS, normalized.screenBrightness)
+            }
             remove(KEY_TRANSLATION_ENABLED)
             putString(KEY_TRANSLATION_DISPLAY_MODE, normalized.translationDisplayMode.name)
         }
@@ -106,6 +114,7 @@ data class NovelReaderSettings(
         val LINE_SPACING_RANGE = 1.2f..2.0f
         val PARAGRAPH_SPACING_RANGE = 0f..3f
         val MARGIN_RANGE = 12..120
+        val SCREEN_BRIGHTNESS_RANGE = 0.1f..1f
 
         private const val PREF_NAME = "novel_reader_settings"
         private const val KEY_FONT_SIZE = "font_size"
@@ -125,6 +134,7 @@ data class NovelReaderSettings(
         private const val KEY_CHAPTER_TITLE_AT_BOTTOM = "chapter_title_at_bottom"
         private const val KEY_READING_STATUS_TRANSPARENT = "reading_status_transparent"
         private const val KEY_PARAGRAPH_INDENT = "paragraph_indent"
+        private const val KEY_SCREEN_BRIGHTNESS = "screen_brightness"
         private const val KEY_TRANSLATION_ENABLED = "translation_enabled"
         private const val KEY_TRANSLATION_DISPLAY_MODE = "translation_display_mode"
 
@@ -175,6 +185,8 @@ data class NovelReaderSettings(
                 ),
                 isReadingStatusTransparent = prefs.getBoolean(KEY_READING_STATUS_TRANSPARENT, true),
                 enableParagraphIndent = prefs.getBoolean(KEY_PARAGRAPH_INDENT, true),
+                screenBrightness = prefs.getSafeFloat(KEY_SCREEN_BRIGHTNESS, -1f)
+                    .takeIf { it >= 0f },
                 isTranslationEnabled = false,
                 translationDisplayMode = runCatching {
                     NovelTranslationDisplayMode.valueOf(

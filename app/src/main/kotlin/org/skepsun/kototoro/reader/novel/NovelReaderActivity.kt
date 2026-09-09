@@ -504,6 +504,7 @@ class NovelReaderActivity :
         setupComposeContent()
 
         applyReaderPalette()
+        applyReaderBrightness(readerSettings)
 
         applyReadingModeToggles()
 
@@ -586,6 +587,7 @@ class NovelReaderActivity :
                 composeReaderViewModel.dismissChapters()
                 onChapterSelected(index)
             },
+            onSearchResultSelected = ::jumpToNovelSearchResult,
             onDismissSettings = composeReaderViewModel::dismissSettings,
             onDismissChapters = composeReaderViewModel::dismissChapters,
             onDismissTools = composeReaderViewModel::dismissTools,
@@ -653,6 +655,7 @@ class NovelReaderActivity :
                             onToggleTranslation = ::toggleTranslation,
                             onToggleReplaceRules = ::toggleReplaceRules,
                             onShowReplaceRules = composeReaderViewModel::showReplaceRules,
+                            onShowMarkings = composeReaderViewModel::showMarkings,
                             onDismissReplaceRules = composeReaderViewModel::dismissReplaceRules,
                             onReplaceRuleToggle = ::toggleReplaceRule,
                             onDismissMarkings = composeReaderViewModel::dismissMarkings,
@@ -662,6 +665,7 @@ class NovelReaderActivity :
                             onTts = ::onTtsClick,
                             onClearTranslationCache = ::onClearTranslationCacheClick,
                             onChapterSelected = ::onChapterSelected,
+                            onSearchResultSelected = ::jumpToNovelSearchResult,
                             onTtsPrevious = { ttsService?.seekPrev() },
                             onTtsPlayPause = ::onTtsPlayPauseClicked,
                             onTtsNext = { ttsService?.seekNext() },
@@ -1670,6 +1674,29 @@ class NovelReaderActivity :
         composeReaderViewModel.jumpToMarking(target)
         if (chapterIndex != currentChapterIndex) {
             currentChapterIndex = chapterIndex
+            loadChapter(chapterIndex)
+        }
+    }
+
+    /**
+     * 章节面板搜索结果点击：跳转到章节内命中偏移处而非章节首页。
+     * 复用标记跳转管线（pendingMarkingTarget + 临时高亮）。
+     */
+    private fun jumpToNovelSearchResult(
+        target: org.skepsun.kototoro.reader.novel.compose.NovelMarkingTarget,
+    ) {
+        composeReaderViewModel.dismissChapters()
+        val chapterIndex = chapters.indexOfFirst { it.id == target.chapterId }
+            .takeIf { it >= 0 } ?: target.chapterIndex
+        if (chapterIndex !in chapters.indices) return
+        val resolved = target.copy(
+            chapterId = chapters[chapterIndex].id,
+            chapterIndex = chapterIndex,
+        )
+        composeReaderViewModel.jumpToMarking(resolved)
+        if (chapterIndex != currentChapterIndex) {
+            currentChapterIndex = chapterIndex
+            currentPageIndex = 0
             loadChapter(chapterIndex)
         }
     }
@@ -3639,6 +3666,7 @@ class NovelReaderActivity :
             runOnUiThread {
                 try {
                     applyReaderPalette()
+                    applyReaderBrightness(settings)
                     applyReadingModeToggles()
 
                     updateDualPageMode()
@@ -3852,6 +3880,13 @@ class NovelReaderActivity :
 
         updateToolbarFloatingStyle(isToolbarFloating)
         updateSystemBarsColors()
+    }
+
+    private fun applyReaderBrightness(settings: NovelReaderSettings) {
+        val attributes = window.attributes
+        attributes.screenBrightness = settings.screenBrightness
+            ?: android.view.WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+        window.attributes = attributes
     }
 
     private fun applyInfoBarColorScheme() {

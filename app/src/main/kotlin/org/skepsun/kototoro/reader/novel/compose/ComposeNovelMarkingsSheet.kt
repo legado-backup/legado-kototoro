@@ -3,6 +3,7 @@ package org.skepsun.kototoro.reader.novel.compose
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,9 +23,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -44,6 +43,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
@@ -55,6 +55,8 @@ import androidx.compose.ui.unit.sp
 import org.skepsun.kototoro.R
 import org.skepsun.kototoro.bookmarks.domain.Bookmark
 import org.skepsun.kototoro.parsers.model.ContentChapter
+import org.skepsun.kototoro.reader.novel.NovelReaderThemePreset
+import org.skepsun.kototoro.reader.novel.novelReaderPalette
 import org.skepsun.kototoro.reader.novel.annotation.NovelMarkingColor
 import org.skepsun.kototoro.reader.novel.annotation.NovelMarkingEntity
 import java.text.SimpleDateFormat
@@ -75,6 +77,7 @@ internal fun ComposeNovelMarkingsSheet(
     markings: List<NovelMarkingEntity>,
     chapters: List<ContentChapter> = emptyList(),
     bookTitle: String = "",
+    themePreset: NovelReaderThemePreset = NovelReaderThemePreset.PAPER,
     onDismiss: () -> Unit,
     onEditNote: (NovelMarkingEntity) -> Unit,
     onDelete: (NovelMarkingEntity) -> Unit,
@@ -82,23 +85,46 @@ internal fun ComposeNovelMarkingsSheet(
     onOpenBookmark: (Bookmark) -> Unit = {},
     onJumpToMarking: (NovelMarkingEntity) -> Unit = {},
 ) {
+    val palette = novelReaderPalette(themePreset, isSystemInDarkTheme())
+    val sheetColor = Color(palette.backgroundColor)
+    val sheetContentColor = Color(palette.textColor)
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         modifier = Modifier.fillMaxHeight(0.92f),
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        containerColor = sheetColor,
+        contentColor = sheetContentColor,
+        scrimColor = Color.Black.copy(alpha = if (palette.isDark) 0.58f else 0.42f),
+        tonalElevation = 0.dp,
     ) {
-        ComposeNovelNotesContent(
-            bookmarks = bookmarks,
-            markings = markings,
-            chapters = chapters,
-            bookTitle = bookTitle,
-            onDismiss = onDismiss,
-            onJumpToMarking = onJumpToMarking,
-            onOpenBookmark = onOpenBookmark,
-            onEditNote = onEditNote,
-            onDelete = onDelete,
-            onDeleteBookmark = onDeleteBookmark,
-            showTitle = true,
+        val readerColors = MaterialTheme.colorScheme.copy(
+            primary = Color(palette.chromeTextColor),
+            onPrimary = sheetColor,
+            primaryContainer = Color(palette.placeholderColor),
+            onPrimaryContainer = Color(palette.textColor),
+            secondaryContainer = Color(palette.highlightColor),
+            onSecondaryContainer = Color(palette.textColor),
+            background = sheetColor,
+            surface = sheetColor,
+            surfaceVariant = Color(palette.placeholderColor),
+            onSurface = sheetContentColor,
+            onSurfaceVariant = Color(palette.secondaryTextColor),
         )
+        MaterialTheme(colorScheme = readerColors) {
+            ComposeNovelNotesContent(
+                bookmarks = bookmarks,
+                markings = markings,
+                chapters = chapters,
+                bookTitle = bookTitle,
+                onDismiss = onDismiss,
+                onJumpToMarking = onJumpToMarking,
+                onOpenBookmark = onOpenBookmark,
+                onEditNote = onEditNote,
+                onDelete = onDelete,
+                onDeleteBookmark = onDeleteBookmark,
+                showTitle = true,
+            )
+        }
     }
 }
 
@@ -244,23 +270,12 @@ internal fun ComposeNovelNotesContent(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.fillMaxWidth(),
         ) {
-            OutlinedTextField(
+            NovelReaderSearchField(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
                 modifier = Modifier.weight(1f),
-                placeholder = { Text(stringResource(R.string.novel_reader_notes_search_hint)) },
-                leadingIcon = {
-                    Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(20.dp))
-                },
-                trailingIcon = {
-                    if (searchQuery.isNotEmpty()) {
-                        IconButton(onClick = { searchQuery = "" }) {
-                            Icon(Icons.Default.Clear, contentDescription = stringResource(R.string.clear), modifier = Modifier.size(18.dp))
-                        }
-                    }
-                },
-                singleLine = true,
-                shape = RoundedCornerShape(14.dp),
+                placeholder = stringResource(R.string.novel_reader_notes_search_hint),
+                clearContentDescription = stringResource(R.string.clear),
             )
             IconButton(onClick = { sortByChapter = !sortByChapter }) {
                 Icon(

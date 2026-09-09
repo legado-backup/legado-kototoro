@@ -1,5 +1,6 @@
 package org.skepsun.kototoro.reader.ui.compose.design
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -139,76 +140,174 @@ fun ReaderSegmentedChoice(
     title: String? = null,
     icon: (@Composable (Int) -> Unit)? = null,
     iconOnly: Boolean = false,
+    stackedTitle: Boolean = false,
+    verticalOptions: Boolean = false,
 ) {
     Surface(
         shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        color = if (stackedTitle) {
+            androidx.compose.ui.graphics.Color.Transparent
+        } else {
+            MaterialTheme.colorScheme.surfaceContainerLow
+        },
         modifier = modifier.fillMaxWidth(),
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(3.dp),
-        ) {
-            if (title != null) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f).padding(horizontal = 9.dp),
+        if (stackedTitle) {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier.padding(4.dp),
+            ) {
+                if (title != null) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 3.dp),
+                    )
+                }
+                ReaderSegmentedChoiceOptions(
+                    options = options,
+                    selectedIndex = selectedIndex,
+                    onSelected = onSelected,
+                    icon = icon,
+                    iconOnly = iconOnly,
+                    vertical = verticalOptions,
+                    equalWidth = true,
                 )
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                options.indices.forEach { index ->
-                    val selected = index == selectedIndex
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = if (selected) {
-                            MaterialTheme.colorScheme.primaryContainer
+        } else {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(3.dp),
+            ) {
+                if (title != null) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f).padding(horizontal = 9.dp),
+                    )
+                }
+                ReaderSegmentedChoiceOptions(
+                    options = options,
+                    selectedIndex = selectedIndex,
+                    onSelected = onSelected,
+                    icon = icon,
+                    iconOnly = iconOnly,
+                    vertical = verticalOptions,
+                    equalWidth = false,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReaderSegmentedChoiceOptions(
+    options: List<String>,
+    selectedIndex: Int,
+    onSelected: (Int) -> Unit,
+    icon: (@Composable (Int) -> Unit)?,
+    iconOnly: Boolean,
+    vertical: Boolean,
+    equalWidth: Boolean,
+) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+        modifier = if (equalWidth) Modifier.fillMaxWidth() else Modifier,
+    ) {
+        options.indices.forEach { index ->
+            val selected = index == selectedIndex
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = if (selected) {
+                    MaterialTheme.colorScheme.primaryContainer
+                } else if (equalWidth) {
+                    MaterialTheme.colorScheme.surfaceContainerLow
+                } else {
+                    androidx.compose.ui.graphics.Color.Transparent
+                },
+                contentColor = if (selected) {
+                    MaterialTheme.colorScheme.onPrimaryContainer
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+                border = if (equalWidth) {
+                    BorderStroke(
+                        1.dp,
+                        if (selected) {
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.85f)
                         } else {
-                            androidx.compose.ui.graphics.Color.Transparent
+                            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.72f)
                         },
-                        contentColor = if (selected) {
-                            MaterialTheme.colorScheme.onPrimaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                        modifier = Modifier
-                            .heightIn(min = 36.dp)
-                            .selectable(
-                                selected = selected,
-                                role = Role.RadioButton,
-                                onClick = { onSelected(index) },
-                            )
-                            .semantics { contentDescription = options[index] },
+                    )
+                } else {
+                    null
+                },
+                modifier = Modifier
+                    .then(if (equalWidth) Modifier.weight(1f) else Modifier)
+                    .heightIn(min = if (vertical) 64.dp else 36.dp)
+                    .selectable(
+                        selected = selected,
+                        role = Role.RadioButton,
+                        onClick = { onSelected(index) },
+                    )
+                    .semantics { contentDescription = options[index] },
+            ) {
+                if (vertical) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(3.dp),
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 7.dp),
                     ) {
-                        Row(
-                            horizontalArrangement = Arrangement.Center,
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(
-                                horizontal = if (iconOnly) 9.dp else 8.dp,
-                                vertical = 5.dp,
-                            ),
-                        ) {
-                            if (icon != null) {
-                                Box(
-                                    contentAlignment = Alignment.Center,
-                                    modifier = Modifier.size(20.dp),
-                                ) {
-                                    icon(index)
-                                }
+                        if (icon != null) {
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier.size(20.dp),
+                            ) {
+                                icon(index)
                             }
-                            if (!iconOnly) {
-                                Text(
-                                    text = options[index],
-                                    style = MaterialTheme.typography.labelLarge,
-                                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = if (icon == null) Modifier else Modifier.padding(start = 6.dp),
-                                )
+                        }
+                        if (!iconOnly) {
+                            Text(
+                                text = options[index],
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                } else {
+                    Row(
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(
+                            horizontal = if (iconOnly) 9.dp else 8.dp,
+                            vertical = 5.dp,
+                        ),
+                    ) {
+                        if (icon != null) {
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier.size(20.dp),
+                            ) {
+                                icon(index)
                             }
+                        }
+                        if (!iconOnly) {
+                            Text(
+                                text = options[index],
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = if (icon == null) Modifier else Modifier.padding(start = 6.dp),
+                            )
                         }
                     }
                 }
