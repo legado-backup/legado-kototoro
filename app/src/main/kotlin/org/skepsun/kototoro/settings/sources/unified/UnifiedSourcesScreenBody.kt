@@ -139,30 +139,6 @@ fun UnifiedSourcesScreen(
     val selectedNsfwCount = remember(readyState?.sources, activeSelectedSourceIds) {
         readyState?.sources.orEmpty().count { it.id in activeSelectedSourceIds && it.isNsfw }
     }
-    val packagesById = remember(readyState?.allPackages) {
-        readyState?.allPackages.orEmpty().associateBy { it.id }
-    }
-    val repositoryOptions = remember(
-        selectedTab,
-        readyState?.allRepositories,
-        readyState?.allPackages,
-        readyState?.allSources,
-        readyState?.filters?.repositoryId,
-    ) {
-        val allRepositories = readyState?.allRepositories.orEmpty()
-        val referencedRepositoryIds = when (selectedTab) {
-            UNIFIED_SOURCES_TAB_SOURCES -> readyState?.allSources
-                .orEmpty()
-                .mapNotNullTo(LinkedHashSet()) { it.effectiveRepositoryId(packagesById) }
-            UNIFIED_SOURCES_TAB_PACKAGES -> readyState?.allPackages
-                .orEmpty()
-                .mapNotNullTo(LinkedHashSet()) { it.repositoryId }
-            else -> emptySet()
-        }
-        allRepositories
-            .filter { it.id in referencedRepositoryIds || it.id == readyState?.filters?.repositoryId }
-            .sortedWith(compareBy({ it.name.lowercase() }, { it.id }))
-    }
     LaunchedEffect(activeSelectedSourceIds) {
         if (selectedSourceIds != activeSelectedSourceIds) {
             onSourceSelectionChange(activeSelectedSourceIds)
@@ -246,12 +222,14 @@ fun UnifiedSourcesScreen(
                             },
                         )
                     }
-                    if (selectedTab == UNIFIED_SOURCES_TAB_REPOSITORIES) {
-                        UnifiedRepositoriesKindFilterRow(
-                            state = readyState,
-                            onKindClick = onKindClick,
-                        )
-                    }
+                    UnifiedSourcesContextualFilterTabs(
+                        tab = selectedTab,
+                        state = readyState,
+                        onContentTypeClick = onContentTypeClick,
+                        onKindClick = onKindClick,
+                        onRepositoryFilterClick = onRepositoryFilterClick,
+                        onPackageStatusClick = onPackageStatusClick,
+                    )
                 }
             }
         },
@@ -305,15 +283,6 @@ fun UnifiedSourcesScreen(
                                     modifier = Modifier.fillMaxSize(),
                                     listState = sourceListState,
                                     sources = state.sources,
-                                    repositories = repositoryOptions,
-                                    selectedRepositoryId = state.filters.repositoryId,
-                                    onRepositoryFilterClick = onRepositoryFilterClick,
-                                    availableContentTypes = state.availableContentTypes,
-                                    selectedContentTypes = state.filters.contentTypes,
-                                    onContentTypeClick = onContentTypeClick,
-                                    availableKinds = state.availableKinds,
-                                    selectedKinds = state.filters.kinds,
-                                    onKindClick = onKindClick,
                                     onBrowseSource = onBrowseSource,
                                     onOpenSourceSettings = onOpenSourceSettings,
                                     onSourceEnabledChange = onSourceEnabledChange,
@@ -335,15 +304,6 @@ fun UnifiedSourcesScreen(
                                     modifier = Modifier.fillMaxSize(),
                                     listState = packageListState,
                                     packages = state.packages,
-                                    repositories = repositoryOptions,
-                                    selectedRepositoryId = state.filters.repositoryId,
-                                    onRepositoryFilterClick = onRepositoryFilterClick,
-                                    packageStatusFilter = state.filters.packageStatusFilter,
-                                    packageUpdateCount = state.packageUpdateCount,
-                                    onPackageStatusClick = onPackageStatusClick,
-                                    availableKinds = state.availableKinds,
-                                    selectedKinds = state.filters.kinds,
-                                    onKindClick = onKindClick,
                                     recommendedPackages = state.recommendedPackages,
                                     missingSourcesWithoutMatch = state.missingSourcesWithoutMatch,
                                     suggestedRepositoriesForMissing = state.suggestedRepositoriesForMissing,
@@ -366,53 +326,189 @@ fun UnifiedSourcesScreen(
 }
 
 @Composable
-private fun UnifiedRepositoriesKindFilterRow(
+private fun UnifiedSourcesContextualFilterTabs(
+    tab: Int,
     state: UnifiedSourcesUiState.Ready,
+    onContentTypeClick: (ContentType?) -> Unit,
     onKindClick: (UnifiedSourceKind?) -> Unit,
+    onRepositoryFilterClick: (String?) -> Unit,
+    onPackageStatusClick: (UnifiedPackageStatusFilter) -> Unit,
 ) {
-    LazyRow(
-        modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        contentPadding = PaddingValues(horizontal = 1.dp),
-    ) {
-        item(key = "repo_kind_all") {
-            CompactFilterChip(
-                selected = state.filters.kinds.isEmpty(),
-                onClick = { onKindClick(null) },
-                text = stringResource(R.string.all_sources),
-            )
+    val packagesById = remember(state.allPackages) { state.allPackages.associateBy { it.id } }
+    val repositoryOptions = remember(tab, state.allRepositories, state.allPackages, state.allSources) {
+        val referencedRepositoryIds = when (tab) {
+            UNIFIED_SOURCES_TAB_SOURCES -> state.allSources
+                .mapNotNullTo(LinkedHashSet()) { it.effectiveRepositoryId(packagesById) }
+            UNIFIED_SOURCES_TAB_PACKAGES -> state.allPackages
+                .mapNotNullTo(LinkedHashSet()) { it.repositoryId }
+            else -> emptySet()
         }
-        items(state.availableKinds, key = { it.name }) { kind ->
-            CompactFilterChip(
-                selected = kind in state.filters.kinds,
-                onClick = { onKindClick(kind) },
-                text = kind.displayLabel(),
-            )
+        state.allRepositories
+            .filter { it.id in referencedRepositoryIds || it.id == state.filters.repositoryId }
+            .sortedWith(compareBy({ it.name.lowercase() }, { it.id }))
+    }
+    Column(
+        modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        when (tab) {
+            UNIFIED_SOURCES_TAB_SOURCES -> {
+                if (repositoryOptions.isNotEmpty()) {
+                    UnifiedRepositoryFilterDropdown(
+                        repositories = repositoryOptions,
+                        selectedRepositoryId = state.filters.repositoryId,
+                        onRepositorySelected = onRepositoryFilterClick,
+                    )
+                }
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    contentPadding = PaddingValues(horizontal = 1.dp),
+                ) {
+                    item(key = "content_all") {
+                        CompactFilterChip(
+                            selected = state.filters.contentTypes.isEmpty(),
+                            onClick = { onContentTypeClick(null) },
+                            text = stringResource(R.string.all_content),
+                        )
+                    }
+                    items(state.availableContentTypes, key = { it.name }) { type ->
+                        CompactFilterChip(
+                            selected = type in state.filters.contentTypes,
+                            onClick = { onContentTypeClick(type) },
+                            text = stringResource(type.titleResId),
+                        )
+                    }
+                }
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    contentPadding = PaddingValues(horizontal = 1.dp),
+                ) {
+                    item(key = "kind_all") {
+                        CompactFilterChip(
+                            selected = state.filters.kinds.isEmpty(),
+                            onClick = { onKindClick(null) },
+                            text = stringResource(R.string.all_sources),
+                        )
+                    }
+                    items(state.availableKinds, key = { it.name }) { kind ->
+                        CompactFilterChip(
+                            selected = kind in state.filters.kinds,
+                            onClick = { onKindClick(kind) },
+                            text = kind.displayLabel(),
+                        )
+                    }
+                }
+            }
+            UNIFIED_SOURCES_TAB_REPOSITORIES -> {
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    contentPadding = PaddingValues(horizontal = 1.dp),
+                ) {
+                    item(key = "repo_kind_all") {
+                        CompactFilterChip(
+                            selected = state.filters.kinds.isEmpty(),
+                            onClick = { onKindClick(null) },
+                            text = stringResource(R.string.all_sources),
+                        )
+                    }
+                    items(state.availableKinds, key = { it.name }) { kind ->
+                        CompactFilterChip(
+                            selected = kind in state.filters.kinds,
+                            onClick = { onKindClick(kind) },
+                            text = kind.displayLabel(),
+                        )
+                    }
+                }
+            }
+            UNIFIED_SOURCES_TAB_PACKAGES -> {
+                if (repositoryOptions.isNotEmpty()) {
+                    UnifiedRepositoryFilterDropdown(
+                        repositories = repositoryOptions,
+                        selectedRepositoryId = state.filters.repositoryId,
+                        onRepositorySelected = onRepositoryFilterClick,
+                    )
+                }
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    contentPadding = PaddingValues(horizontal = 1.dp),
+                ) {
+                    item(key = "package_status_all") {
+                        CompactFilterChip(
+                            selected = state.filters.packageStatusFilter == UnifiedPackageStatusFilter.ALL,
+                            onClick = { onPackageStatusClick(UnifiedPackageStatusFilter.ALL) },
+                            text = stringResource(R.string.all),
+                        )
+                    }
+                    item(key = "package_status_updates") {
+                        val label = if (state.packageUpdateCount > 0) {
+                            "${stringResource(R.string.package_filter_updates)} (${state.packageUpdateCount})"
+                        } else {
+                            stringResource(R.string.package_filter_updates)
+                        }
+                        CompactFilterChip(
+                            selected = state.filters.packageStatusFilter == UnifiedPackageStatusFilter.UPDATE_AVAILABLE,
+                            onClick = { onPackageStatusClick(UnifiedPackageStatusFilter.UPDATE_AVAILABLE) },
+                            text = label,
+                        )
+                    }
+                    item(key = "package_status_installed") {
+                        CompactFilterChip(
+                            selected = state.filters.packageStatusFilter == UnifiedPackageStatusFilter.INSTALLED,
+                            onClick = { onPackageStatusClick(UnifiedPackageStatusFilter.INSTALLED) },
+                            text = stringResource(R.string.package_filter_installed),
+                        )
+                    }
+                    item(key = "package_status_not_installed") {
+                        CompactFilterChip(
+                            selected = state.filters.packageStatusFilter == UnifiedPackageStatusFilter.NOT_INSTALLED,
+                            onClick = { onPackageStatusClick(UnifiedPackageStatusFilter.NOT_INSTALLED) },
+                            text = stringResource(R.string.package_filter_available),
+                        )
+                    }
+                }
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    contentPadding = PaddingValues(horizontal = 1.dp),
+                ) {
+                    item(key = "pkg_kind_all") {
+                        CompactFilterChip(
+                            selected = state.filters.kinds.isEmpty(),
+                            onClick = { onKindClick(null) },
+                            text = stringResource(R.string.all_sources),
+                        )
+                    }
+                    items(state.availableKinds, key = { it.name }) { kind ->
+                        CompactFilterChip(
+                            selected = kind in state.filters.kinds,
+                            onClick = { onKindClick(kind) },
+                            text = kind.displayLabel(),
+                        )
+                    }
+                }
+            }
         }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun <T> UnifiedFilterDropdown(
-    selected: Boolean,
-    currentLabel: String,
-    options: List<UnifiedFilterOption<T>>,
-    isOptionSelected: (T) -> Boolean,
-    onOptionSelected: (T) -> Unit,
-    modifier: Modifier = Modifier,
+private fun UnifiedRepositoryFilterDropdown(
+    repositories: List<UnifiedSourceRepositoryItem>,
+    selectedRepositoryId: String?,
+    onRepositorySelected: (String?) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
     val style = rememberUnifiedSourcesVisualStyle()
-    Box(modifier = modifier) {
+    val selectedRepository = repositories.firstOrNull { it.id == selectedRepositoryId }
+
+    androidx.compose.foundation.layout.Box {
         FilterChip(
-            selected = selected,
+            selected = selectedRepository != null,
             onClick = { expanded = true },
             shape = style.chipShape,
-            modifier = Modifier.defaultMinSize(minHeight = unifiedActionButtonHeight),
             label = {
                 Text(
-                    text = currentLabel,
+                    text = selectedRepository?.name ?: stringResource(R.string.repository_source),
                     style = MaterialTheme.typography.labelSmall,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -422,7 +518,7 @@ internal fun <T> UnifiedFilterDropdown(
                 Icon(
                     painter = painterResource(R.drawable.ic_expand_more),
                     contentDescription = null,
-                    modifier = Modifier.size(16.dp),
+                    modifier = Modifier.size(18.dp),
                 )
             },
         )
@@ -430,21 +526,37 @@ internal fun <T> UnifiedFilterDropdown(
             expanded = expanded,
             onDismissRequest = { expanded = false },
         ) {
-            options.forEach { option ->
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.all)) },
+                onClick = {
+                    expanded = false
+                    onRepositorySelected(null)
+                },
+                leadingIcon = {
+                    if (selectedRepositoryId == null) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_check),
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                },
+            )
+            repositories.forEach { repository ->
                 DropdownMenuItem(
                     text = {
                         Text(
-                            text = option.label,
+                            text = repository.name,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
                     },
                     onClick = {
-                        onOptionSelected(option.value)
                         expanded = false
+                        onRepositorySelected(repository.id)
                     },
                     leadingIcon = {
-                        if (isOptionSelected(option.value)) {
+                        if (repository.id == selectedRepositoryId) {
                             Icon(
                                 painter = painterResource(R.drawable.ic_check),
                                 contentDescription = null,
@@ -456,111 +568,6 @@ internal fun <T> UnifiedFilterDropdown(
             }
         }
     }
-}
-
-internal data class UnifiedFilterOption<T>(
-    val value: T,
-    val label: String,
-)
-
-@Composable
-internal fun UnifiedRepositoryFilterDropdown(
-    repositories: List<UnifiedSourceRepositoryItem>,
-    selectedRepositoryId: String?,
-    onRepositorySelected: (String?) -> Unit,
-) {
-    val selectedRepository = repositories.firstOrNull { it.id == selectedRepositoryId }
-    val options = buildList {
-        add(UnifiedFilterOption<String?>(null, stringResource(R.string.all)))
-        repositories.forEach { repository ->
-            add(UnifiedFilterOption<String?>(repository.id, repository.name))
-        }
-    }
-    UnifiedFilterDropdown(
-        selected = selectedRepository != null,
-        currentLabel = selectedRepository?.name ?: stringResource(R.string.repository_source),
-        options = options,
-        isOptionSelected = { it == selectedRepositoryId },
-        onOptionSelected = onRepositorySelected,
-    )
-}
-
-@Composable
-internal fun UnifiedContentTypeFilterDropdown(
-    availableContentTypes: List<ContentType>,
-    selectedContentTypes: Set<ContentType>,
-    onContentTypeSelected: (ContentType?) -> Unit,
-) {
-    val allLabel = stringResource(R.string.all_content)
-    val selectedContentType = selectedContentTypes.firstOrNull()
-    val options = buildList {
-        add(UnifiedFilterOption<ContentType?>(null, allLabel))
-        availableContentTypes.forEach { type ->
-            add(UnifiedFilterOption<ContentType?>(type, stringResource(type.titleResId)))
-        }
-    }
-    UnifiedFilterDropdown(
-        selected = selectedContentType != null,
-        currentLabel = selectedContentType?.let { stringResource(it.titleResId) } ?: allLabel,
-        options = options,
-        isOptionSelected = { it == selectedContentType },
-        onOptionSelected = onContentTypeSelected,
-    )
-}
-
-@Composable
-internal fun UnifiedKindFilterDropdown(
-    availableKinds: List<UnifiedSourceKind>,
-    selectedKinds: Set<UnifiedSourceKind>,
-    onKindSelected: (UnifiedSourceKind?) -> Unit,
-) {
-    val allLabel = stringResource(R.string.all_sources)
-    val selectedKind = selectedKinds.firstOrNull()
-    val options = buildList {
-        add(UnifiedFilterOption<UnifiedSourceKind?>(null, allLabel))
-        availableKinds.forEach { kind ->
-            add(UnifiedFilterOption<UnifiedSourceKind?>(kind, kind.displayLabel()))
-        }
-    }
-    UnifiedFilterDropdown(
-        selected = selectedKind != null,
-        currentLabel = selectedKind?.displayLabel() ?: allLabel,
-        options = options,
-        isOptionSelected = { it == selectedKind },
-        onOptionSelected = onKindSelected,
-    )
-}
-
-@Composable
-internal fun UnifiedPackageStatusFilterDropdown(
-    selectedStatus: UnifiedPackageStatusFilter,
-    updateAvailableCount: Int,
-    onPackageStatusSelected: (UnifiedPackageStatusFilter) -> Unit,
-) {
-    val updateLabel = if (updateAvailableCount > 0) {
-        "${stringResource(R.string.package_filter_updates)} ($updateAvailableCount)"
-    } else {
-        stringResource(R.string.package_filter_updates)
-    }
-    val options = buildList {
-        add(UnifiedFilterOption(UnifiedPackageStatusFilter.ALL, stringResource(R.string.all)))
-        add(UnifiedFilterOption(UnifiedPackageStatusFilter.UPDATE_AVAILABLE, updateLabel))
-        add(UnifiedFilterOption(UnifiedPackageStatusFilter.INSTALLED, stringResource(R.string.package_filter_installed)))
-        add(UnifiedFilterOption(UnifiedPackageStatusFilter.NOT_INSTALLED, stringResource(R.string.package_filter_available)))
-    }
-    val currentLabel = when (selectedStatus) {
-        UnifiedPackageStatusFilter.ALL -> stringResource(R.string.all)
-        UnifiedPackageStatusFilter.UPDATE_AVAILABLE -> updateLabel
-        UnifiedPackageStatusFilter.INSTALLED -> stringResource(R.string.package_filter_installed)
-        UnifiedPackageStatusFilter.NOT_INSTALLED -> stringResource(R.string.package_filter_available)
-    }
-    UnifiedFilterDropdown(
-        selected = selectedStatus != UnifiedPackageStatusFilter.ALL,
-        currentLabel = currentLabel,
-        options = options,
-        isOptionSelected = { it == selectedStatus },
-        onOptionSelected = onPackageStatusSelected,
-    )
 }
 
 @Composable
@@ -593,7 +600,7 @@ internal fun CompactFilterChip(
     FilterChip(
         selected = selected,
         onClick = onClick,
-        modifier = modifier.defaultMinSize(minHeight = unifiedActionButtonHeight),
+        modifier = modifier.defaultMinSize(minHeight = 30.dp),
         shape = style.chipShape,
         label = {
             Text(

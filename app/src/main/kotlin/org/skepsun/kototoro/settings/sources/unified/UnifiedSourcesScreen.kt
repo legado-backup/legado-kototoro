@@ -47,7 +47,6 @@ internal const val UNIFIED_SOURCES_TAB_COUNT = 3
 internal val unifiedCardListPadding = PaddingValues(start = SettingsContentHorizontalPadding, top = 8.dp, end = SettingsContentHorizontalPadding, bottom = 8.dp)
 internal val unifiedCardContentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
 internal val unifiedCardSpacing = 8.dp
-internal val unifiedActionButtonHeight = 32.dp
 
 internal data class UnifiedSourcesVisualStyle(
     val chipShape: RoundedCornerShape,

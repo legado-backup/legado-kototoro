@@ -86,7 +86,6 @@ import org.skepsun.kototoro.core.ui.compose.rememberSafePainter
 import org.skepsun.kototoro.core.ui.theme.LocalMaterialExpressiveComponentsEnabled
 import org.skepsun.kototoro.ireader.model.IReaderMangaSource
 import org.skepsun.kototoro.mihon.model.MihonMangaSource
-import org.skepsun.kototoro.parsers.model.ContentType
 import org.skepsun.kototoro.settings.compose.SettingsContentHorizontalPadding
 
 private object PackageIconMemoryCache {
@@ -159,15 +158,6 @@ internal fun UnifiedSourceList(
     modifier: Modifier = Modifier,
     listState: LazyListState,
     sources: List<UnifiedSourceItem>,
-    repositories: List<UnifiedSourceRepositoryItem>,
-    selectedRepositoryId: String?,
-    onRepositoryFilterClick: (String?) -> Unit,
-    availableContentTypes: List<ContentType>,
-    selectedContentTypes: Set<ContentType>,
-    onContentTypeClick: (ContentType?) -> Unit,
-    availableKinds: List<UnifiedSourceKind>,
-    selectedKinds: Set<UnifiedSourceKind>,
-    onKindClick: (UnifiedSourceKind?) -> Unit,
     onBrowseSource: (UnifiedSourceItem) -> Unit,
     onOpenSourceSettings: (UnifiedSourceItem) -> Unit,
     onSourceEnabledChange: (String, Boolean) -> Unit,
@@ -218,33 +208,6 @@ internal fun UnifiedSourceList(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     contentPadding = PaddingValues(start = actionsStartPadding),
                 ) {
-                    if (repositories.isNotEmpty()) {
-                        item(key = "repository_filter") {
-                            UnifiedRepositoryFilterDropdown(
-                                repositories = repositories,
-                                selectedRepositoryId = selectedRepositoryId,
-                                onRepositorySelected = onRepositoryFilterClick,
-                            )
-                        }
-                    }
-                    if (availableContentTypes.isNotEmpty()) {
-                        item(key = "content_type_filter") {
-                            UnifiedContentTypeFilterDropdown(
-                                availableContentTypes = availableContentTypes,
-                                selectedContentTypes = selectedContentTypes,
-                                onContentTypeSelected = onContentTypeClick,
-                            )
-                        }
-                    }
-                    if (availableKinds.isNotEmpty()) {
-                        item(key = "kind_filter") {
-                            UnifiedKindFilterDropdown(
-                                availableKinds = availableKinds,
-                                selectedKinds = selectedKinds,
-                                onKindSelected = onKindClick,
-                            )
-                        }
-                    }
                     item(key = "enable_all_sources") {
                         CompactActionChip(
                             onClick = onEnableAllSources,
@@ -1002,15 +965,6 @@ internal fun UnifiedPackageList(
     modifier: Modifier = Modifier,
     listState: LazyListState,
     packages: List<UnifiedSourcePackageItem>,
-    repositories: List<UnifiedSourceRepositoryItem>,
-    selectedRepositoryId: String?,
-    onRepositoryFilterClick: (String?) -> Unit,
-    packageStatusFilter: UnifiedPackageStatusFilter,
-    packageUpdateCount: Int,
-    onPackageStatusClick: (UnifiedPackageStatusFilter) -> Unit,
-    availableKinds: List<UnifiedSourceKind>,
-    selectedKinds: Set<UnifiedSourceKind>,
-    onKindClick: (UnifiedSourceKind?) -> Unit,
     recommendedPackages: List<RecommendedPackageItem> = emptyList(),
     missingSourcesWithoutMatch: List<MissingSourceHint> = emptyList(),
     suggestedRepositoriesForMissing: List<UnifiedRecommendedRepository> = emptyList(),
@@ -1137,31 +1091,6 @@ internal fun UnifiedPackageList(
                         .padding(bottom = 4.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    if (repositories.isNotEmpty()) {
-                        item(key = "repository_filter") {
-                            UnifiedRepositoryFilterDropdown(
-                                repositories = repositories,
-                                selectedRepositoryId = selectedRepositoryId,
-                                onRepositorySelected = onRepositoryFilterClick,
-                            )
-                        }
-                    }
-                    item(key = "package_status_filter") {
-                        UnifiedPackageStatusFilterDropdown(
-                            selectedStatus = packageStatusFilter,
-                            updateAvailableCount = packageUpdateCount,
-                            onPackageStatusSelected = onPackageStatusClick,
-                        )
-                    }
-                    if (availableKinds.isNotEmpty()) {
-                        item(key = "kind_filter") {
-                            UnifiedKindFilterDropdown(
-                                availableKinds = availableKinds,
-                                selectedKinds = selectedKinds,
-                                onKindSelected = onKindClick,
-                            )
-                        }
-                    }
                     item(key = "update_all_packages") {
                         CompactActionChip(
                             onClick = onUpdateAllPackages,

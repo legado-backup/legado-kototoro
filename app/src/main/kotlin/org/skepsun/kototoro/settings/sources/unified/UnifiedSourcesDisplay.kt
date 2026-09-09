@@ -162,7 +162,7 @@ internal fun CompactActionChip(
     AssistChip(
         onClick = onClick,
         enabled = enabled,
-        modifier = modifier.defaultMinSize(minHeight = unifiedActionButtonHeight),
+        modifier = modifier.defaultMinSize(minHeight = 30.dp),
         label = {
             Box(modifier = Modifier.padding(horizontal = 2.dp)) {
                 label()
