@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -702,9 +703,12 @@ internal fun BookNoteCard(
                     )
                 }
 
-                GlassDropdownMenu(
+                DropdownMenu(
                     expanded = menuExpanded,
                     onDismissRequest = { menuExpanded = false },
+                    containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 1f),
+                    tonalElevation = 0.dp,
+                    shadowElevation = 3.dp,
                 ) {
                     if (item is BookNoteItem.NovelHighlight) {
                         DropdownMenuItem(
