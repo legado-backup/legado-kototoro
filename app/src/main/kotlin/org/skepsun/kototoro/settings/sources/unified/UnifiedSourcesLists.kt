@@ -1480,7 +1480,7 @@ private fun UnifiedPackageRow(
                     UnifiedSourcePackageState.UPDATE_AVAILABLE -> {
                         if (
                             item.kind.isSideloadKind() &&
-                            item.installLocation != UnifiedSourcePackageInstallLocation.LOCAL_APK
+                            item.installLocation == null
                         ) {
                             CompactActionChip(
                                 onClick = onSystemInstall,

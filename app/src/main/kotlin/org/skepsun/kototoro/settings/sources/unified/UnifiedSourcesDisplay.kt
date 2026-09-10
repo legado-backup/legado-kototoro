@@ -142,7 +142,8 @@ internal val UnifiedSourcePackageState.isWarning: Boolean
 
 @Composable
 internal fun UnifiedSourcePackageItem.primaryActionLabel(): String {
-    val isLocalApkAction = kind.isSideloadKind()
+    val isLocalApkAction = kind.isSideloadKind() &&
+        installLocation != UnifiedSourcePackageInstallLocation.SYSTEM
     return when (state) {
         UnifiedSourcePackageState.AVAILABLE -> stringResource(
             if (isLocalApkAction) R.string.sideload_extension else R.string.install_extension,
@@ -393,4 +394,3 @@ private val topBarContentTypes = linkedSetOf(
 private fun Set<ContentType>.primaryContentType(): ContentType? {
     return singleOrNull { it in topBarContentTypes }
 }
-

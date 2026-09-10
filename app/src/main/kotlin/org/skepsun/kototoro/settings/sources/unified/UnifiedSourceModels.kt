@@ -1,6 +1,7 @@
 package org.skepsun.kototoro.settings.sources.unified
 
 import org.skepsun.kototoro.extensions.repo.RepoAvailableExtension
+import org.skepsun.kototoro.extensions.install.ExtensionInstallMode
 import org.skepsun.kototoro.core.lnreader.LNReaderPluginInfo
 import org.skepsun.kototoro.parsers.model.ContentSource
 import org.skepsun.kototoro.parsers.model.ContentType
@@ -103,6 +104,14 @@ data class UnifiedSourcePackageItem(
     val activeSourceCount: Int = 0,
     val shadowedSourceCount: Int = 0,
 )
+
+internal fun UnifiedSourcePackageItem.preferredInstallMode(): ExtensionInstallMode {
+    return when (installLocation) {
+        UnifiedSourcePackageInstallLocation.SYSTEM -> ExtensionInstallMode.SYSTEM
+        UnifiedSourcePackageInstallLocation.LOCAL_APK,
+        null -> ExtensionInstallMode.LOCAL_APK
+    }
+}
 
 data class UnifiedJsonPackagePayload(
     val content: String,

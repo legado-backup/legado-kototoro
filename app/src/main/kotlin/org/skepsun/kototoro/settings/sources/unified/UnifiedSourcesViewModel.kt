@@ -446,7 +446,8 @@ class UnifiedSourcesViewModel @Inject constructor(
     }
 
     fun installPackage(packageId: String) {
-        installPackage(packageId, ExtensionInstallMode.LOCAL_APK)
+        val item = currentPackage(packageId) ?: return
+        installPackage(packageId, item.preferredInstallMode())
     }
 
     fun installPackage(packageId: String, mode: ExtensionInstallMode) {
@@ -1319,7 +1320,11 @@ class UnifiedSourcesViewModel @Inject constructor(
                     handleBatchNextAction(batchUpdateState.nextAction())
                     return
                 }
-                requestInstall(item, fromBatch = true)
+                requestInstall(
+                    item = item,
+                    fromBatch = true,
+                    mode = item.preferredInstallMode(),
+                )
             }
         }
     }
