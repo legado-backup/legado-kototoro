@@ -80,6 +80,7 @@ import org.skepsun.kototoro.dictionary.DictionaryActivity
 import org.skepsun.kototoro.core.ui.BaseComposeFullscreenActivity
 import org.skepsun.kototoro.core.ui.compose.LocalLiquidGlassBackdrop
 import org.skepsun.kototoro.core.ui.compose.LocalLiquidGlassLayerBackdrop
+import org.skepsun.kototoro.local.epub.buildEpubChapterUrl
 import org.skepsun.kototoro.core.prefs.InterfaceStyle
 import org.skepsun.kototoro.core.ui.theme.LocalInterfaceStyle
 import org.skepsun.kototoro.core.util.ext.getParcelableExtraCompat
@@ -3029,7 +3030,7 @@ class NovelReaderActivity :
                                 title = mapping.chapterTitle,  // 不添加卷名前缀，详情页已经分组
                                 number = chapter.number + mapping.chapterIndex,
                                 volume = chapter.volume,
-                                url = "${pages[0].url}#chapter/${mapping.chapterIndex}",
+                                url = buildEpubChapterUrl(mapping.epubFilePath, mapping.chapterIndex),
                                 scanlator = chapter.scanlator,
                                 uploadDate = mapping.createdAt,
                                 branch = chapter.branch,

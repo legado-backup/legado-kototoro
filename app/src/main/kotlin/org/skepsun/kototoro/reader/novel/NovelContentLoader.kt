@@ -203,10 +203,25 @@ class NovelContentLoader @Inject constructor(
         replaceRulesEnabled: Boolean,
         disabledReplaceRuleIds: Set<Long>,
     ): String? = withContext(Dispatchers.IO) {
-        val reference = parseEpubChapterReference(chapter.url) ?: return@withContext null
-        val epubFile = resolveEpubFile(appContext, reference.fileReference) ?: return@withContext null
+        val reference = parseEpubChapterReference(chapter.url)
+        val mapping = if (reference == null &&
+            (chapter.url.contains("#chapter/") || chapter.url.startsWith("epub://", ignoreCase = true))
+        ) {
+            mangaDatabase.getEpubChapterMappingDao().getById(chapter.id)
+        } else {
+            null
+        }
+        val epubFile = mapping?.epubFilePath
+            ?.let { resolveEpubFile(appContext, it) }
+            ?.takeIf(File::exists)
+            ?: reference?.fileReference
+                ?.let { resolveEpubFile(appContext, it) }
+            ?.takeIf(File::exists)
+            ?: return@withContext null
+        val chapterIndex = resolveEpubChapterIndex(chapter.url, mapping?.chapterIndex)
+            ?: return@withContext null
         val parser = org.skepsun.kototoro.local.epub.LocalEpubParser(epubFile, epubContentCache)
-        parser.getChapterContent(reference.chapterIndex)?.let { html ->
+        parser.getChapterContent(chapterIndex)?.let { html ->
             processChapterText(htmlToPlainText(html), chapter, scopeName, replaceRulesEnabled, disabledReplaceRuleIds)
         }
     }
@@ -666,8 +681,10 @@ class NovelContentLoader @Inject constructor(
             // Sort mappings by parentChapterId and chapterIndex to match LocalEpubSource ordering
             val sortedMappings = allMappings.sortedWith(compareBy({ it.parentChapterId }, { it.chapterIndex }))
 
-            // Find mapping by global index (the index in the URL corresponds to the position in sorted list)
-            val mapping = sortedMappings.getOrNull(chapterIndex)
+            // Prefer the chapter ID mapping. It remains correct for URLs created
+            // before the switch from global indices to per-file chapter indices.
+            val mapping = epubChapterMappingDao.findByInternalChapterId(mangaId, chapter.id)
+                ?: sortedMappings.getOrNull(chapterIndex)
                 ?: throw IllegalStateException("EPUB chapter mapping not found for manga $mangaId, index $chapterIndex (total mappings: ${sortedMappings.size})")
 
             android.util.Log.d("NovelContentLoader", "Found EPUB file: ${mapping.epubFilePath}")

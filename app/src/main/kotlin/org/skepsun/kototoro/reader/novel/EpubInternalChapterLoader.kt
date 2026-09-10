@@ -5,16 +5,22 @@ import android.net.Uri
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.skepsun.kototoro.core.db.dao.EpubChapterMappingDao
+import org.skepsun.kototoro.core.db.entity.EpubChapterMappingEntity
 import org.skepsun.kototoro.local.epub.EpubContent
 import org.skepsun.kototoro.local.epub.EpubContentCache
 import org.skepsun.kototoro.local.epub.EpubError
 import org.skepsun.kototoro.local.epub.EpubErrorHandler
 import org.skepsun.kototoro.local.epub.EpubFileManager
 import org.skepsun.kototoro.local.epub.EpubReaderImpl
+import org.skepsun.kototoro.local.epub.parseEpubChapterIndex
 import org.skepsun.kototoro.local.epub.parseEpubChapterReference
 import org.skepsun.kototoro.local.epub.resolveEpubFile
 import org.skepsun.kototoro.parsers.model.ContentChapter
 import java.io.File
+
+internal fun resolveEpubChapterIndex(url: String, mappedChapterIndex: Int?): Int? {
+    return mappedChapterIndex?.takeIf { it >= 0 } ?: parseEpubChapterIndex(url)
+}
 
 /**
  * Result of loading an EPUB internal chapter
@@ -29,7 +35,7 @@ data class EpubChapterLoadResult(
  * Handles loading of EPUB internal chapters.
  *
  * Responsibilities:
- * - Extract chapter index from URL
+ * - Resolve chapter index from persisted mapping or URL
  * - Locate EPUB file using parent chapter ID
  * - Read specific chapter at extracted index
  * - Handle errors for missing files
@@ -53,22 +59,27 @@ class EpubInternalChapterLoader(
     /**
      * Loads an EPUB internal chapter.
      *
-     * @param chapter The chapter to load (must have URL format: ...#chapter/N)
+     * @param chapter The chapter to load. Persisted mappings may supply the file and index
+     * even when the URL still contains the original remote EPUB address.
      * @return Result containing the chapter content, EPUB file, and chapter path
      *
      * Performance: Runs on IO dispatcher (Requirement 11.3)
      */
     suspend fun loadEpubInternalChapter(chapter: ContentChapter): Result<EpubChapterLoadResult> = withContext(Dispatchers.IO) {
         try {
-            // Extract chapter index from URL (Requirement 6.4)
-            val chapterIndex = extractChapterIndexFromUrl(chapter.url)
+            // Prefer the persisted mapping. Download sources may keep the original
+            // remote URL, while the EPUB itself has already been saved locally.
+            val mapping = epubChapterMappingDao.getById(chapter.id)
+
+            // Extract chapter index from the mapping or URL (Requirement 6.4)
+            val chapterIndex = resolveEpubChapterIndex(chapter.url, mapping?.chapterIndex)
             if (chapterIndex == null) {
                 val error = EpubError.ChapterLoadError.InvalidUrl(chapter.url)
                 return@withContext EpubErrorHandler.createFailure(error, "loadEpubInternalChapter")
             }
 
             // Locate EPUB file using parent chapter ID (Requirement 6.5)
-            val epubFile = findEpubFileForChapter(chapter)
+            val epubFile = findEpubFileForChapter(chapter, mapping)
             if (epubFile == null) {
                 val error = EpubError.ChapterLoadError.ChapterNotFound(chapter.id)
                 return@withContext EpubErrorHandler.createFailure(error, "loadEpubInternalChapter")
@@ -118,17 +129,6 @@ class EpubInternalChapterLoader(
     }
 
     /**
-     * Extracts chapter index from URL fragment.
-     * URL format: file:///path/to/file.epub#chapter/N
-     *
-     * @param url The chapter URL
-     * @return The chapter index, or null if extraction fails
-     */
-    private fun extractChapterIndexFromUrl(url: String): Int? {
-        return parseEpubChapterReference(url)?.chapterIndex
-    }
-
-    /**
      * Finds the EPUB file for a given chapter.
      *
      * Strategy:
@@ -139,11 +139,14 @@ class EpubInternalChapterLoader(
      * @param chapter The chapter
      * @return The EPUB file, or null if not found
      */
-    private suspend fun findEpubFileForChapter(chapter: ContentChapter): File? {
+    private suspend fun findEpubFileForChapter(
+        chapter: ContentChapter,
+        mapping: EpubChapterMappingEntity? = null,
+    ): File? {
         // Strategy 1: Look up in database mapping
-        val mapping = epubChapterMappingDao.getById(chapter.id)
-        if (mapping != null) {
-            val file = resolveEpubFile(context, mapping.epubFilePath)
+        val persistedMapping = mapping ?: epubChapterMappingDao.getById(chapter.id)
+        if (persistedMapping != null) {
+            val file = resolveEpubFile(context, persistedMapping.epubFilePath)
             if (file?.exists() == true) {
                 return file
             }

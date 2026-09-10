@@ -33,6 +33,7 @@ import org.skepsun.kototoro.details.data.ContentDetails
 import org.skepsun.kototoro.explore.domain.RecoverContentUseCase
 import org.skepsun.kototoro.local.data.LocalMangaRepository
 import org.skepsun.kototoro.local.domain.model.LocalContent
+import org.skepsun.kototoro.local.epub.buildEpubChapterUrl
 import org.skepsun.kototoro.parsers.exception.NotFoundException
 import org.skepsun.kototoro.parsers.model.Content
 import org.skepsun.kototoro.parsers.util.nullIfEmpty
@@ -422,11 +423,11 @@ class DetailsLoadUseCase @Inject constructor(
                             title = mapping.chapterTitle,
                             number = mapping.chapterIndex.toFloat(),
                             volume = chapter.volume,  // 保留父章节的volume
-                        url = "epub://${manga.id}/chapter/${mapping.chapterIndex}",
-                        scanlator = mapping.epubFileName,
-                        uploadDate = mapping.createdAt,
-                        branch = null,  // EPUB internal chapters have no branch
-                        source = LocalNovelSource,
+                            url = buildEpubChapterUrl(mapping.epubFilePath, mapping.chapterIndex),
+                            scanlator = mapping.epubFileName,
+                            uploadDate = mapping.createdAt,
+                            branch = null,  // EPUB internal chapters have no branch
+                            source = LocalNovelSource,
                         )
                     }
 

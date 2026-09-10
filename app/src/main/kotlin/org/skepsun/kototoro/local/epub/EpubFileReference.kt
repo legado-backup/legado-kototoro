@@ -11,20 +11,36 @@ internal data class EpubChapterReference(
     val chapterIndex: Int,
 )
 
-internal fun parseEpubChapterReference(url: String): EpubChapterReference? {
+internal fun parseEpubChapterIndex(url: String): Int? {
     val marker = "#chapter/"
     val markerIndex = url.lastIndexOf(marker)
     if (markerIndex <= 0) return null
-    val chapterIndex = url.substring(markerIndex + marker.length)
+    return url.substring(markerIndex + marker.length)
         .substringBefore('?')
         .substringBefore('#')
         .toIntOrNull()
         ?.takeIf { it >= 0 }
-        ?: return null
+}
+
+internal fun parseEpubChapterReference(url: String): EpubChapterReference? {
+    val marker = "#chapter/"
+    val markerIndex = url.lastIndexOf(marker)
+    if (markerIndex <= 0) return null
+    val chapterIndex = parseEpubChapterIndex(url) ?: return null
     val fileReference = url.substring(0, markerIndex)
     val scheme = fileReference.substringBefore(':', missingDelimiterValue = "").lowercase()
     if (scheme !in SUPPORTED_EPUB_SCHEMES) return null
     return EpubChapterReference(fileReference, chapterIndex)
+}
+
+internal fun buildEpubChapterUrl(fileReference: String, chapterIndex: Int): String {
+    require(chapterIndex >= 0) { "EPUB chapter index must not be negative" }
+    val normalizedFileReference = if (fileReference.substringBefore(':', missingDelimiterValue = "").isEmpty()) {
+        File(fileReference).toURI().toString()
+    } else {
+        fileReference
+    }
+    return "$normalizedFileReference#chapter/$chapterIndex"
 }
 
 internal fun resolveEpubFile(context: Context, reference: String): File? {
