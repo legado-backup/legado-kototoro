@@ -376,6 +376,7 @@ class SettingsSearchHelper @Inject constructor(
             "reader_chapter_title_bottom" to R.string.reader_chapter_title_at_bottom,
             "reader_background" to R.string.background,
             "pages_numbers" to R.string.show_pages_numbers,
+            "pages_save_manga_title_length" to R.string.page_save_manga_title_length,
             "pages_preload" to R.string.preload_pages,
             "reader_threads" to R.string.reader_threads,
             "reader_prefetch_limit" to R.string.prefetch_limit,

@@ -974,6 +974,29 @@ private fun ReaderMangaSettingsPage(
         }
     }
 
+    SettingsPreferenceGroup(
+        title = stringResource(R.string.pages_saving),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 20.dp),
+    ) {
+        item {
+            SettingsSliderPreference(
+                title = stringResource(R.string.page_save_manga_title_length),
+                summary = stringResource(R.string.page_save_manga_title_length_summary),
+                iconRes = R.drawable.ic_save,
+                value = settings.observeAsState(AppSettings.KEY_PAGES_SAVE_MANGA_TITLE_LENGTH) {
+                    settings.pagesSaveMangaTitleLength
+                }.value,
+                valueRange = AppSettings.PAGES_SAVE_MANGA_TITLE_LENGTH_MIN..
+                    AppSettings.PAGES_SAVE_MANGA_TITLE_LENGTH_MAX,
+                step = 4,
+                valueText = { it.toString() },
+                onValueChange = { settings.pagesSaveMangaTitleLength = it },
+            )
+        }
+    }
+
     SettingsCollapsiblePreferenceGroup(
         title = stringResource(R.string.reader_settings_group_performance),
         modifier = Modifier

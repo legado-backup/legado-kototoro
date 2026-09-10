@@ -78,7 +78,8 @@ class PageSaveHelper @AssistedInject constructor(
         val pageLoader = getPageLoader()
         val pageUrl = pageLoader.getPageUrl(task.page).toUri()
         val pageUri = pageLoader.loadPage(task.page, force = false)
-        val proposedName = task.getFileBaseName() + "." + getPageExtension(pageUrl, pageUri)
+        val proposedName = task.getFileBaseName(settings.pagesSaveMangaTitleLength) + "." +
+            getPageExtension(pageUrl, pageUri)
         val destination = File(checkNotNull(context.getExternalFilesDir(TEMP_DIR)), proposedName)
         copyImpl(pageUri, destination.toUri())
         return destination
@@ -89,7 +90,7 @@ class PageSaveHelper @AssistedInject constructor(
         val pageUrl = pageLoader.getPageUrl(task.page).toUri()
         val pageUri = pageLoader.loadPage(task.page, force = false)
         val outputFormat = getOutputFormat(pageUrl, pageUri)
-        val proposedName = task.getFileBaseName() + "." + outputFormat.extension
+        val proposedName = task.getFileBaseName(settings.pagesSaveMangaTitleLength) + "." + outputFormat.extension
         val tempSource = saveToTempFile(task)
         val tempOutput = createTempOutputFile(outputFormat.extension)
         val sourceBounds = getImageBounds(tempSource)
@@ -130,7 +131,7 @@ class PageSaveHelper @AssistedInject constructor(
         for (task in tasks) {
             val pageUrl = pageLoader.getPageUrl(task.page).toUri()
             val pageUri = pageLoader.loadPage(task.page, force = false)
-            val proposedName = task.getFileBaseName()
+            val proposedName = task.getFileBaseName(settings.pagesSaveMangaTitleLength)
             val ext = getPageExtension(pageUrl, pageUri)
             val mime = requireNotNull(MimeTypes.getMimeTypeFromExtension("_.$ext")) {
                 "Unknown type of $proposedName"
@@ -244,8 +245,8 @@ class PageSaveHelper @AssistedInject constructor(
         val page: ContentPage,
     ) {
 
-        fun getFileBaseName() = buildString {
-            append(manga.title.toFileNameSafe().take(MAX_BASENAME_LENGTH))
+        fun getFileBaseName(mangaTitleLength: Int) = buildString {
+            append(manga.title.toFileNameSafe().take(mangaTitleLength.coerceAtLeast(0)))
             manga.findChapterById(chapterId)?.let { chapter ->
                 append('-')
                 append(chapter.number)
@@ -265,7 +266,6 @@ class PageSaveHelper @AssistedInject constructor(
 
     private companion object {
 
-        private const val MAX_BASENAME_LENGTH = 12
         private const val CROP_QUALITY = 95
         private const val EXTENSION_FALLBACK = "png"
         private const val TEMP_DIR = "pages"

@@ -1901,6 +1901,18 @@ class AppSettings @Inject constructor(@ApplicationContext private val context: C
         get() = prefs.getSafeInt(KEY_READER_PREFETCH_LIMIT, 6)
         set(value) = prefs.edit { putInt(KEY_READER_PREFETCH_LIMIT, value.coerceIn(1, 20)) }
 
+    var pagesSaveMangaTitleLength: Int
+        get() = prefs.getSafeInt(
+            KEY_PAGES_SAVE_MANGA_TITLE_LENGTH,
+            DEFAULT_PAGES_SAVE_MANGA_TITLE_LENGTH,
+        ).coerceIn(PAGES_SAVE_MANGA_TITLE_LENGTH_MIN, PAGES_SAVE_MANGA_TITLE_LENGTH_MAX)
+        set(value) = prefs.edit {
+            putInt(
+                KEY_PAGES_SAVE_MANGA_TITLE_LENGTH,
+                value.coerceIn(PAGES_SAVE_MANGA_TITLE_LENGTH_MIN, PAGES_SAVE_MANGA_TITLE_LENGTH_MAX),
+            )
+        }
+
     var screenshotsPolicy: ScreenshotsPolicy
         get() = prefs.getEnumValue(KEY_SCREENSHOTS_POLICY, ScreenshotsPolicy.ALLOW)
         set(value) = prefs.edit { putEnumValue(KEY_SCREENSHOTS_POLICY, value) }
@@ -3210,6 +3222,10 @@ class AppSettings @Inject constructor(@ApplicationContext private val context: C
         const val KEY_READING_TIME = "reading_time"
         const val KEY_PAGES_SAVE_DIR = "pages_dir"
         const val KEY_PAGES_SAVE_ASK = "pages_dir_ask"
+        const val KEY_PAGES_SAVE_MANGA_TITLE_LENGTH = "pages_save_manga_title_length"
+        const val DEFAULT_PAGES_SAVE_MANGA_TITLE_LENGTH = 24
+        const val PAGES_SAVE_MANGA_TITLE_LENGTH_MIN = 12
+        const val PAGES_SAVE_MANGA_TITLE_LENGTH_MAX = 64
         const val KEY_STATS_ENABLED = "stats_on"
         const val KEY_FEED_HEADER = "feed_header"
         const val KEY_SHOW_ALL_UPDATES = "show_all_updates"

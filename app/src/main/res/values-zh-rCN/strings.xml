@@ -162,6 +162,8 @@
     <string name="remove">删除</string>
     <string name="_s_deleted_from_local_storage">已从本地存储中删除“%s”</string>
     <string name="save_page">保存图片</string>
+    <string name="page_save_manga_title_length">保存图片时的漫画名长度</string>
+    <string name="page_save_manga_title_length_summary">设置图片文件名中保留的漫画名字符数（12–64）</string>
     <string name="page_saved">保存成功</string>
     <string name="share_image">分享图片</string>
     <string name="_import">导入</string>

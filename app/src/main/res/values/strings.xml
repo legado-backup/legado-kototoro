@@ -115,6 +115,8 @@
     <string name="remove">Remove</string>
     <string name="_s_deleted_from_local_storage">\"%s\" deleted from local storage</string>
     <string name="save_page">Save page</string>
+    <string name="page_save_manga_title_length">Manga title length in saved filenames</string>
+    <string name="page_save_manga_title_length_summary">Number of manga title characters kept in saved image filenames (12–64)</string>
     <string name="page_saved">Page saved</string>
     <string name="pages_saved">Pages saved</string>
     <string name="share_image">Share image</string>
