@@ -24,11 +24,9 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import org.acra.ReportField
 import org.acra.config.dialog
-import org.acra.config.httpSender
 import org.acra.data.StringFormat
 import kotlinx.coroutines.withContext
 import org.acra.ktx.initAcra
-import org.acra.sender.HttpSender
 import org.conscrypt.Conscrypt
 import org.skepsun.kototoro.BuildConfig
 import org.skepsun.kototoro.R
@@ -38,6 +36,7 @@ import org.skepsun.kototoro.core.db.MangaDatabase
 import org.skepsun.kototoro.core.os.AppValidator
 import org.skepsun.kototoro.core.os.RomCompat
 import org.skepsun.kototoro.core.prefs.AppSettings
+import org.skepsun.kototoro.core.ui.dialog.CrashReportCopyDialog
 import org.skepsun.kototoro.core.util.ext.processLifecycleScope
 import org.skepsun.kototoro.local.data.LocalStorageChanges
 import org.skepsun.kototoro.local.data.index.LocalContentIndex
@@ -167,12 +166,6 @@ open class BaseApp : App(), Configuration.Provider, SingletonImageLoader.Factory
         initAcra {
             buildConfigClass = BuildConfig::class.java
             reportFormat = StringFormat.JSON
-            httpSender {
-                uri = getString(R.string.url_error_report)
-                basicAuthLogin = getString(R.string.acra_login)
-                basicAuthPassword = getString(R.string.acra_password)
-                httpMethod = HttpSender.Method.POST
-            }
             reportContent = listOf(
                 ReportField.PACKAGE_NAME,
                 ReportField.INSTALLATION_ID,
@@ -186,9 +179,10 @@ open class BaseApp : App(), Configuration.Provider, SingletonImageLoader.Factory
             )
 
             dialog {
-                text = getString(R.string.crash_text)
+                text = getString(R.string.crash_copy_text)
                 title = getString(R.string.error_occurred)
-                positiveButtonText = getString(R.string.send)
+                positiveButtonText = getString(R.string.copy)
+                reportDialogClass = CrashReportCopyDialog::class.java
                 resIcon = R.drawable.ic_alert_outline
                 resTheme = android.R.style.Theme_Material_Light_Dialog_Alert
             }

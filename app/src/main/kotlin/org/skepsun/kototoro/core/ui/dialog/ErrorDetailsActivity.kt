@@ -23,7 +23,6 @@ import org.skepsun.kototoro.core.util.ext.copyToClipboard
 import org.skepsun.kototoro.core.util.ext.getCauseUrl
 import org.skepsun.kototoro.core.util.ext.isHttpUrl
 import org.skepsun.kototoro.core.util.ext.isReportable
-import org.skepsun.kototoro.core.util.ext.report
 import java.io.Serializable
 import javax.inject.Inject
 
@@ -68,9 +67,9 @@ class ErrorDetailsActivity : BaseComposeActivity() {
                             finishAfterTransition()
                         }) { Text(getString(R.string.update)) }
                         exception.isReportable() -> TextButton(onClick = {
-                            exception.report(silent = true)
+                            copyToClipboard(getString(R.string.error), exception.stackTraceToString())
                             finishAfterTransition()
-                        }) { Text(getString(R.string.report)) }
+                        }) { Text(getString(R.string.copy)) }
                     }
                 },
                 dismissButton = {

@@ -404,6 +404,17 @@
 			android:exported="false"
 			android:label="@string/crash_log_detail" />
 		<activity
+			android:name="org.skepsun.kototoro.core.ui.dialog.CrashReportCopyDialog"
+			android:excludeFromRecents="true"
+			android:exported="false"
+			android:finishOnTaskLaunch="true"
+			android:launchMode="singleInstance"
+			android:process=":acra"
+			android:theme="@android:style/Theme.Dialog" />
+		<activity
+			android:name="org.acra.dialog.CrashReportDialog"
+			tools:node="remove" />
+		<activity
 			android:name="org.skepsun.kototoro.tracker.ui.debug.TrackerDebugActivity"
 			android:label="@string/tracker_debug_info" />
 		<activity

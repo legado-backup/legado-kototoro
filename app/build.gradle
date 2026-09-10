@@ -564,7 +564,6 @@ configurations.all {
 	implementation libs.djl.sentencepiece
 	implementation 'com.github.akari39:RealCUGAN-ncnn-Android:1.1'
 
-	implementation libs.acra.http
 	implementation libs.acra.dialog
 
 	implementation libs.conscrypt.android

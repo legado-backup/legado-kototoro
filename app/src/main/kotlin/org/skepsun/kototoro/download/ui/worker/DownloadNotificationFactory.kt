@@ -234,7 +234,7 @@ class DownloadNotificationFactory @AssistedInject constructor(
                         builder.addAction(
                             NotificationCompat.Action(
                                 0,
-                                context.getString(R.string.report),
+                                context.getString(R.string.copy),
                                 reportIntent,
                             ),
                         )

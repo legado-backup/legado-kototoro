@@ -662,6 +662,9 @@
     <string name="crash_logs_cleared">崩溃日志已清除</string>
     <string name="crash_logs_summary">查看和分享崩溃报告（无需 adb）</string>
     <string name="crash_text">出错了，请向开发人员提交错误报告以帮助修复问题。</string>
+    <string name="crash_copy_text">出错了，请点击“复制”将崩溃报告复制到剪贴板，然后发送给开发者。</string>
+    <string name="crash_report_copied">崩溃报告已复制到剪贴板。</string>
+    <string name="crash_report_copy_failed">无法复制崩溃报告。</string>
     <string name="create_backup">创建备份</string>
     <string name="create_category">添加分类</string>
     <string name="create_or_restore_backup">创建或恢复备份</string>
