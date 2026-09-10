@@ -66,6 +66,7 @@ pnpm-lock.yaml
 /skills-lock.json
 /.codex/agents/
 /.codex/config.toml
+/.codex/*.png
 
 # Trellis developer-local state
 /.trellis/
