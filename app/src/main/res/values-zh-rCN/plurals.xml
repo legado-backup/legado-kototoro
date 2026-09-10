@@ -6,6 +6,9 @@
     <plurals name="new_chapters">
         <item quantity="other">%1$d 个新章节</item>
     </plurals>
+    <plurals name="feed_timeline_updates">
+        <item quantity="other">%1$d 条更新</item>
+    </plurals>
     <plurals name="chapters">
         <item quantity="other">%1$d 个章节</item>
     </plurals>

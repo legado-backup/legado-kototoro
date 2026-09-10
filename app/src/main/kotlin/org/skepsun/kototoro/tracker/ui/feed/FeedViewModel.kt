@@ -344,8 +344,8 @@ class FeedViewModel @Inject constructor(
     ) { filters, _ -> filters }
         .combine(observeHeader()) { filters, header ->
             buildList<ListModel> {
-                quickFilter.filterItem(filters)?.let(::add)
                 header?.let(::add)
+                quickFilter.filterItem(filters)?.let(::add)
             }
         }
         .stateIn(viewModelScope + Dispatchers.Default, SharingStarted.Eagerly, emptyList())

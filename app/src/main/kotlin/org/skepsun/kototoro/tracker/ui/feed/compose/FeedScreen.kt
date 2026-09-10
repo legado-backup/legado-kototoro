@@ -1,5 +1,6 @@
 package org.skepsun.kototoro.tracker.ui.feed.compose
 
+import android.content.Context
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
@@ -11,13 +12,17 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.paging.LoadState
 import androidx.paging.compose.LazyPagingItems
@@ -44,9 +49,12 @@ import org.skepsun.kototoro.core.model.FavouriteCategory
 import org.skepsun.kototoro.core.prefs.AppSettings
 import org.skepsun.kototoro.core.prefs.ListMode
 import org.skepsun.kototoro.core.prefs.observeAsState
+import org.skepsun.kototoro.core.ui.compose.AppLayoutTokens
 import org.skepsun.kototoro.core.ui.compose.KototoroLoadingIndicator
 import org.skepsun.kototoro.core.ui.compose.KototoroPullToRefreshBox
 import org.skepsun.kototoro.core.ui.compose.ScrollToTopEffect
+import org.skepsun.kototoro.core.ui.compose.ScrollbarTimeline
+import org.skepsun.kototoro.core.ui.compose.ScrollbarTimelineSection
 import org.skepsun.kototoro.core.ui.compose.VerticalScrollbar
 import org.skepsun.kototoro.list.ui.RetainedPagingSnapshotHost
 import org.skepsun.kototoro.list.ui.compose.rememberRetainedPagingSnapshotState
@@ -107,8 +115,12 @@ fun FeedScreen(
     val listState = retainedState?.listState ?: rememberSaveable(saver = LazyListState.Saver) {
         LazyListState()
     }
+    val context = LocalContext.current
     val displayedItems = retainedState?.displayedItems ?: liveLeadingItems
     val displayedPagingItems = retainedState?.displayedPagingItems ?: livePagingItems
+    val feedTimeline = remember(displayedItems, context) {
+        buildFeedScrollbarTimeline(displayedItems, context)
+    }
     val pagingStatusItem: ListModel? = displayedPagingItems?.let { paging ->
         when {
             paging.itemCount == 0 && paging.loadState.refresh is LoadState.Loading -> LoadingState
@@ -123,7 +135,6 @@ fun FeedScreen(
     ScrollToTopEffect {
         listState.scrollToItem(0)
     }
-    val context = LocalContext.current
 
     val density = LocalDensity.current
     val settings = remember(context.applicationContext) { AppSettings(context.applicationContext) }
@@ -213,13 +224,21 @@ fun FeedScreen(
             modifier = Modifier.fillMaxSize()
         ) {
 
-            items(
+            itemsIndexed(
                 items = displayedItems,
-                key = ::feedItemKey,
-                contentType = ::feedItemContentType,
-            ) { item ->
+                key = { _, item -> feedItemKey(item) },
+                contentType = { _, item -> feedItemContentType(item) },
+            ) { index, item ->
+                val timelineLabel = if (item is FeedItem) {
+                    (displayedItems.getOrNull(index - 1) as? ListHeader)
+                        ?.getText(context)
+                        ?.toString()
+                } else {
+                    null
+                }
                 FeedListItemContent(
                     item = item,
+                    timelineLabel = timelineLabel,
                     carouselPrefs = carouselPrefs,
                     selectedItemIds = selectedItemIds,
                     showCategoryFilterInline = showCategoryFilterInline,
@@ -281,6 +300,7 @@ fun FeedScreen(
         VerticalScrollbar(
             state = listState,
             contentPadding = contentPadding,
+            timeline = feedTimeline.takeIf { it.sections.isNotEmpty() },
         )
     }
 }
@@ -304,9 +324,61 @@ private fun feedItemContentType(item: ListModel): Any = when (item) {
     else -> "feed_other"
 }
 
+private fun buildFeedScrollbarTimeline(
+    items: List<ListModel>,
+    context: Context,
+): ScrollbarTimeline {
+    val sections = buildList {
+        var pendingHeader: ListHeader? = null
+        var firstFeedItemIndex = -1
+        var feedItemCount = 0
+
+        fun flushSection() {
+            val header = pendingHeader
+            if (header != null && firstFeedItemIndex >= 0 && feedItemCount > 0) {
+                val dateLabel = header.getText(context)?.toString().orEmpty()
+                val countLabel = context.resources.getQuantityString(
+                    R.plurals.feed_timeline_updates,
+                    feedItemCount,
+                    feedItemCount,
+                )
+                add(
+                    ScrollbarTimelineSection(
+                        label = "$dateLabel · $countLabel",
+                        firstItemIndex = firstFeedItemIndex,
+                        itemCount = feedItemCount,
+                    ),
+                )
+            }
+            pendingHeader = null
+            firstFeedItemIndex = -1
+            feedItemCount = 0
+        }
+
+        items.forEachIndexed { index, item ->
+            when (item) {
+                is ListHeader -> {
+                    flushSection()
+                    pendingHeader = item
+                }
+                is FeedItem -> {
+                    if (pendingHeader != null) {
+                        if (firstFeedItemIndex < 0) firstFeedItemIndex = index
+                        feedItemCount++
+                    }
+                }
+                else -> Unit
+            }
+        }
+        flushSection()
+    }
+    return ScrollbarTimeline(sections)
+}
+
 @Composable
 private fun FeedListItemContent(
     item: ListModel,
+    timelineLabel: String? = null,
     carouselPrefs: UpdatedContentCarouselPrefs,
     selectedItemIds: Set<Long>,
     showCategoryFilterInline: Boolean,
@@ -319,16 +391,16 @@ private fun FeedListItemContent(
     onCaptureNavigationSnapshot: (ListModel) -> Unit,
     onRetry: () -> Unit,
 ) {
-    val context = LocalContext.current
     when (item) {
         is QuickFilter -> if (showCategoryFilterInline) {
-            org.skepsun.kototoro.list.ui.compose.QuickFilterSection(
+            FeedFilterSection(
                 quickFilter = item,
                 onQuickFilterOptionClick = onQuickFilterOptionClick,
             )
         }
         is FeedItem -> FeedItemCard(
             item = item,
+            timelineLabel = timelineLabel,
             isSelected = item.id in selectedItemIds,
             onClick = { coverBounds ->
                 onCaptureNavigationSnapshot(item)
@@ -350,17 +422,37 @@ private fun FeedListItemContent(
             },
             onMoreClick = { onUpdatedContentMoreClick(item) },
         )
-        is ListHeader -> Text(
-            text = item.getText(context)?.toString().orEmpty(),
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onBackground,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-        )
+        is ListHeader -> Unit
         LoadingState -> FeedLoadingState()
         is EmptyState -> FeedEmptyState(item)
         is ErrorState -> FeedErrorState(item = item, onRetry = onRetry)
+    }
+}
+
+@Composable
+private fun FeedFilterSection(
+    quickFilter: QuickFilter,
+    onQuickFilterOptionClick: (ListFilterOption) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(
+                horizontal = AppLayoutTokens.screenHorizontalPadding,
+                vertical = 4.dp,
+            ),
+        shape = RoundedCornerShape(24.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.82f),
+        border = BorderStroke(
+            width = 1.dp,
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.24f),
+        ),
+    ) {
+        org.skepsun.kototoro.list.ui.compose.QuickFilterSection(
+            quickFilter = quickFilter,
+            onQuickFilterOptionClick = onQuickFilterOptionClick,
+        )
     }
 }
 

@@ -29,6 +29,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.compositionLocalOf
@@ -59,6 +60,7 @@ import kotlinx.coroutines.delay
 import org.skepsun.kototoro.R
 import org.skepsun.kototoro.core.util.ext.getThemeColor
 import kotlin.math.abs
+import kotlin.math.ln
 import kotlin.math.min
 import kotlin.math.roundToInt
 
@@ -73,6 +75,23 @@ private val FastScrollInsetEnd = 2.dp
  */
 val LocalScrollbarActive = compositionLocalOf<MutableState<Boolean>> { mutableStateOf(false) }
 
+@Immutable
+data class ScrollbarTimelineSection(
+    val label: String,
+    val firstItemIndex: Int,
+    val itemCount: Int,
+)
+
+@Immutable
+data class ScrollbarTimeline(
+    val sections: List<ScrollbarTimelineSection>,
+)
+
+private data class ScrollbarTimelineMarker(
+    val position: Float,
+    val intensity: Float,
+)
+
 @Composable
 fun BoxScope.VerticalScrollbar(
     state: LazyListState,
@@ -85,8 +104,10 @@ fun BoxScope.VerticalScrollbar(
     alwaysVisible: Boolean = false,
     endInset: Dp = FastScrollInsetEnd,
     labelProvider: ((Int) -> String)? = null,
+    timeline: ScrollbarTimeline? = null,
 ) {
     val estimator = remember { ScrollbarSectionEstimator() }
+    val timelineEstimator = remember { TimelineScrollbarEstimator() }
     FastScrollbar(
         modifier = modifier,
         contentPadding = contentPadding,
@@ -97,14 +118,38 @@ fun BoxScope.VerticalScrollbar(
         alwaysVisible = alwaysVisible,
         endInset = endInset,
         labelProvider = labelProvider,
+        timelineLabelProvider = timeline?.let { currentTimeline ->
+            { fraction -> timelineEstimator.labelForFraction(fraction, currentTimeline) }
+        },
+        timelineSectionProvider = timeline?.let { currentTimeline ->
+            { fraction -> timelineEstimator.sectionForFraction(fraction, currentTimeline) }
+        },
+        timelineMarkerProvider = timeline?.let { currentTimeline ->
+            { timelineEstimator.markers(currentTimeline) }
+        },
         totalItemsCount = { state.layoutInfo.totalItemsCount },
         visibleItemsCount = { state.layoutInfo.visibleItemsInfo.size },
-        scrollFraction = { estimator.computeFraction(state.layoutInfo) },
+        scrollFraction = {
+            if (timeline == null) {
+                estimator.computeFraction(state.layoutInfo)
+            } else {
+                timelineEstimator.computeFraction(state.layoutInfo, timeline)
+            }
+        },
         isScrollInProgress = { state.isScrollInProgress },
         onFastScrollToFraction = { fraction ->
             val layoutInfo = state.layoutInfo
             val totalItems = layoutInfo.totalItemsCount
             if (totalItems <= 0) return@FastScrollbar
+            if (timeline != null) {
+                val (targetIndex, targetOffset) = timelineEstimator.findItemAndOffsetForFraction(
+                    fraction = fraction,
+                    layoutInfo = layoutInfo,
+                    timeline = timeline,
+                )
+                state.requestScrollToItem(targetIndex, targetOffset)
+                return@FastScrollbar
+            }
             if (fraction <= 0.001f) {
                 state.requestScrollToItem(0, 0)
                 return@FastScrollbar
@@ -143,6 +188,9 @@ fun BoxScope.VerticalScrollbar(
         alwaysVisible = alwaysVisible,
         endInset = endInset,
         labelProvider = labelProvider,
+        timelineLabelProvider = null,
+        timelineSectionProvider = null,
+        timelineMarkerProvider = null,
         totalItemsCount = { state.layoutInfo.totalItemsCount },
         visibleItemsCount = { state.layoutInfo.visibleItemsInfo.size },
         scrollFraction = { estimator.computeFraction(state) },
@@ -176,6 +224,9 @@ private fun BoxScope.FastScrollbar(
     alwaysVisible: Boolean,
     endInset: Dp,
     labelProvider: ((Int) -> String)?,
+    timelineLabelProvider: ((Float) -> String?)?,
+    timelineSectionProvider: ((Float) -> Int)?,
+    timelineMarkerProvider: (() -> List<ScrollbarTimelineMarker>)?,
     totalItemsCount: () -> Int,
     visibleItemsCount: () -> Int,
     scrollFraction: () -> Float,
@@ -280,7 +331,19 @@ private fun BoxScope.FastScrollbar(
                         onDragFraction = { fraction ->
                             dragFraction = fraction
                             onFastScrollToFraction(fraction)
-                            if (labelProvider != null) {
+                            if (timelineLabelProvider != null) {
+                                val sectionIndex = timelineSectionProvider?.invoke(fraction) ?: -1
+                                if (sectionIndex != lastBubbleIndex) {
+                                    if (lastBubbleIndex >= 0) {
+                                        rootView.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                                    }
+                                    lastBubbleIndex = sectionIndex
+                                }
+                                val newLabel = timelineLabelProvider(fraction)
+                                if (newLabel != bubbleText) {
+                                    bubbleText = newLabel
+                                }
+                            } else if (labelProvider != null) {
                                 val total = totalItemsCount()
                                 if (total > 0) {
                                     val targetIndex = (fraction * (total - 1)).roundToInt().coerceIn(0, total - 1)
@@ -315,6 +378,12 @@ private fun BoxScope.FastScrollbar(
             }
             val barHeightPx = handleHeightPx.coerceAtMost(trackHeightPx)
             val barTopPx = (trackHeightPx - barHeightPx) * currentScrollFraction.coerceIn(0f, 1f)
+            val timelineLabel = if (scrolling && !isDragging) {
+                timelineLabelProvider?.invoke(currentScrollFraction)
+            } else {
+                null
+            }
+            val visibleBubbleText = if (isDragging) bubbleText else timelineLabel
 
             Canvas(modifier = Modifier.fillMaxSize()) {
                 if (alpha <= 0f || !showScrollbar || totalItems <= 0 || visibleItems <= 0 || totalItems <= visibleItems) {
@@ -330,8 +399,21 @@ private fun BoxScope.FastScrollbar(
                         y = 0f,
                     ),
                     size = Size(trackWidthPx, size.height),
-                    cornerRadius = CornerRadius(trackWidthPx / 2f),
-                )
+                        cornerRadius = CornerRadius(trackWidthPx / 2f),
+                    )
+                timelineMarkerProvider?.invoke()?.forEach { marker ->
+                    val markerY = (size.height - barHeightPx) * marker.position + barHeightPx / 2f
+                    val markerRadius = (trackWidthPx * (0.55f + marker.intensity * 0.55f))
+                        .coerceIn(1.5f, 3.5f)
+                    drawCircle(
+                        color = handleColor.copy(alpha = 0.58f * alpha),
+                        radius = markerRadius,
+                        center = Offset(
+                            x = barLeft + handleWidthPx / 2f,
+                            y = markerY,
+                        ),
+                    )
+                }
                 drawRoundRect(
                     color = handleColor.copy(alpha = handleColor.alpha * alpha),
                     topLeft = Offset(barLeft, barTopPx),
@@ -340,9 +422,9 @@ private fun BoxScope.FastScrollbar(
                 )
             }
 
-            if (isDragging && !bubbleText.isNullOrEmpty() && alpha > 0f && showScrollbar) {
+            if ((isDragging || scrolling) && !visibleBubbleText.isNullOrEmpty() && alpha > 0f && showScrollbar) {
                 FastScrollBubble(
-                    text = bubbleText.orEmpty(),
+                    text = visibleBubbleText.orEmpty(),
                     barTopPx = barTopPx,
                     barHeightPx = barHeightPx,
                     trackHeightPx = trackHeightPx,
@@ -661,6 +743,194 @@ internal class ScrollbarSectionEstimator {
             100f
         }
         return (smoothedTotalHeight / avg.coerceAtLeast(1f)).coerceAtLeast(1f)
+    }
+}
+
+private const val TIMELINE_PREFIX_WEIGHT = 0.65f
+private const val TIMELINE_ITEM_WEIGHT_FACTOR = 0.35f
+
+private class TimelineScrollbarEstimator {
+
+    fun computeFraction(
+        layoutInfo: LazyListLayoutInfo,
+        timeline: ScrollbarTimeline,
+    ): Float {
+        val visibleItem = layoutInfo.visibleItemsInfo.firstOrNull { it.size > 0 } ?: return 0f
+        val metrics = createMetrics(timeline, layoutInfo.totalItemsCount)
+        if (metrics.sections.isEmpty()) return 0f
+
+        val itemProgress = ((layoutInfo.viewportStartOffset - visibleItem.offset).toFloat() / visibleItem.size)
+            .coerceIn(0f, 1f)
+        return metrics.positionFor(visibleItem.index + itemProgress)
+    }
+
+    fun findItemAndOffsetForFraction(
+        fraction: Float,
+        layoutInfo: LazyListLayoutInfo,
+        timeline: ScrollbarTimeline,
+    ): Pair<Int, Int> {
+        val totalItems = layoutInfo.totalItemsCount
+        if (totalItems <= 0) return 0 to 0
+
+        val metrics = createMetrics(timeline, totalItems)
+        if (metrics.sections.isEmpty()) return 0 to 0
+        if (fraction <= 0.001f) return 0 to 0
+        if (fraction >= 0.999f) return (totalItems - 1) to Int.MAX_VALUE
+
+        val targetWeight = fraction.coerceIn(0f, 1f) * metrics.totalWeight
+        if (metrics.prefixItemCount > 0 && targetWeight < metrics.prefixWeight) {
+            val prefixProgress = targetWeight / metrics.prefixWeight
+            val targetIndex = (prefixProgress * metrics.prefixItemCount)
+                .toInt()
+                .coerceIn(0, metrics.prefixItemCount - 1)
+            return targetIndex to 0
+        }
+
+        metrics.sections.forEachIndexed { index, section ->
+            val sectionStartWeight = metrics.sectionStartWeights[index]
+            val sectionWeight = metrics.sectionWeights[index]
+            val isLastSection = index == metrics.sections.lastIndex
+            if (targetWeight <= sectionStartWeight + sectionWeight || isLastSection) {
+                val sectionProgress = ((targetWeight - sectionStartWeight) / sectionWeight)
+                    .coerceIn(0f, 1f)
+                val targetIndex = section.firstItemIndex +
+                    (sectionProgress * section.itemCount).toInt()
+                return targetIndex.coerceIn(
+                    section.firstItemIndex,
+                    section.firstItemIndex + section.itemCount - 1,
+                ) to 0
+            }
+        }
+
+        return (totalItems - 1) to 0
+    }
+
+    fun labelForFraction(
+        fraction: Float,
+        timeline: ScrollbarTimeline,
+    ): String? {
+        val metrics = createMetrics(timeline, inferredTotalItems(timeline))
+        if (metrics.sections.isEmpty()) return null
+
+        val targetWeight = fraction.coerceIn(0f, 1f) * metrics.totalWeight
+        if (metrics.prefixItemCount > 0 && targetWeight < metrics.prefixWeight) {
+            return metrics.sections.first().label
+        }
+
+        metrics.sections.forEachIndexed { index, section ->
+            val sectionEnd = metrics.sectionStartWeights[index] + metrics.sectionWeights[index]
+            if (targetWeight <= sectionEnd || index == metrics.sections.lastIndex) {
+                return section.label
+            }
+        }
+        return metrics.sections.last().label
+    }
+
+    fun sectionForFraction(
+        fraction: Float,
+        timeline: ScrollbarTimeline,
+    ): Int {
+        val metrics = createMetrics(timeline, inferredTotalItems(timeline))
+        if (metrics.sections.isEmpty()) return -1
+
+        val targetWeight = fraction.coerceIn(0f, 1f) * metrics.totalWeight
+        metrics.sections.forEachIndexed { index, _ ->
+            val sectionEnd = metrics.sectionStartWeights[index] + metrics.sectionWeights[index]
+            if (targetWeight <= sectionEnd || index == metrics.sections.lastIndex) {
+                return index
+            }
+        }
+        return metrics.sections.lastIndex
+    }
+
+    fun markers(timeline: ScrollbarTimeline): List<ScrollbarTimelineMarker> {
+        val metrics = createMetrics(timeline, inferredTotalItems(timeline))
+        if (metrics.sections.isEmpty()) return emptyList()
+
+        val maxItemCount = metrics.sections.maxOf { it.itemCount }.coerceAtLeast(1)
+        val maxLogCount = ln((maxItemCount + 1).toDouble()).toFloat()
+        return metrics.sections.mapIndexed { index, section ->
+            val logCount = ln((section.itemCount.coerceAtLeast(1) + 1).toDouble()).toFloat()
+            ScrollbarTimelineMarker(
+                position = (metrics.sectionStartWeights[index] / metrics.totalWeight).coerceIn(0f, 1f),
+                intensity = (logCount / maxLogCount).coerceIn(0f, 1f),
+            )
+        }
+    }
+
+    private fun createMetrics(
+        timeline: ScrollbarTimeline,
+        totalItems: Int,
+    ): TimelineMetrics {
+        val sections = timeline.sections
+            .filter { it.firstItemIndex >= 0 && it.itemCount > 0 }
+            .sortedBy { it.firstItemIndex }
+        if (sections.isEmpty()) return TimelineMetrics.empty()
+
+        val firstItemIndex = sections.first().firstItemIndex.coerceAtMost(totalItems.coerceAtLeast(0))
+        val prefixWeight = if (firstItemIndex > 0) TIMELINE_PREFIX_WEIGHT else 0f
+        val sectionStartWeights = FloatArray(sections.size)
+        val sectionWeights = FloatArray(sections.size)
+        var totalWeight = prefixWeight
+        sections.forEachIndexed { index, section ->
+            sectionStartWeights[index] = totalWeight
+            val weight = 1f + TIMELINE_ITEM_WEIGHT_FACTOR * ln((section.itemCount + 1).toDouble()).toFloat()
+            sectionWeights[index] = weight
+            totalWeight += weight
+        }
+        return TimelineMetrics(
+            sections = sections,
+            prefixItemCount = firstItemIndex,
+            prefixWeight = prefixWeight,
+            sectionStartWeights = sectionStartWeights,
+            sectionWeights = sectionWeights,
+            totalWeight = totalWeight.coerceAtLeast(1f),
+        )
+    }
+
+    private fun inferredTotalItems(timeline: ScrollbarTimeline): Int {
+        return timeline.sections.maxOfOrNull { it.firstItemIndex + it.itemCount }
+            ?.coerceAtLeast(1)
+            ?: 1
+    }
+}
+
+private data class TimelineMetrics(
+    val sections: List<ScrollbarTimelineSection>,
+    val prefixItemCount: Int,
+    val prefixWeight: Float,
+    val sectionStartWeights: FloatArray,
+    val sectionWeights: FloatArray,
+    val totalWeight: Float,
+) {
+    fun positionFor(coordinate: Float): Float {
+        if (sections.isEmpty()) return 0f
+        if (prefixItemCount > 0 && coordinate < prefixItemCount) {
+            return (coordinate.coerceAtLeast(0f) / prefixItemCount * prefixWeight) / totalWeight
+        }
+
+        sections.forEachIndexed { index, section ->
+            val sectionStart = section.firstItemIndex.toFloat()
+            val sectionEnd = sectionStart + section.itemCount
+            val nextSectionStart = sections.getOrNull(index + 1)?.firstItemIndex?.toFloat()
+            if (coordinate < sectionEnd || coordinate < (nextSectionStart ?: Float.POSITIVE_INFINITY) || index == sections.lastIndex) {
+                val sectionProgress = ((coordinate - sectionStart) / section.itemCount)
+                    .coerceIn(0f, 1f)
+                return (sectionStartWeights[index] + sectionWeights[index] * sectionProgress) / totalWeight
+            }
+        }
+        return 1f
+    }
+
+    companion object {
+        fun empty() = TimelineMetrics(
+            sections = emptyList(),
+            prefixItemCount = 0,
+            prefixWeight = 0f,
+            sectionStartWeights = FloatArray(0),
+            sectionWeights = FloatArray(0),
+            totalWeight = 1f,
+        )
     }
 }
 
