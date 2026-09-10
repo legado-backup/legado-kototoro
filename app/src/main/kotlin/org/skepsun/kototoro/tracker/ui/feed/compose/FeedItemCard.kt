@@ -313,7 +313,7 @@ private fun FeedTimelineDateLabel(
             modifier = Modifier
                 .clip(RoundedCornerShape(9.dp))
                 .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.72f))
-                .padding(horizontal = 5.dp, vertical = 3.dp),
+                .padding(horizontal = 4.dp, vertical = 3.dp),
             style = MaterialTheme.typography.labelSmall,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -373,9 +373,9 @@ private val FEED_COVER_SHAPE = RoundedCornerShape(14.dp)
 internal val FEED_TIMELINE_RAIL_WIDTH = 28.dp
 private val FEED_TIMELINE_NODE_SIZE = 10.dp
 private val FEED_TIMELINE_NODE_STROKE_WIDTH = 3.dp
-private val FEED_TIMELINE_DATE_LABEL_START = 4.dp
-private val FEED_TIMELINE_DATE_LABEL_WIDTH = 60.dp
-private val FEED_TIMELINE_DATE_LABEL_NODE_GAP = 8.dp
+private val FEED_TIMELINE_DATE_LABEL_START = 2.dp
+private val FEED_TIMELINE_DATE_LABEL_WIDTH = 52.dp
+private val FEED_TIMELINE_DATE_LABEL_NODE_GAP = 6.dp
 private val FEED_TIMELINE_CARD_LEADING_SPACE =
     FEED_TIMELINE_DATE_LABEL_START +
         FEED_TIMELINE_DATE_LABEL_WIDTH +
