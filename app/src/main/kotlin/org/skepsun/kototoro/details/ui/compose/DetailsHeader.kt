@@ -102,9 +102,15 @@ internal fun Color.detailsButtonContainerColor(): Color = withDetailsMinAlpha(0.
  * layer is what makes the oversized buffer dangerous, so an expanded text never pays for one.
  */
 private const val COLLAPSED_TITLE_MAX_LINES = 3
-private const val EXPANDED_TITLE_MAX_LINES = 12
+private const val EXPANDED_TITLE_MAX_LINES = 6
 private const val MAX_RENDERED_TITLE_LENGTH = 1_000
 private const val MAX_RENDERED_DESCRIPTION_LENGTH = 4_000
+
+internal fun detailsTitleMaxLines(isExpanded: Boolean): Int = if (isExpanded) {
+    EXPANDED_TITLE_MAX_LINES
+} else {
+    COLLAPSED_TITLE_MAX_LINES
+}
 
 
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
@@ -471,7 +477,7 @@ fun DetailsHeader(
                             .clickable(enabled = canExpandTitle) {
                                 isTitleExpanded = !isTitleExpanded
                             },
-                        maxLines = if (isTitleExpanded) EXPANDED_TITLE_MAX_LINES else COLLAPSED_TITLE_MAX_LINES,
+                        maxLines = detailsTitleMaxLines(isTitleExpanded),
                         overflow = TextOverflow.Ellipsis,
                         onTextLayout = { textLayoutResult ->
                             val hasCollapsedOverflow = textLayoutResult.hasVisualOverflow ||
