@@ -19,6 +19,7 @@ import org.skepsun.kototoro.core.util.ext.MutableEventFlow
 import org.skepsun.kototoro.core.util.ext.call
 import org.skepsun.kototoro.core.util.ext.toFileOrNull
 import org.skepsun.kototoro.core.util.ext.toUriOrNull
+import org.skepsun.kototoro.details.domain.DetailsLoadUseCase
 import org.skepsun.kototoro.explore.data.ContentSourcesRepository
 import org.skepsun.kototoro.explore.domain.ExploreRepository
 import org.skepsun.kototoro.filter.ui.FilterCoordinator
@@ -60,6 +61,7 @@ class LocalListViewModel @Inject constructor(
     sourceAvailabilityRepository: SourceAvailabilityRepository,
     mangaDataRepository: ContentDataRepository,
     captchaAutoResolveCoordinator: org.skepsun.kototoro.core.exceptions.resolve.CaptchaAutoResolveCoordinator,
+    detailsLoadUseCase: DetailsLoadUseCase,
     private val globalFavoritesState: org.skepsun.kototoro.favourites.domain.GlobalFavoritesState,
 ) : RemoteListViewModel(
     savedStateHandle = savedStateHandle,
@@ -72,6 +74,7 @@ class LocalListViewModel @Inject constructor(
     sourceAvailabilityRepository = sourceAvailabilityRepository,
     mangaDataRepository = mangaDataRepository,
     captchaAutoResolveCoordinator = captchaAutoResolveCoordinator,
+    detailsLoadUseCase = detailsLoadUseCase,
     localStorageChanges = localStorageChanges,
 ), SharedPreferences.OnSharedPreferenceChangeListener, QuickFilterListener {
 

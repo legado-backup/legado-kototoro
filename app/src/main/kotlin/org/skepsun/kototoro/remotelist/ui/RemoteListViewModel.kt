@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
@@ -30,6 +31,7 @@ import org.skepsun.kototoro.parsers.model.ContentSource as ParserContentSource
 import org.skepsun.kototoro.core.model.distinctById
 import org.skepsun.kototoro.core.model.isLocal
 import org.skepsun.kototoro.core.model.withOverride
+import org.skepsun.kototoro.core.nav.ContentIntent
 import org.skepsun.kototoro.core.parser.ContentActionRepository
 import org.skepsun.kototoro.core.parser.ContentDataRepository
 import org.skepsun.kototoro.core.parser.ContentRepository
@@ -58,10 +60,10 @@ import org.skepsun.kototoro.list.ui.model.toErrorFooter
 import org.skepsun.kototoro.list.ui.model.toErrorState
 import org.skepsun.kototoro.local.data.LocalStorageChanges
 import org.skepsun.kototoro.local.domain.model.LocalContent
+import org.skepsun.kototoro.details.domain.DetailsLoadUseCase
 import org.skepsun.kototoro.parsers.model.Content
 
 import org.skepsun.kototoro.parsers.util.sizeOrZero
-import org.skepsun.kototoro.parsers.util.runCatchingCancellable
 import javax.inject.Inject
 
 private const val FILTER_MIN_INTERVAL = 250L
@@ -77,8 +79,9 @@ open class RemoteListViewModel @Inject constructor(
     private val exploreRepository: ExploreRepository,
     sourcesRepository: ContentSourcesRepository,
     private val sourceAvailabilityRepository: SourceAvailabilityRepository,
-    private val mangaDataRepository: ContentDataRepository,
+    mangaDataRepository: ContentDataRepository,
     private val captchaAutoResolveCoordinator: CaptchaAutoResolveCoordinator,
+    private val detailsLoadUseCase: DetailsLoadUseCase,
     @LocalStorageChanges localStorageChanges: SharedFlow<LocalContent?>,
 ) : ContentListViewModel(settings, mangaDataRepository, localStorageChanges), FilterCoordinator.Owner {
 
@@ -211,9 +214,9 @@ open class RemoteListViewModel @Inject constructor(
 
     suspend fun loadPreviewDetails(item: ContentListModel): Content {
         return kotlinx.coroutines.withContext(Dispatchers.Default) {
-            val details = repository.getDetails(item.manga)
-            runCatchingCancellable { mangaDataRepository.updateProjectionSnapshot(details) }
-                .getOrDefault(details)
+            detailsLoadUseCase(ContentIntent.of(item.manga), force = false)
+                .first { it.isLoaded }
+                .toContent()
                 .withOverride(item.override)
         }
     }

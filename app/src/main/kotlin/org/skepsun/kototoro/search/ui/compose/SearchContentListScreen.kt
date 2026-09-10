@@ -552,9 +552,9 @@ fun AppSearchContentListRoute(
         val restoredContent = contentListItems
             .firstOrNull { it.id == previewId }
             ?.toContentWithOverride()
-        if (restoredContent != null) {
+        if (restoredContent != null && previewContent?.id != previewId) {
             previewContent = restoredContent
-        } else if (contentItems.none { it === LoadingState }) {
+        } else if (restoredContent == null && contentItems.none { it === LoadingState }) {
             clearPreview()
         }
     }

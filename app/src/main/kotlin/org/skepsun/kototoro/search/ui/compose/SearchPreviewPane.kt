@@ -72,11 +72,7 @@ internal fun SearchPreviewPane(
         content.previewAuthors()
     }
     val previewChapters = remember(content.chapters) {
-        content.chapters.orEmpty()
-            .filter { chapter ->
-                !chapter.title.isNullOrBlank() || chapter.number > 0f || chapter.uploadDate > 0L
-            }
-            .take(3)
+        content.chapters.orEmpty().take(3)
     }
     val coverShape = RoundedCornerShape(16.dp)
 
@@ -473,7 +469,7 @@ private fun SearchPreviewChapterRow(
 ) {
     val title = chapter.title?.takeIf(String::isNotBlank)
         ?: chapter.numberString()?.let { "#$it" }
-        ?: stringResource(R.string.chapters)
+        ?: stringResource(R.string.unnamed_chapter)
     val metadata = remember(chapter.number, chapter.scanlator, chapter.branch, chapter.uploadDate) {
         buildList {
             chapter.numberString()?.let { add("#$it") }
