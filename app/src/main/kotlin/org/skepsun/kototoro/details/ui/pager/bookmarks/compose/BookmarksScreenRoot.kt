@@ -44,6 +44,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -244,28 +245,34 @@ private fun NovelNotesTabContent(
                 FilterChip(
                     selected = selectedFilter == NoteType.ALL,
                     onClick = { selectedFilter = NoteType.ALL },
-                    label = { Text("全部 (${notes.size})", fontSize = 12.sp) },
+                    label = { Text(stringResource(R.string.book_notes_filter_all, notes.size), fontSize = 12.sp) },
                     shape = RoundedCornerShape(8.dp),
                     colors = FilterChipDefaults.filterChipColors(),
                 )
                 FilterChip(
                     selected = selectedFilter == NoteType.HIGHLIGHT,
                     onClick = { selectedFilter = NoteType.HIGHLIGHT },
-                    label = { Text("划线 ($highlightCount)", fontSize = 12.sp) },
+                    label = {
+                        Text(stringResource(R.string.book_notes_filter_highlights, highlightCount), fontSize = 12.sp)
+                    },
                     shape = RoundedCornerShape(8.dp),
                     colors = FilterChipDefaults.filterChipColors(),
                 )
                 FilterChip(
                     selected = selectedFilter == NoteType.THOUGHT,
                     onClick = { selectedFilter = NoteType.THOUGHT },
-                    label = { Text("想法 ($thoughtCount)", fontSize = 12.sp) },
+                    label = {
+                        Text(stringResource(R.string.book_notes_filter_thoughts, thoughtCount), fontSize = 12.sp)
+                    },
                     shape = RoundedCornerShape(8.dp),
                     colors = FilterChipDefaults.filterChipColors(),
                 )
                 FilterChip(
                     selected = selectedFilter == NoteType.BOOKMARK,
                     onClick = { selectedFilter = NoteType.BOOKMARK },
-                    label = { Text("书签 ($bookmarkCount)", fontSize = 12.sp) },
+                    label = {
+                        Text(stringResource(R.string.book_notes_filter_bookmarks, bookmarkCount), fontSize = 12.sp)
+                    },
                     shape = RoundedCornerShape(8.dp),
                     colors = FilterChipDefaults.filterChipColors(),
                 )
@@ -280,7 +287,7 @@ private fun NovelNotesTabContent(
             ) {
                 Icon(
                     imageVector = Icons.Default.Search,
-                    contentDescription = "搜索",
+                    contentDescription = stringResource(R.string.search),
                     modifier = Modifier.size(18.dp),
                     tint = if (searchVisible) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -293,7 +300,7 @@ private fun NovelNotesTabContent(
                 ) {
                     Icon(
                         painter = painterResource(R.drawable.ic_share),
-                        contentDescription = "导出笔记",
+                        contentDescription = stringResource(R.string.book_notes_export),
                         modifier = Modifier.size(18.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -308,13 +315,19 @@ private fun NovelNotesTabContent(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 4.dp),
-                placeholder = { Text("搜索划线或想法内容...", fontSize = 13.sp) },
+                placeholder = {
+                    Text(stringResource(R.string.book_notes_search_hint), fontSize = 13.sp)
+                },
                 singleLine = true,
                 shape = RoundedCornerShape(12.dp),
                 trailingIcon = {
                     if (searchQuery.isNotEmpty()) {
                         IconButton(onClick = { searchQuery = "" }) {
-                            Icon(imageVector = Icons.Default.Close, contentDescription = "清除", modifier = Modifier.size(16.dp))
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = stringResource(R.string.clear),
+                                modifier = Modifier.size(16.dp),
+                            )
                         }
                     }
                 },
@@ -337,14 +350,16 @@ private fun NovelNotesTabContent(
                     )
                     Spacer(modifier = Modifier.height(14.dp))
                     Text(
-                        text = if (notes.isEmpty()) "暂无笔记与书签" else "未找到匹配的笔记",
+                        text = stringResource(
+                            if (notes.isEmpty()) R.string.book_notes_empty else R.string.book_notes_no_matches,
+                        ),
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     if (notes.isEmpty()) {
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = "阅读小说时长按划线、发表想法或添加书签，即可在此处查看",
+                            text = stringResource(R.string.book_notes_empty_hint),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.outline,
                             textAlign = TextAlign.Center,
@@ -422,12 +437,22 @@ private fun NovelNotesTabContent(
                             },
                             onCopy = {
                                 val copyText = when (item) {
-                                    is BookNoteItem.NovelHighlight -> item.note?.let { "$it\n引用：${item.text}" } ?: item.text
-                                    is BookNoteItem.BookmarkEntry -> "${item.chapterTitle} (第${item.page + 1}页)"
+                                    is BookNoteItem.NovelHighlight -> item.note?.let {
+                                        "$it\n${context.getString(R.string.book_notes_quote_prefix, item.text)}"
+                                    } ?: item.text
+                                    is BookNoteItem.BookmarkEntry -> context.getString(
+                                        R.string.book_notes_bookmark_position,
+                                        item.chapterTitle,
+                                        item.page + 1,
+                                    )
                                 }
                                 val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                                 cm.setPrimaryClip(ClipData.newPlainText("note", copyText))
-                                Toast.makeText(context, "已复制到剪贴板", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(
+                                    context,
+                                    R.string.book_notes_copied,
+                                    Toast.LENGTH_SHORT,
+                                ).show()
                             },
                             onDelete = {
                                 onDeleteNote(item)
@@ -459,9 +484,10 @@ private fun NovelNotesTabContent(
             },
             onSaveMarkdown = {
                 val safeTitle = manga.title.toFileNameSafe().ifBlank { "book" }.take(50)
-                createDocumentLauncher.launch("《${safeTitle}》读书笔记.md")
+                createDocumentLauncher.launch(
+                    context.getString(R.string.book_notes_export_filename, safeTitle),
+                )
             },
         )
     }
 }
-

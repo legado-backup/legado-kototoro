@@ -273,7 +273,8 @@ private fun Shape.liquidLensCornerRadii(
  *
  * Material 3 always receives a stable semantic surface. iOS uses Backdrop only
  * when a same-window backdrop is available; dialogs and unsupported contexts
- * intentionally fall back to an opaque surface.
+ * intentionally fall back to an opaque surface, while menus provide their own
+ * artwork-aware translucent fallback.
  */
 @Composable
 fun GlassSurface(
@@ -311,7 +312,11 @@ fun GlassSurface(
 
     val colors = MaterialTheme.colorScheme
     val isArtworkBackground = LocalBackgroundStyle.current == BackgroundStyle.DYNAMIC_ARTWORK_BLUR
-    val fallbackColor = if (dialogSurface && isArtworkBackground) {
+    val fallbackColor = if (componentRole == GlassComponentRole.Menu && isArtworkBackground) {
+        // Menus are rendered in a separate Popup window. Keep their single visual
+        // layer translucent so the artwork background is not replaced by a white plate.
+        colors.surfaceContainer.copy(alpha = 0.50f)
+    } else if (dialogSurface && isArtworkBackground) {
         colors.surfaceContainer.copy(alpha = 1f)
     } else if (!isIosStyle && isArtworkBackground) {
         colors.surfaceContainer.copy(alpha = 1f)

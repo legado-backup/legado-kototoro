@@ -6,6 +6,7 @@ import dagger.Reusable
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import org.skepsun.kototoro.R
 import org.skepsun.kototoro.core.db.MangaDatabase
 import org.skepsun.kototoro.core.db.entity.toContent
 import java.io.File
@@ -53,9 +54,9 @@ class BookNotesRepository @Inject constructor(
             val progressText = when {
                 progressPercent != null && progressPercent > 0f -> {
                     val p = (progressPercent * 100).toInt().coerceIn(0, 100)
-                    "在读 · $p%"
+                    context.getString(R.string.book_notes_reading_progress, p)
                 }
-                history != null -> "在读"
+                history != null -> context.getString(R.string.status_reading)
                 else -> null
             }
 
@@ -87,7 +88,10 @@ class BookNotesRepository @Inject constructor(
 
         val highlightItems = markings.map { m ->
             val chapter = chapters[m.chapterId]
-            val chapterTitle = chapter?.title ?: "第 ${m.chapterIndex + 1} 章"
+            val chapterTitle = chapter?.title ?: context.getString(
+                R.string.book_notes_chapter_fallback,
+                m.chapterIndex + 1,
+            )
             BookNoteItem.NovelHighlight(
                 id = m.id,
                 mangaId = m.mangaId,
@@ -111,7 +115,10 @@ class BookNotesRepository @Inject constructor(
         val bookmarkItems = bookmarks.map { b ->
             val chapter = chapters[b.chapterId]
             val chapterIndex = chapter?.index ?: 0
-            val chapterTitle = chapter?.title ?: "第 ${b.page + 1} 页"
+            val chapterTitle = chapter?.title ?: context.getString(
+                R.string.book_notes_page_fallback,
+                b.page + 1,
+            )
             val snapshotFile = File(context.filesDir, "bookmarks/manga_${b.mangaId}_chapter_${b.chapterId}_page_${b.page}.jpg")
             val localSnapshotUri = if (snapshotFile.exists() && snapshotFile.length() > 0) {
                 snapshotFile.toUri().toString()

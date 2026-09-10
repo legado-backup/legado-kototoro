@@ -38,12 +38,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import org.skepsun.kototoro.R
+import org.skepsun.kototoro.core.prefs.BackgroundStyle
+import org.skepsun.kototoro.core.ui.theme.LocalBackgroundStyle
+import org.skepsun.kototoro.core.ui.theme.artworkAwareContainerColor
 import org.skepsun.kototoro.notes.domain.BookNotesSummary
 
 @Composable
@@ -79,7 +83,7 @@ fun NotesOverviewScreen(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "笔记",
+                            text = stringResource(R.string.notes),
                             style = MaterialTheme.typography.titleLarge.copy(
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 20.sp,
@@ -88,7 +92,11 @@ fun NotesOverviewScreen(
                         )
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = "${uiState.totalNotesCount} 个笔记 · 留在了 ${uiState.totalBooksCount} 本书上",
+                            text = stringResource(
+                                R.string.book_notes_overview_summary,
+                                uiState.totalNotesCount,
+                                uiState.totalBooksCount,
+                            ),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -97,7 +105,7 @@ fun NotesOverviewScreen(
                     IconButton(onClick = { searchBarVisible = !searchBarVisible }) {
                         Icon(
                             imageVector = if (searchBarVisible) Icons.Default.Close else Icons.Default.Search,
-                            contentDescription = "搜索",
+                            contentDescription = stringResource(R.string.search),
                             tint = MaterialTheme.colorScheme.onBackground,
                         )
                     }
@@ -109,7 +117,7 @@ fun NotesOverviewScreen(
                         value = uiState.searchQuery,
                         onValueChange = onSearchQueryChange,
                         modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("搜索书名或笔记内容...") },
+                        placeholder = { Text(stringResource(R.string.book_notes_overview_search_hint)) },
                         singleLine = true,
                         shape = RoundedCornerShape(12.dp),
                     )
@@ -134,13 +142,19 @@ fun NotesOverviewScreen(
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
-                        text = if (uiState.searchQuery.isBlank()) "暂无笔记" else "未找到相关笔记",
+                        text = stringResource(
+                            if (uiState.searchQuery.isBlank()) {
+                                R.string.book_notes_overview_empty
+                            } else {
+                                R.string.book_notes_overview_no_matches
+                            },
+                        ),
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurface,
                     )
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = "阅读小说或漫画时长按划线、记想法或加书签，即可在此集中查看",
+                        text = stringResource(R.string.book_notes_overview_empty_hint),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -170,10 +184,14 @@ private fun BookNotesOverviewCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val isArtworkBackground = LocalBackgroundStyle.current == BackgroundStyle.DYNAMIC_ARTWORK_BLUR
+
     Card(
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface.artworkAwareContainerColor(),
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (isArtworkBackground) 0.dp else 1.dp),
         modifier = modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
@@ -200,7 +218,7 @@ private fun BookNotesOverviewCard(
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = "个笔记",
+                        text = stringResource(R.string.book_notes_overview_count_suffix),
                         style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.alignByBaseline(),
@@ -209,8 +227,8 @@ private fun BookNotesOverviewCard(
 
                 Spacer(modifier = Modifier.height(6.dp))
 
-                Text(
-                    text = "《${summary.title}》",
+                    Text(
+                        text = stringResource(R.string.book_notes_overview_book_title, summary.title),
                     style = MaterialTheme.typography.titleMedium.copy(
                         fontWeight = FontWeight.SemiBold,
                         fontSize = 15.sp,
@@ -223,7 +241,7 @@ private fun BookNotesOverviewCard(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Text(
-                    text = summary.readingProgressText ?: "在读",
+                    text = summary.readingProgressText ?: stringResource(R.string.status_reading),
                     style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

@@ -32,6 +32,7 @@ fun PagesScreenRoot(
     lifecycleOwner: LifecycleOwner,
     viewModel: PagesViewModel,
     detailsPaneState: DetailsPaneState? = null,
+    isScrollEnabled: Boolean = true,
     thumbnailAspectRatio: Float = 0.7f,
 ) {
     val context = LocalContext.current
@@ -79,6 +80,7 @@ fun PagesScreenRoot(
         emptyMessageResId = null,
         isLoading = isLoading,
         detailsPaneState = detailsPaneState,
+        isScrollEnabled = isScrollEnabled,
         onLoadPrevious = viewModel::loadPrevChapter,
         onLoadNext = viewModel::loadNextChapter,
         onVisiblePlaceholder = viewModel::loadTowardsChapter,

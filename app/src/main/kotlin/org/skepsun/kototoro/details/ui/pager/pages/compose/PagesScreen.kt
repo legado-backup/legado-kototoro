@@ -172,6 +172,7 @@ fun PagesScreen(
     emptyMessageResId: Int?,
     isLoading: Boolean,
     detailsPaneState: DetailsPaneState? = null,
+    isScrollEnabled: Boolean = true,
     onLoadPrevious: () -> Unit = {},
     onLoadNext: () -> Unit = {},
     onVisiblePlaceholder: (Long) -> Unit = {},
@@ -258,6 +259,7 @@ fun PagesScreen(
                 contentPadding = PaddingValues(16.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
+                userScrollEnabled = isScrollEnabled,
                 modifier = Modifier
                     .fillMaxSize()
                     .then(paneNestedScrollModifier),
@@ -316,6 +318,7 @@ fun PagesScreen(
             }
             VerticalScrollbar(
                 state = listState,
+                draggable = isScrollEnabled,
                 contentPadding = PaddingValues(16.dp),
                 labelProvider = { index -> "${index + 1}" },
             )

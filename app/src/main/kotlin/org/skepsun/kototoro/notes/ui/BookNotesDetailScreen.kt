@@ -31,7 +31,6 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -56,13 +55,18 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import org.skepsun.kototoro.R
+import org.skepsun.kototoro.core.prefs.BackgroundStyle
+import org.skepsun.kototoro.core.ui.theme.LocalBackgroundStyle
+import org.skepsun.kototoro.core.ui.theme.artworkAwareContainerColor
 import org.skepsun.kototoro.core.util.ext.toFileNameSafe
+import org.skepsun.kototoro.main.ui.compose.GlassDropdownMenu
 import org.skepsun.kototoro.notes.domain.BookNoteItem
 import org.skepsun.kototoro.notes.domain.NoteType
 import org.skepsun.kototoro.parsers.model.Content
@@ -105,10 +109,16 @@ fun BookNotesDetailScreen(
     val bookmarkCount = notes.count { it is BookNoteItem.BookmarkEntry }
 
     val subtitleText = buildList {
-        if (highlightCount > 0) add("${highlightCount}条划线")
-        if (thoughtCount > 0) add("${thoughtCount}条想法")
-        if (bookmarkCount > 0) add("${bookmarkCount}个书签")
-    }.joinToString(" · ").ifBlank { "共 ${notes.size} 条笔记" }
+        if (highlightCount > 0) {
+            add(stringResource(R.string.book_notes_count_highlights, highlightCount))
+        }
+        if (thoughtCount > 0) {
+            add(stringResource(R.string.book_notes_count_thoughts, thoughtCount))
+        }
+        if (bookmarkCount > 0) {
+            add(stringResource(R.string.book_notes_count_bookmarks, bookmarkCount))
+        }
+    }.joinToString(" · ").ifBlank { stringResource(R.string.book_notes_total_count, notes.size) }
 
     Column(
         modifier = modifier
@@ -133,7 +143,7 @@ fun BookNotesDetailScreen(
                     IconButton(onClick = onBack) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "返回",
+                            contentDescription = stringResource(R.string.back),
                             tint = MaterialTheme.colorScheme.onBackground,
                         )
                     }
@@ -144,7 +154,7 @@ fun BookNotesDetailScreen(
                             .padding(start = 4.dp),
                     ) {
                         Text(
-                            text = "笔记",
+                            text = stringResource(R.string.notes),
                             style = MaterialTheme.typography.titleMedium.copy(
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 18.sp,
@@ -167,7 +177,7 @@ fun BookNotesDetailScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 8.dp),
-                        placeholder = { Text("搜索本书笔记...") },
+                        placeholder = { Text(stringResource(R.string.book_notes_book_search_hint)) },
                         singleLine = true,
                         shape = RoundedCornerShape(12.dp),
                         trailingIcon = {
@@ -175,7 +185,7 @@ fun BookNotesDetailScreen(
                                 searchBarVisible = false
                                 onBookSearchQueryChange("")
                             }) {
-                                Icon(Icons.Default.Close, contentDescription = "关闭")
+                                Icon(Icons.Default.Close, contentDescription = stringResource(R.string.close))
                             }
                         },
                     )
@@ -203,7 +213,7 @@ fun BookNotesDetailScreen(
                                     author = book.authors.firstOrNull().orEmpty(),
                                 )
                             } else {
-                                Toast.makeText(context, "暂无划线文本可做书摘", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, R.string.book_notes_no_highlight_excerpt, Toast.LENGTH_SHORT).show()
                             }
                         },
                         onSearchClick = { searchBarVisible = !searchBarVisible },
@@ -231,10 +241,19 @@ fun BookNotesDetailScreen(
                 ) {
                     Text(
                         text = when (uiState.selectedFilter) {
-                            NoteType.ALL -> "全部笔记 (${uiState.filteredBookNotes.size})"
-                            NoteType.HIGHLIGHT -> "仅看划线 (${uiState.filteredBookNotes.size})"
-                            NoteType.THOUGHT -> "仅看想法 (${uiState.filteredBookNotes.size})"
-                            NoteType.BOOKMARK -> "仅看书签 (${uiState.filteredBookNotes.size})"
+                            NoteType.ALL -> stringResource(R.string.book_notes_selected_all, uiState.filteredBookNotes.size)
+                            NoteType.HIGHLIGHT -> stringResource(
+                                R.string.book_notes_selected_highlights,
+                                uiState.filteredBookNotes.size,
+                            )
+                            NoteType.THOUGHT -> stringResource(
+                                R.string.book_notes_selected_thoughts,
+                                uiState.filteredBookNotes.size,
+                            )
+                            NoteType.BOOKMARK -> stringResource(
+                                R.string.book_notes_selected_bookmarks,
+                                uiState.filteredBookNotes.size,
+                            )
                         },
                         style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
                         color = MaterialTheme.colorScheme.onSurface,
@@ -248,36 +267,36 @@ fun BookNotesDetailScreen(
                                 modifier = Modifier.size(16.dp),
                             )
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("筛选")
+                            Text(stringResource(R.string.filter))
                         }
 
-                        DropdownMenu(
+                        GlassDropdownMenu(
                             expanded = filterMenuExpanded,
                             onDismissRequest = { filterMenuExpanded = false },
                         ) {
                             DropdownMenuItem(
-                                text = { Text("全部 (${notes.size})") },
+                                text = { Text(stringResource(R.string.book_notes_filter_all, notes.size)) },
                                 onClick = {
                                     filterMenuExpanded = false
                                     onFilterChange(NoteType.ALL)
                                 },
                             )
                             DropdownMenuItem(
-                                text = { Text("仅划线 ($highlightCount)") },
+                                text = { Text(stringResource(R.string.book_notes_filter_highlights, highlightCount)) },
                                 onClick = {
                                     filterMenuExpanded = false
                                     onFilterChange(NoteType.HIGHLIGHT)
                                 },
                             )
                             DropdownMenuItem(
-                                text = { Text("仅想法 ($thoughtCount)") },
+                                text = { Text(stringResource(R.string.book_notes_filter_thoughts, thoughtCount)) },
                                 onClick = {
                                     filterMenuExpanded = false
                                     onFilterChange(NoteType.THOUGHT)
                                 },
                             )
                             DropdownMenuItem(
-                                text = { Text("仅书签 ($bookmarkCount)") },
+                                text = { Text(stringResource(R.string.book_notes_filter_bookmarks, bookmarkCount)) },
                                 onClick = {
                                     filterMenuExpanded = false
                                     onFilterChange(NoteType.BOOKMARK)
@@ -298,7 +317,7 @@ fun BookNotesDetailScreen(
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(
-                            text = "未筛选出符合条件的笔记",
+                            text = stringResource(R.string.book_notes_filtered_empty),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -337,12 +356,18 @@ fun BookNotesDetailScreen(
                             },
                             onCopy = {
                                 val copyText = when (item) {
-                                    is BookNoteItem.NovelHighlight -> item.note?.let { "$it\n引用：${item.text}" } ?: item.text
-                                    is BookNoteItem.BookmarkEntry -> "${item.chapterTitle} (第${item.page}页)"
+                                    is BookNoteItem.NovelHighlight -> item.note?.let {
+                                        "$it\n${context.getString(R.string.book_notes_quote_prefix, item.text)}"
+                                    } ?: item.text
+                                    is BookNoteItem.BookmarkEntry -> context.getString(
+                                        R.string.book_notes_bookmark_position,
+                                        item.chapterTitle,
+                                        item.page + 1,
+                                    )
                                 }
                                 val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                                 cm.setPrimaryClip(ClipData.newPlainText("note", copyText))
-                                Toast.makeText(context, "已复制到剪贴板", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, R.string.book_notes_copied, Toast.LENGTH_SHORT).show()
                             },
                             onDelete = { onDeleteNote(item) },
                         )
@@ -374,7 +399,9 @@ fun BookNotesDetailScreen(
             },
             onSaveMarkdown = {
                 val safeTitle = manga.title.toFileNameSafe().ifBlank { "book" }.take(50)
-                createDocumentLauncher.launch("《${safeTitle}》读书笔记.md")
+                createDocumentLauncher.launch(
+                    context.getString(R.string.book_notes_export_filename, safeTitle),
+                )
             },
         )
     }
@@ -390,10 +417,14 @@ private fun BookDetailHeaderCard(
     onReadClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val isArtworkBackground = LocalBackgroundStyle.current == BackgroundStyle.DYNAMIC_ARTWORK_BLUR
+
     Card(
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface.artworkAwareContainerColor(),
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (isArtworkBackground) 0.dp else 1.dp),
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 6.dp),
@@ -422,7 +453,7 @@ private fun BookDetailHeaderCard(
                     )
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = "共 $totalNotesCount 条笔记",
+                        text = stringResource(R.string.book_notes_total_count, totalNotesCount),
                         style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
                         color = MaterialTheme.colorScheme.primary,
                     )
@@ -461,22 +492,22 @@ private fun BookDetailHeaderCard(
             ) {
                 QuickActionButton(
                     iconRes = R.drawable.ic_images,
-                    label = "书摘模式",
+                    label = stringResource(R.string.book_notes_make_excerpt),
                     onClick = onExcerptClick,
                 )
                 QuickActionButton(
                     iconRes = R.drawable.ic_search,
-                    label = "搜索笔记",
+                    label = stringResource(R.string.book_notes_search_notes),
                     onClick = onSearchClick,
                 )
                 QuickActionButton(
                     iconRes = R.drawable.ic_share,
-                    label = "导出笔记",
+                    label = stringResource(R.string.book_notes_export),
                     onClick = onExportClick,
                 )
                 QuickActionButton(
                     iconRes = R.drawable.ic_book_page,
-                    label = "继续阅读",
+                    label = stringResource(R.string.continue_reading),
                     onClick = onReadClick,
                 )
             }
@@ -522,11 +553,14 @@ internal fun BookNoteCard(
     manga: Content? = null,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
+    val isArtworkBackground = LocalBackgroundStyle.current == BackgroundStyle.DYNAMIC_ARTWORK_BLUR
 
     Card(
         shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface.artworkAwareContainerColor(),
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (isArtworkBackground) 0.dp else 0.5.dp),
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 4.dp)
@@ -566,7 +600,7 @@ internal fun BookNoteCard(
                         } else {
                             Icon(
                                 painter = painterResource(R.drawable.ic_comment),
-                                contentDescription = "想法",
+                                contentDescription = stringResource(R.string.notes),
                                 modifier = Modifier.size(13.dp),
                                 tint = markingColor.lineColor,
                             )
@@ -575,7 +609,7 @@ internal fun BookNoteCard(
                     is BookNoteItem.BookmarkEntry -> {
                         Icon(
                             painter = painterResource(R.drawable.ic_bookmark),
-                            contentDescription = "书签",
+                            contentDescription = stringResource(R.string.bookmarks),
                             modifier = Modifier.size(13.dp),
                             tint = MaterialTheme.colorScheme.tertiary,
                         )
@@ -600,7 +634,7 @@ internal fun BookNoteCard(
                             )
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
-                                text = "引用：${item.text}",
+                                text = stringResource(R.string.book_notes_quote_prefix, item.text),
                                 style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp, lineHeight = 17.sp),
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 3,
@@ -616,7 +650,11 @@ internal fun BookNoteCard(
                     }
                     is BookNoteItem.BookmarkEntry -> {
                         Text(
-                            text = "${item.chapterTitle} (第 ${item.page + 1} 页)",
+                            text = stringResource(
+                                R.string.book_notes_bookmark_position,
+                                item.chapterTitle,
+                                item.page + 1,
+                            ),
                             style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
                             color = MaterialTheme.colorScheme.onSurface,
                         )
@@ -658,19 +696,19 @@ internal fun BookNoteCard(
                 ) {
                     Icon(
                         imageVector = Icons.Default.MoreVert,
-                        contentDescription = "更多",
+                        contentDescription = stringResource(R.string.more),
                         modifier = Modifier.size(16.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
 
-                DropdownMenu(
+                GlassDropdownMenu(
                     expanded = menuExpanded,
                     onDismissRequest = { menuExpanded = false },
                 ) {
                     if (item is BookNoteItem.NovelHighlight) {
                         DropdownMenuItem(
-                            text = { Text("做成书摘") },
+                            text = { Text(stringResource(R.string.book_notes_make_excerpt)) },
                             onClick = {
                                 menuExpanded = false
                                 onMakeExcerpt()
@@ -678,14 +716,14 @@ internal fun BookNoteCard(
                         )
                     }
                     DropdownMenuItem(
-                        text = { Text("复制内容") },
+                        text = { Text(stringResource(R.string.book_notes_copy_content)) },
                         onClick = {
                             menuExpanded = false
                             onCopy()
                         },
                     )
                     DropdownMenuItem(
-                        text = { Text("删除") },
+                        text = { Text(stringResource(R.string.delete)) },
                         onClick = {
                             menuExpanded = false
                             onDelete()
@@ -717,21 +755,21 @@ internal fun BookNotesExportBottomSheet(
                 .padding(horizontal = 20.dp, vertical = 8.dp),
         ) {
             Text(
-                text = "导出《${manga.title}》笔记",
+                text = stringResource(R.string.book_notes_export_title, manga.title),
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, fontSize = 18.sp),
                 color = MaterialTheme.colorScheme.onSurface,
             )
             Spacer(modifier = Modifier.height(2.dp))
             Text(
-                text = "共 ${notes.size} 条笔记，导出为标准 Markdown 格式",
+                text = stringResource(R.string.book_notes_export_summary, notes.size),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(modifier = Modifier.height(16.dp))
 
             ListItem(
-                headlineContent = { Text("复制 Markdown 内容") },
-                supportingContent = { Text("复制到系统剪贴板，方便快速粘贴到其他地方") },
+                headlineContent = { Text(stringResource(R.string.book_notes_copy_markdown)) },
+                supportingContent = { Text(stringResource(R.string.book_notes_copy_markdown_summary)) },
                 leadingContent = {
                     Icon(
                         painter = painterResource(R.drawable.ic_copy),
@@ -751,8 +789,8 @@ internal fun BookNotesExportBottomSheet(
             HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
             ListItem(
-                headlineContent = { Text("分享 Markdown 文档") },
-                supportingContent = { Text("生成 .md 文件，发送到微信、QQ、Obsidian 等") },
+                headlineContent = { Text(stringResource(R.string.book_notes_share_markdown)) },
+                supportingContent = { Text(stringResource(R.string.book_notes_share_markdown_summary)) },
                 leadingContent = {
                     Icon(
                         painter = painterResource(R.drawable.ic_share),
@@ -772,8 +810,8 @@ internal fun BookNotesExportBottomSheet(
             HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
             ListItem(
-                headlineContent = { Text("另存为本地文件") },
-                supportingContent = { Text("使用系统存储选择器，保存到手机本地目录") },
+                headlineContent = { Text(stringResource(R.string.book_notes_save_markdown)) },
+                supportingContent = { Text(stringResource(R.string.book_notes_save_markdown_summary)) },
                 leadingContent = {
                     Icon(
                         painter = painterResource(R.drawable.ic_download),

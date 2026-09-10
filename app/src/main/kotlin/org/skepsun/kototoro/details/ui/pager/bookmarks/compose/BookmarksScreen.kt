@@ -39,9 +39,12 @@ import androidx.core.net.toUri
 import coil3.compose.AsyncImage
 import org.skepsun.kototoro.R
 import org.skepsun.kototoro.bookmarks.domain.Bookmark
+import org.skepsun.kototoro.core.prefs.BackgroundStyle
 import org.skepsun.kototoro.details.ui.compose.state.DetailsPaneState
 import org.skepsun.kototoro.details.ui.compose.state.rememberDetailsPaneNestedScrollConnection
 import org.skepsun.kototoro.core.ui.compose.performSelectionHapticFeedback
+import org.skepsun.kototoro.core.ui.theme.LocalBackgroundStyle
+import org.skepsun.kototoro.core.ui.theme.artworkAwareContainerColor
 import org.skepsun.kototoro.list.ui.model.ListHeader
 import java.io.File
 
@@ -55,6 +58,7 @@ private fun BookmarkCard(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+    val isArtworkBackground = LocalBackgroundStyle.current == BackgroundStyle.DYNAMIC_ARTWORK_BLUR
     val snapshotFile = remember(bookmark) {
         File(context.filesDir, "bookmarks/manga_${bookmark.manga.id}_chapter_${bookmark.chapterId}_page_${bookmark.page}.jpg")
     }
@@ -76,8 +80,9 @@ private fun BookmarkCard(
             ),
         shape = RoundedCornerShape(8.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.artworkAwareContainerColor(),
         ),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (isArtworkBackground) 0.dp else 1.dp),
         border = if (isSelected) BorderStroke(4.dp, MaterialTheme.colorScheme.primary) else null,
     ) {
         Box(modifier = Modifier.fillMaxSize()) {

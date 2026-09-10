@@ -8,6 +8,7 @@ import android.widget.Toast
 import androidx.core.app.ShareCompat
 import androidx.core.content.FileProvider
 import org.skepsun.kototoro.BuildConfig
+import org.skepsun.kototoro.R
 import org.skepsun.kototoro.core.util.ext.toFileNameSafe
 import org.skepsun.kototoro.notes.domain.BookNoteItem
 import org.skepsun.kototoro.parsers.model.Content
@@ -18,18 +19,23 @@ import java.util.Locale
 
 object BookNotesExportHelper {
 
-    fun generateMarkdown(manga: Content, notes: List<BookNoteItem>): String {
+    fun generateMarkdown(context: Context, manga: Content, notes: List<BookNoteItem>): String {
         val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
         val sb = StringBuilder()
 
-        sb.appendLine("# 《${manga.title}》 读书笔记")
+        sb.appendLine(context.getString(R.string.book_notes_markdown_title, manga.title))
         sb.appendLine()
         if (manga.authors.isNotEmpty()) {
-            sb.appendLine("> **作者**：${manga.authors.joinToString(" / ")}")
+            sb.appendLine(
+                context.getString(
+                    R.string.book_notes_markdown_author,
+                    manga.authors.joinToString(" / "),
+                ),
+            )
         }
-        sb.appendLine("> **导出来源**：Kototoro 笔记中心")
-        sb.appendLine("> **导出时间**：${dateFormat.format(Date())}")
-        sb.appendLine("> **笔记总数**：${notes.size} 条")
+        sb.appendLine(context.getString(R.string.book_notes_markdown_source))
+        sb.appendLine(context.getString(R.string.book_notes_markdown_time, dateFormat.format(Date())))
+        sb.appendLine(context.getString(R.string.book_notes_markdown_total, notes.size))
         sb.appendLine()
         sb.appendLine("---")
         sb.appendLine()
@@ -45,7 +51,7 @@ object BookNotesExportHelper {
                         sb.appendLine("> ${note.text}")
                         sb.appendLine()
                         if (!note.note.isNullOrBlank()) {
-                            sb.appendLine("💭 **想法**：${note.note}")
+                            sb.appendLine(context.getString(R.string.book_notes_markdown_thought, note.note))
                             sb.appendLine()
                         }
                         if (timeStr.isNotBlank()) {
@@ -54,8 +60,21 @@ object BookNotesExportHelper {
                         }
                     }
                     is BookNoteItem.BookmarkEntry -> {
-                        val progressStr = if (note.percent > 0) " (进度 ${(note.percent * 100).toInt()}%)" else ""
-                        sb.appendLine("🔖 **书签**：第 ${note.page + 1} 页$progressStr")
+                        val progressStr = if (note.percent > 0) {
+                            context.getString(
+                                R.string.book_notes_markdown_progress,
+                                (note.percent * 100).toInt(),
+                            )
+                        } else {
+                            ""
+                        }
+                        sb.appendLine(
+                            context.getString(
+                                R.string.book_notes_markdown_bookmark,
+                                note.page + 1,
+                                progressStr,
+                            ),
+                        )
                         sb.appendLine()
                         if (timeStr.isNotBlank()) {
                             sb.appendLine("*$timeStr*")
@@ -70,18 +89,21 @@ object BookNotesExportHelper {
     }
 
     fun copyToClipboard(context: Context, manga: Content, notes: List<BookNoteItem>) {
-        val md = generateMarkdown(manga, notes)
+        val md = generateMarkdown(context, manga, notes)
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         clipboard.setPrimaryClip(ClipData.newPlainText("notes_export", md))
-        Toast.makeText(context, "已复制全书笔记 Markdown 格式", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, R.string.book_notes_copied_markdown, Toast.LENGTH_SHORT).show()
     }
 
     fun shareMarkdownFile(context: Context, manga: Content, notes: List<BookNoteItem>) {
         try {
-            val md = generateMarkdown(manga, notes)
+            val md = generateMarkdown(context, manga, notes)
             val exportDir = File(context.cacheDir, "notes_export").apply { mkdirs() }
             val safeTitle = manga.title.toFileNameSafe().ifBlank { "book" }.take(50)
-            val file = File(exportDir, "《${safeTitle}》读书笔记.md")
+            val file = File(
+                exportDir,
+                context.getString(R.string.book_notes_export_filename, safeTitle),
+            )
             file.writeText(md, Charsets.UTF_8)
 
             val uri = FileProvider.getUriForFile(
@@ -93,23 +115,31 @@ object BookNotesExportHelper {
             ShareCompat.IntentBuilder(context)
                 .setType("text/markdown")
                 .setStream(uri)
-                .setChooserTitle("分享《${manga.title}》笔记")
+                .setChooserTitle(context.getString(R.string.book_notes_share_title, manga.title))
                 .startChooser()
         } catch (e: Exception) {
-            Toast.makeText(context, "分享失败：${e.message}", Toast.LENGTH_SHORT).show()
+            Toast.makeText(
+                context,
+                context.getString(R.string.book_notes_share_failed, e.message.orEmpty()),
+                Toast.LENGTH_SHORT,
+            ).show()
         }
     }
 
     fun writeMarkdownToUri(context: Context, uri: Uri, manga: Content, notes: List<BookNoteItem>): Boolean {
         return try {
-            val md = generateMarkdown(manga, notes)
+            val md = generateMarkdown(context, manga, notes)
             context.contentResolver.openOutputStream(uri)?.use { output ->
                 output.write(md.toByteArray(Charsets.UTF_8))
             }
-            Toast.makeText(context, "笔记已成功保存到文件", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, R.string.book_notes_saved, Toast.LENGTH_SHORT).show()
             true
         } catch (e: Exception) {
-            Toast.makeText(context, "保存失败：${e.message}", Toast.LENGTH_SHORT).show()
+            Toast.makeText(
+                context,
+                context.getString(R.string.book_notes_save_failed, e.message.orEmpty()),
+                Toast.LENGTH_SHORT,
+            ).show()
             false
         }
     }

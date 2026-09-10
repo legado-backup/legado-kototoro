@@ -235,6 +235,7 @@ fun ChaptersPagesTabsContent(
                         lifecycleOwner = lifecycleOwner,
                         viewModel = pagesViewModel,
                         detailsPaneState = detailsPaneState,
+                        isScrollEnabled = isChapterListScrollEnabled,
                         thumbnailAspectRatio = pageThumbnailAspectRatio,
                     )
                     DETAILS_TAB_BOOKMARKS -> BookmarksScreenRoot(
