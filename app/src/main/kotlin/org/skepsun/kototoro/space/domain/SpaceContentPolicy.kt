@@ -46,11 +46,12 @@ class DefaultSpaceContentPolicy @Inject constructor(
 
     override fun allowedSourceNames(spaceId: SpaceId): Set<String>? {
         val context = catalogRepository.find(spaceId) ?: return emptySet()
-        if (context.sourceLanguages.isEmpty() && context.sourceKinds.isEmpty()) return null
+        val isAllTypes = context.allowedContentTypes.containsAll(ALL_STANDARD_CONTENT_TYPES)
+        if (context.sourceLanguages.isEmpty() && context.sourceKinds.isEmpty() && (context.isBuiltIn || isAllTypes)) return null
         return sourceRuleResolver.resolveCurrentSourceNames(
             SourceRule(
                 languages = context.sourceLanguages,
-                contentTypes = context.allowedContentTypes,
+                contentTypes = if (isAllTypes) emptySet() else context.allowedContentTypes,
                 sourceTypes = context.sourceKinds,
             ),
         )
@@ -59,13 +60,14 @@ class DefaultSpaceContentPolicy @Inject constructor(
     override fun observeAllowedSourceNames(spaceId: SpaceId): Flow<Set<String>?> {
         return catalogRepository.spaces.flatMapLatest { spaces ->
             val context = spaces.firstOrNull { it.id == spaceId } ?: return@flatMapLatest flowOf(emptySet())
-            if (context.sourceLanguages.isEmpty() && context.sourceKinds.isEmpty()) {
+            val isAllTypes = context.allowedContentTypes.containsAll(ALL_STANDARD_CONTENT_TYPES)
+            if (context.sourceLanguages.isEmpty() && context.sourceKinds.isEmpty() && (context.isBuiltIn || isAllTypes)) {
                 flowOf(null)
             } else {
                 sourceRuleResolver.observeResolvedSourceNames(
                     SourceRule(
                         languages = context.sourceLanguages,
-                        contentTypes = context.allowedContentTypes,
+                        contentTypes = if (isAllTypes) emptySet() else context.allowedContentTypes,
                         sourceTypes = context.sourceKinds,
                     ),
                 )
@@ -73,3 +75,5 @@ class DefaultSpaceContentPolicy @Inject constructor(
         }.distinctUntilChanged()
     }
 }
+
+private val ALL_STANDARD_CONTENT_TYPES = ContentType.entries.filterNot { it == ContentType.OTHER }.toSet()

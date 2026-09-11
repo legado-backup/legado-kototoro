@@ -146,10 +146,11 @@ class SpaceResumeViewModel @Inject constructor(
     }
 }
 
-private fun SpaceKind.toContentType(): ContentType = when (this) {
+private fun SpaceKind.toContentType(): ContentType? = when (this) {
     SpaceKind.MANGA -> ContentType.MANGA
     SpaceKind.NOVEL -> ContentType.NOVEL
     SpaceKind.ANIME -> ContentType.VIDEO
+    SpaceKind.ALL -> null
 }
 
 internal fun buildSpaceResumeUiState(

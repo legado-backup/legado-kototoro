@@ -3882,6 +3882,9 @@
     <string name="content_types">Content types</string>
     <string name="source_types">Source types</string>
     <string name="custom_space_rule_summary">%1$d content types · %2$d languages · %3$d source types</string>
+    <string name="space_languages_hint">Leave empty to include all languages</string>
+    <string name="space_source_types_hint">Leave empty to include all source types</string>
+    <string name="space_content_types_required_hint">Select at least one content type</string>
     <string name="novel_selection_text">Selected text</string>
     <string name="novel_selection_copied">Selected text copied</string>
     <string name="novel_selection_dictionary">Look up</string>

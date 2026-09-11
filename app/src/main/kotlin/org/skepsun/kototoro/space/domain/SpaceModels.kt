@@ -10,6 +10,7 @@ enum class SpaceKind {
     MANGA,
     NOVEL,
     ANIME,
+    ALL,
 }
 
 data class SpaceContext(
@@ -69,8 +70,13 @@ object BuiltInSpaces {
     )
 }
 
+private val NOVEL_CONTENT_TYPES = setOf(ContentType.NOVEL, ContentType.HENTAI_NOVEL)
+private val VIDEO_CONTENT_TYPES = setOf(ContentType.VIDEO, ContentType.HENTAI_VIDEO)
+
 fun Set<ContentType>.primarySpaceKind(): SpaceKind = when {
-    isNotEmpty() && all { it == ContentType.NOVEL || it == ContentType.HENTAI_NOVEL } -> SpaceKind.NOVEL
-    isNotEmpty() && all { it == ContentType.VIDEO || it == ContentType.HENTAI_VIDEO } -> SpaceKind.ANIME
-    else -> SpaceKind.MANGA
+    isEmpty() -> SpaceKind.ALL
+    all { it in NOVEL_CONTENT_TYPES } -> SpaceKind.NOVEL
+    all { it in VIDEO_CONTENT_TYPES } -> SpaceKind.ANIME
+    all { it !in NOVEL_CONTENT_TYPES && it !in VIDEO_CONTENT_TYPES } -> SpaceKind.MANGA
+    else -> SpaceKind.ALL
 }

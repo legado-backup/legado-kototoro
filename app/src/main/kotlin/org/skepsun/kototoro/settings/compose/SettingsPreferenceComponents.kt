@@ -80,7 +80,7 @@ data class SettingsChoiceOption<T>(
     val label: String,
 )
 
-private enum class SettingsIconTone(val iosColor: Color) {
+internal enum class SettingsIconTone(val iosColor: Color) {
     PRIMARY(Color(0xFF007AFF)),
     SECONDARY(Color(0xFF34C759)),
     TERTIARY(Color(0xFFFF9500)),
@@ -90,7 +90,7 @@ private enum class SettingsIconTone(val iosColor: Color) {
 }
 
 @Composable
-private fun SettingsIconTone.containerColor(isIosStyle: Boolean): Color {
+internal fun SettingsIconTone.containerColor(isIosStyle: Boolean): Color {
     if (isIosStyle) return iosColor
     val scheme = MaterialTheme.colorScheme
     return when (this) {
@@ -104,7 +104,7 @@ private fun SettingsIconTone.containerColor(isIosStyle: Boolean): Color {
 }
 
 @Composable
-private fun SettingsIconTone.contentColor(isIosStyle: Boolean): Color {
+internal fun SettingsIconTone.contentColor(isIosStyle: Boolean): Color {
     if (isIosStyle) return Color.White
     val scheme = MaterialTheme.colorScheme
     return when (this) {
@@ -118,7 +118,7 @@ private fun SettingsIconTone.contentColor(isIosStyle: Boolean): Color {
 }
 
 @Composable
-private fun SettingsLeadingIcon(
+internal fun SettingsLeadingIcon(
     imageVector: ImageVector,
     @DrawableRes iconRes: Int? = null,
     tone: SettingsIconTone,
@@ -156,7 +156,7 @@ private fun SettingsLeadingIcon(
 }
 
 @Composable
-private fun settingsSwitchColors(): SwitchColors {
+internal fun settingsSwitchColors(): SwitchColors {
     return if (LocalInterfaceStyle.current == InterfaceStyle.IOS) {
         SwitchDefaults.colors(
             checkedThumbColor = Color.White,
@@ -1178,7 +1178,7 @@ fun SettingsGroupDivider(
 }
 
 @Composable
-private fun Modifier.settingsPreferenceLayout(enabled: Boolean): Modifier {
+internal fun Modifier.settingsPreferenceLayout(enabled: Boolean): Modifier {
     val isIosStyle = LocalInterfaceStyle.current == InterfaceStyle.IOS
     val tokens = LocalInterfaceStyleTokens.current
     // Legacy MATERIAL_3 was normalized to MATERIAL_3_EXPRESSIVE, so the branch below always

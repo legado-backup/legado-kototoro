@@ -931,7 +931,8 @@ internal fun SpaceContext.customMonogram(): String? {
 private fun SpaceId.presentation(): SpacePresentation = when (this) {
     BuiltInSpaces.Novel -> SpacePresentation(R.string.space_novel, R.drawable.ic_content_novel, R.drawable.ic_read)
     BuiltInSpaces.Anime -> SpacePresentation(R.string.space_anime, R.drawable.ic_content_video, R.drawable.ic_play)
-    else -> SpacePresentation(R.string.space_manga, R.drawable.ic_content_manga, R.drawable.ic_read)
+    BuiltInSpaces.Manga -> SpacePresentation(R.string.space_manga, R.drawable.ic_content_manga, R.drawable.ic_read)
+    else -> SpacePresentation(R.string.all, R.drawable.ic_filter_content_type, R.drawable.ic_read)
 }
 
 private fun SpaceContext.presentation(): SpacePresentation = when (kind) {
@@ -941,4 +942,6 @@ private fun SpaceContext.presentation(): SpacePresentation = when (kind) {
         SpacePresentation(R.string.space_anime, R.drawable.ic_content_video, R.drawable.ic_play)
     org.skepsun.kototoro.space.domain.SpaceKind.MANGA ->
         SpacePresentation(R.string.space_manga, R.drawable.ic_content_manga, R.drawable.ic_read)
+    org.skepsun.kototoro.space.domain.SpaceKind.ALL ->
+        SpacePresentation(R.string.all, R.drawable.ic_filter_content_type, R.drawable.ic_read)
 }

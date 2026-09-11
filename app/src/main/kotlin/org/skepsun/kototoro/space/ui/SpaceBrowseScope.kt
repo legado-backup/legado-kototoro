@@ -73,12 +73,10 @@ class SpaceBrowseScope @Inject constructor(
             initialValue = null,
         )
 
-    fun observeGroupTab(spaceIds: Flow<SpaceId?>): Flow<BrowseGroupTab?> = combine(
-        spaceIds,
-        catalogRepository.spaces,
-    ) { spaceId, spaces ->
-        spaceId?.let { id -> spaces.firstOrNull { it.id == id }?.kind?.toBrowseGroupTab() }
-    }
+    fun observeGroupTab(spaceIds: Flow<SpaceId?>): Flow<BrowseGroupTab?> = observeGroupTab(
+        spaceIds = spaceIds,
+        spaces = catalogRepository.spaces,
+    )
 
     internal fun groupTabFor(spaceId: SpaceId?): BrowseGroupTab? =
         spaceId?.let { id -> catalogRepository.find(id)?.kind?.toBrowseGroupTab() }
@@ -103,6 +101,16 @@ class SpaceBrowseScope @Inject constructor(
     )
 }
 
+internal fun observeGroupTab(
+    spaceIds: Flow<SpaceId?>,
+    spaces: Flow<List<SpaceContext>>,
+): Flow<BrowseGroupTab?> = combine(
+    spaceIds,
+    spaces,
+) { spaceId, spaceList ->
+    spaceId?.let { id -> spaceList.firstOrNull { it.id == id }?.kind?.toBrowseGroupTab() }
+}
+
 internal fun observeAllowedSourceNames(
     spaceIds: Flow<SpaceId?>,
     spaces: Flow<List<SpaceContext>>,
@@ -117,21 +125,22 @@ internal fun observeAllowedSourceNames(
             observeSources(),
         ) { spaces, sources ->
             val context = spaces.firstOrNull { it.id == spaceId } ?: return@combine null
-            if (context.sourceLanguages.isEmpty() && context.sourceKinds.isEmpty() && context.isBuiltIn) {
+            val isAllTypes = context.allowedContentTypes.containsAll(ALL_STANDARD_CONTENT_TYPES)
+            if (context.sourceLanguages.isEmpty() && context.sourceKinds.isEmpty() && (context.isBuiltIn || isAllTypes)) {
                 null
             } else {
                 resolveSourceNames(
                     SourceRule(
                         languages = context.sourceLanguages,
-                        contentTypes = context.allowedContentTypes,
+                        contentTypes = if (isAllTypes) emptySet() else context.allowedContentTypes,
                         sourceTypes = context.sourceKinds,
                     ),
                     sources,
                 )
             }
-            }
         }
     }
+}
 
 fun StateFlow<BrowseGroupTab>.scopedToSpace(
     spaceBrowseScope: SpaceBrowseScope,
@@ -155,14 +164,18 @@ internal fun StateFlow<BrowseGroupTab>.scopedToSpace(
 internal fun SpaceId.toBrowseGroupTab(): BrowseGroupTab = when (this) {
     BuiltInSpaces.Novel -> BrowseGroupTab.Novel
     BuiltInSpaces.Anime -> BrowseGroupTab.Video
-    else -> BrowseGroupTab.Content
+    BuiltInSpaces.Manga -> BrowseGroupTab.Content
+    else -> BrowseGroupTab.All
 }
 
-private fun org.skepsun.kototoro.space.domain.SpaceKind.toBrowseGroupTab(): BrowseGroupTab = when (this) {
+internal fun org.skepsun.kototoro.space.domain.SpaceKind.toBrowseGroupTab(): BrowseGroupTab = when (this) {
     org.skepsun.kototoro.space.domain.SpaceKind.NOVEL -> BrowseGroupTab.Novel
     org.skepsun.kototoro.space.domain.SpaceKind.ANIME -> BrowseGroupTab.Video
     org.skepsun.kototoro.space.domain.SpaceKind.MANGA -> BrowseGroupTab.Content
+    org.skepsun.kototoro.space.domain.SpaceKind.ALL -> BrowseGroupTab.All
 }
+
+private val ALL_STANDARD_CONTENT_TYPES = ContentType.entries.filterNot { it == ContentType.OTHER }.toSet()
 
 internal fun BrowseGroupTab.toPrimaryContentType(): ContentType? = when (this) {
     BrowseGroupTab.Content -> ContentType.MANGA

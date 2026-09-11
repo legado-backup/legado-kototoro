@@ -2729,6 +2729,9 @@ SHA-256 指紋:
     <string name="content_types">內容類型</string>
     <string name="source_types">內容來源類型</string>
     <string name="custom_space_rule_summary">%1$d 種內容類型 · %2$d 種語言 · %3$d 種內容來源類型</string>
+    <string name="space_languages_hint">留空以包含全部語言</string>
+    <string name="space_source_types_hint">留空以包含全部內容來源類型</string>
+    <string name="space_content_types_required_hint">請至少選擇一種內容類型</string>
     <string name="filter_group_reading_status">閱讀</string>
     <string name="filter_group_publication_status">連載</string>
     <string name="filter_group_content_rating">分級</string>

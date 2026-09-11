@@ -3539,6 +3539,9 @@ SHA-256 指纹:
     <string name="content_types">内容类型</string>
     <string name="source_types">内容源类型</string>
     <string name="custom_space_rule_summary">%1$d 种内容类型 · %2$d 种语言 · %3$d 种内容源类型</string>
+    <string name="space_languages_hint">留空以包含全部语言</string>
+    <string name="space_source_types_hint">留空以包含全部内容源类型</string>
+    <string name="space_content_types_required_hint">请至少选择一种内容类型</string>
     <string name="entity_organize_repair_mixed_work_content_types_title">修复混合内容类型的作品实体</string>
     <string name="entity_organize_repair_mixed_work_content_types_summary">%1$d 个作品实体包含 %2$d 个来自不同内容类型的本地投影。将投影拆分为独立作品实体以恢复类型隔离。</string>
     <string name="entity_organize_repair_mixed_work_content_types_action">拆分混合内容类型作品</string>

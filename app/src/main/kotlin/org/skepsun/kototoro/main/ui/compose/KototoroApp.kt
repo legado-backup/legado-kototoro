@@ -696,7 +696,7 @@ fun KototoroApp(
             SpaceKind.MANGA -> ContentType.MANGA
             SpaceKind.NOVEL -> ContentType.NOVEL
             SpaceKind.ANIME -> ContentType.VIDEO
-            null -> effectiveResumeContent?.source?.getContentType()
+            SpaceKind.ALL, null -> effectiveResumeContent?.source?.getContentType()
         }
     } else {
         effectiveResumeContent?.source?.getContentType()
