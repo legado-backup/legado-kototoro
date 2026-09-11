@@ -319,7 +319,7 @@ fun PagesScreen(
             VerticalScrollbar(
                 state = listState,
                 draggable = isScrollEnabled,
-                contentPadding = PaddingValues(16.dp),
+                contentPadding = PaddingValues(vertical = 16.dp),
                 labelProvider = { index -> "${index + 1}" },
             )
         }
