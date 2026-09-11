@@ -2472,28 +2472,17 @@ class NovelReaderActivity :
                             // 成功读取EPUB，显示内容
                             renderChapter(index, chapter, epubContent)
                         } else {
-                            // 读取失败，显示提示信息
-                            val webUrl = pages[0].url
-                            val epubMessage = """
-                                此章节为EPUB格式文件
-                                
-                                Novelia文库的EPUB文件需要在网页端下载。
-                                
-                                下载步骤：
-                                1. 在浏览器中打开小说页面
-                                2. 找到对应的分卷
-                                3. 点击下载按钮
-                                4. 下载EPUB文件
-                                5. 使用EPUB阅读器打开
-                                
-                                小说页面：
-                                $webUrl
-                                
-                                提示：
-                                - 可能需要登录Novelia账号
-                                - 下载后可以使用Moon+ Reader等阅读器打开
-                                - 未来版本将支持更便捷的下载方式
-                            """.trimIndent()
+                            // 读取失败：该分卷尚未下载，向用户正确引导「先下载、后展开」的流程
+                            val volumeName = chapter.title.orEmpty()
+                            val epubMessage = buildString {
+                                append(getString(R.string.novel_epub_volume_not_downloaded_title))
+                                append("\n\n")
+                                if (volumeName.isNotBlank()) {
+                                    append(getString(R.string.novel_epub_volume_name_format, volumeName))
+                                    append("\n\n")
+                                }
+                                append(getString(R.string.novel_epub_download_guide))
+                            }
                             renderChapter(index, chapter, epubMessage)
                         }
                         return@launch

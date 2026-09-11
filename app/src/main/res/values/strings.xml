@@ -724,6 +724,9 @@
     <string name="novel_epub_url_invalid">Invalid chapter URL format</string>
     <string name="novel_epub_parse_failed">Failed to parse EPUB file</string>
     <string name="novel_epub_load_failed">Cannot load EPUB chapter: %s</string>
+    <string name="novel_epub_volume_not_downloaded_title">This EPUB volume has not been downloaded yet</string>
+    <string name="novel_epub_volume_name_format">Volume: %s</string>
+    <string name="novel_epub_download_guide">To read this volume, please download it first:\n\n1. Go back to the details page\n2. Find this volume and tap download (or use batch download)\n3. Wait for the download to finish\n\nOnce downloaded, the app will automatically expand the volume into chapters that you can read right here — no external reader needed.</string>
     <string name="novel_load_chapters_failed">Failed to load chapter list: %s</string>
     <string name="novel_load_chapter_failed">Failed to load chapter: %s</string>
     <string name="quality_auto">Auto</string>

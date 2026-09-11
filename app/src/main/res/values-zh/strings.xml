@@ -1423,6 +1423,9 @@
     <string name="novel_dual_page_mode">双页模式</string>
     <string name="novel_epub_index_invalid">章节索引无效</string>
     <string name="novel_epub_load_failed">无法加载EPUB章节: %s</string>
+    <string name="novel_epub_volume_not_downloaded_title">此分卷为 EPUB 格式，尚未下载</string>
+    <string name="novel_epub_volume_name_format">分卷：%s</string>
+    <string name="novel_epub_download_guide">要阅读本分卷，请先下载它：\n\n1. 返回作品详情页\n2. 找到本分卷并点击下载（或使用批量下载）\n3. 等待下载完成\n\n下载完成后，应用会自动将分卷展开为章节，并可直接在此阅读，无需外部阅读器。</string>
     <string name="novel_epub_not_found">EPUB文件未找到，可能已被删除</string>
     <string name="novel_epub_parse_failed">EPUB文件解析失败</string>
     <string name="novel_epub_url_invalid">章节URL格式错误</string>
