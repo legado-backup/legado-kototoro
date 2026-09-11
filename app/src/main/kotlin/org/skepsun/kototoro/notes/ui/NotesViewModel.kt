@@ -3,6 +3,7 @@ package org.skepsun.kototoro.notes.ui
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -12,13 +13,20 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.plus
 import org.skepsun.kototoro.core.db.MangaDatabase
 import org.skepsun.kototoro.core.db.entity.toContent
+import org.skepsun.kototoro.core.prefs.AppSettings
+import org.skepsun.kototoro.core.prefs.observeAsFlow
 import org.skepsun.kototoro.notes.domain.BookNoteItem
 import org.skepsun.kototoro.notes.domain.BookNotesRepository
 import org.skepsun.kototoro.notes.domain.BookNotesSummary
 import org.skepsun.kototoro.notes.domain.NoteType
 import org.skepsun.kototoro.parsers.model.Content
+import org.skepsun.kototoro.space.domain.SpaceContentPolicy
+import org.skepsun.kototoro.space.domain.SpaceId
+import org.skepsun.kototoro.space.ui.SpaceBindableViewModel
+import org.skepsun.kototoro.space.ui.SpaceBrowseScope
 import javax.inject.Inject
 
 data class NotesUiState(
@@ -30,6 +38,8 @@ data class NotesUiState(
     val selectedFilter: NoteType = NoteType.ALL,
     val bookSearchQuery: String = "",
     val isLoading: Boolean = true,
+    val isGlobalNsfwDisabled: Boolean = false,
+    val isNsfwFiltered: Boolean = false,
 ) {
     val totalNotesCount: Int get() = summaries.sumOf { it.totalCount }
     val totalBooksCount: Int get() = summaries.size
@@ -55,7 +65,17 @@ data class NotesUiState(
                                 (item.note?.contains(bookSearchQuery, ignoreCase = true) == true)
                         }
                         is BookNoteItem.BookmarkEntry -> {
-                            item.chapterTitle.contains(bookSearchQuery, ignoreCase = true)
+                            item.chapterTitle.contains(bookSearchQuery, ignoreCase = true) ||
+                                (item.imageUrl?.contains(bookSearchQuery, ignoreCase = true) == true)
+                        }
+                        is BookNoteItem.MangaCropNote -> {
+                            (item.note?.contains(bookSearchQuery, ignoreCase = true) == true) ||
+                                item.chapterTitle.contains(bookSearchQuery, ignoreCase = true)
+                        }
+                        is BookNoteItem.VideoNote -> {
+                            (item.note?.contains(bookSearchQuery, ignoreCase = true) == true) ||
+                                (item.quoteText?.contains(bookSearchQuery, ignoreCase = true) == true) ||
+                                item.chapterTitle.contains(bookSearchQuery, ignoreCase = true)
                         }
                     }
                 }
@@ -67,17 +87,40 @@ data class NotesUiState(
         get() = filteredBookNotes.groupBy { it.chapterTitle }
 }
 
+private data class BookSelectionState(
+    val mangaId: Long?,
+    val manga: Content?,
+    val notes: List<BookNoteItem>,
+    val filter: NoteType,
+    val bookQuery: String,
+)
+
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class NotesViewModel @Inject constructor(
     private val repository: BookNotesRepository,
     private val database: MangaDatabase,
-) : ViewModel() {
+    private val spaceContentPolicy: SpaceContentPolicy,
+    private val settings: AppSettings,
+    spaceBrowseScope: SpaceBrowseScope,
+) : ViewModel(), SpaceBindableViewModel {
+
+    private val spaceBinding = spaceBrowseScope.createBinding(viewModelScope + Dispatchers.Default)
+
+    override fun bindSpace(spaceId: SpaceId?) = spaceBinding.bindSpace(spaceId)
 
     private val searchQuery = MutableStateFlow("")
     private val selectedMangaId = MutableStateFlow<Long?>(null)
     private val selectedFilter = MutableStateFlow(NoteType.ALL)
     private val bookSearchQuery = MutableStateFlow("")
+    private val filterNsfw = MutableStateFlow(false)
+
+    val isGlobalNsfwDisabled: StateFlow<Boolean> = settings.observeAsFlow(AppSettings.KEY_BOOKMARKS_EXCLUDE_NSFW) { isBookmarksExcludeNsfw }
+        .stateIn(viewModelScope + Dispatchers.Default, SharingStarted.Eagerly, settings.isBookmarksExcludeNsfw)
+
+    fun toggleNsfwFilter() {
+        filterNsfw.value = !filterNsfw.value
+    }
 
     private val selectedBookData = selectedMangaId.flatMapLatest { mangaId ->
         if (mangaId == null) {
@@ -92,24 +135,58 @@ class NotesViewModel @Inject constructor(
         }
     }
 
-    private val summariesAndSearch = combine(repository.observeSummaries(), searchQuery) { s, q -> Pair(s, q) }
-    private val filterAndQuery = combine(selectedFilter, bookSearchQuery) { f, q -> Pair(f, q) }
+    private val policyAndFilter = combine(
+        spaceBinding.spaceId,
+        isGlobalNsfwDisabled,
+        filterNsfw,
+    ) { spaceId, globalNsfwDisabled, onScreenNsfwFiltered ->
+        Triple(spaceId, globalNsfwDisabled, onScreenNsfwFiltered)
+    }
 
-    val uiState: StateFlow<NotesUiState> = combine(
-        summariesAndSearch,
+    private val bookSelection = combine(
         selectedMangaId,
         selectedBookData,
-        filterAndQuery,
-    ) { (summaries, query), mangaId, (manga, notes), (filter, bookQuery) ->
+        selectedFilter,
+        bookSearchQuery,
+    ) { mangaId, (manga, notes), filter, bookQuery ->
+        BookSelectionState(mangaId, manga, notes, filter, bookQuery)
+    }
+
+    val uiState: StateFlow<NotesUiState> = combine(
+        repository.observeSummaries(),
+        policyAndFilter,
+        searchQuery,
+        bookSelection,
+    ) { summaries, (spaceId, globalNsfwDisabled, onScreenNsfwFiltered), query, selection ->
+        val shouldFilterNsfw = globalNsfwDisabled || onScreenNsfwFiltered
+        val filteredByPolicy = summaries.filter { summary ->
+            if (spaceId != null) {
+                val allowedTypes = spaceContentPolicy.allowedTypes(spaceId)
+                if (allowedTypes.isNotEmpty() && summary.contentType !in allowedTypes) {
+                    return@filter false
+                }
+                val allowedSources = spaceContentPolicy.allowedSourceNames(spaceId)
+                if (allowedSources != null && summary.source.isNotBlank() && summary.source !in allowedSources) {
+                    return@filter false
+                }
+            }
+            if (shouldFilterNsfw && summary.isNsfw) {
+                return@filter false
+            }
+            true
+        }
+
         NotesUiState(
-            summaries = summaries,
+            summaries = filteredByPolicy,
             searchQuery = query,
-            selectedMangaId = mangaId,
-            selectedManga = manga,
-            selectedBookNotes = notes,
-            selectedFilter = filter,
-            bookSearchQuery = bookQuery,
+            selectedMangaId = selection.mangaId,
+            selectedManga = selection.manga,
+            selectedBookNotes = selection.notes,
+            selectedFilter = selection.filter,
+            bookSearchQuery = selection.bookQuery,
             isLoading = false,
+            isGlobalNsfwDisabled = globalNsfwDisabled,
+            isNsfwFiltered = onScreenNsfwFiltered,
         )
     }.stateIn(
         scope = viewModelScope,

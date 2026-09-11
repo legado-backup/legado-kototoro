@@ -100,6 +100,7 @@ sealed interface VideoPlayerAction {
     data class OpenMore(val anchorBounds: IntRect) : VideoPlayerAction
     data object ToggleFullscreen : VideoPlayerAction
     data object ToggleScreenLock : VideoPlayerAction
+    data object AddNote : VideoPlayerAction
 }
 
 /**
@@ -330,6 +331,17 @@ fun VideoPlayerBottomControls(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
+                    PlayerIconButton(
+                        icon = {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_comment),
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                            )
+                        },
+                        contentDescription = stringResource(R.string.video_add_note),
+                        onClick = { onAction(VideoPlayerAction.AddNote) },
+                    )
                     PlayerTextButton(
                         text = state.playbackSpeedLabel,
                         onClick = { onAction(VideoPlayerAction.OpenPlaybackSpeed(speedAnchorBounds)) },

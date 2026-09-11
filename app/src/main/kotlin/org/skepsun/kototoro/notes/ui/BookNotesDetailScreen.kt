@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -53,6 +54,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -63,6 +65,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import org.skepsun.kototoro.R
+import org.skepsun.kototoro.bookmarks.domain.extractNovelBookmarkPreview
+import org.skepsun.kototoro.core.model.getContentType
 import org.skepsun.kototoro.core.prefs.BackgroundStyle
 import org.skepsun.kototoro.core.ui.theme.LocalBackgroundStyle
 import org.skepsun.kototoro.core.ui.theme.artworkAwareContainerColor
@@ -72,6 +76,7 @@ import org.skepsun.kototoro.notes.domain.BookNoteItem
 import org.skepsun.kototoro.notes.domain.NoteType
 import org.skepsun.kototoro.parsers.model.Content
 import org.skepsun.kototoro.parsers.model.ContentPage
+import org.skepsun.kototoro.parsers.model.ContentType
 import org.skepsun.kototoro.reader.novel.compose.NovelExcerptData
 import org.skepsun.kototoro.reader.novel.compose.NovelExcerptSheet
 import org.skepsun.kototoro.reader.novel.annotation.NovelMarkingColor
@@ -105,9 +110,9 @@ fun BookNotesDetailScreen(
         }
     }
 
-    val highlightCount = notes.count { it is BookNoteItem.NovelHighlight && it.note.isNullOrBlank() }
-    val thoughtCount = notes.count { it is BookNoteItem.NovelHighlight && !it.note.isNullOrBlank() }
-    val bookmarkCount = notes.count { it is BookNoteItem.BookmarkEntry }
+    val highlightCount = notes.count { it.noteType == NoteType.HIGHLIGHT }
+    val thoughtCount = notes.count { it.noteType == NoteType.THOUGHT }
+    val bookmarkCount = notes.count { it.noteType == NoteType.BOOKMARK }
 
     val subtitleText = buildList {
         if (highlightCount > 0) {
@@ -205,14 +210,9 @@ fun BookNotesDetailScreen(
                         manga = book,
                         totalNotesCount = notes.size,
                         onExcerptClick = {
-                            val firstHighlight = notes.filterIsInstance<BookNoteItem.NovelHighlight>().firstOrNull()
-                            if (firstHighlight != null) {
-                                activeExcerptData = NovelExcerptData(
-                                    selectedText = firstHighlight.text,
-                                    bookTitle = book.title,
-                                    chapterTitle = firstHighlight.chapterTitle,
-                                    author = book.authors.firstOrNull().orEmpty(),
-                                )
+                            val firstExcerptable = notes.firstOrNull { canMakeExcerpt(it) }
+                            if (firstExcerptable != null) {
+                                activeExcerptData = createExcerptData(firstExcerptable, book)
                             } else {
                                 Toast.makeText(context, R.string.book_notes_no_highlight_excerpt, Toast.LENGTH_SHORT).show()
                             }
@@ -346,25 +346,36 @@ fun BookNotesDetailScreen(
                                 manga?.let { onJumpToReader(it, item) }
                             },
                             onMakeExcerpt = {
-                                if (item is BookNoteItem.NovelHighlight) {
-                                    activeExcerptData = NovelExcerptData(
-                                        selectedText = item.text,
-                                        bookTitle = manga?.title.orEmpty(),
-                                        chapterTitle = item.chapterTitle,
-                                        author = manga?.authors?.firstOrNull().orEmpty(),
-                                    )
-                                }
+                                activeExcerptData = createExcerptData(item, manga)
                             },
                             onCopy = {
                                 val copyText = when (item) {
                                     is BookNoteItem.NovelHighlight -> item.note?.let {
                                         "$it\n${context.getString(R.string.book_notes_quote_prefix, item.text)}"
                                     } ?: item.text
-                                    is BookNoteItem.BookmarkEntry -> context.getString(
+                                    is BookNoteItem.BookmarkEntry -> {
+                                        val preview = extractNovelBookmarkPreview(item.imageUrl)
+                                        if (preview.isNotBlank()) {
+                                            "${context.getString(R.string.book_notes_bookmark_position, item.chapterTitle, item.page + 1)}\n$preview"
+                                        } else {
+                                            context.getString(
+                                                R.string.book_notes_bookmark_position,
+                                                item.chapterTitle,
+                                                item.page + 1,
+                                            )
+                                        }
+                                    }
+                                    is BookNoteItem.MangaCropNote -> item.note ?: context.getString(
                                         R.string.book_notes_bookmark_position,
                                         item.chapterTitle,
                                         item.page + 1,
                                     )
+                                    is BookNoteItem.VideoNote -> {
+                                        val time = org.skepsun.kototoro.video.ui.compose.formatDuration(item.positionMs)
+                                        val quote = item.quoteText?.let { "\n${context.getString(R.string.book_notes_quote_prefix, it)}" }.orEmpty()
+                                        val note = item.note?.let { "$it\n" }.orEmpty()
+                                        "${note}${item.chapterTitle} $time$quote"
+                                    }
                                 }
                                 val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                                 cm.setPrimaryClip(ClipData.newPlainText("note", copyText))
@@ -585,6 +596,8 @@ internal fun BookNoteCard(
                                 markingColor.lineColor.copy(alpha = 0.18f)
                             }
                             is BookNoteItem.BookmarkEntry -> MaterialTheme.colorScheme.tertiary.copy(alpha = 0.12f)
+                            is BookNoteItem.MangaCropNote -> MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                            is BookNoteItem.VideoNote -> MaterialTheme.colorScheme.secondary.copy(alpha = 0.15f)
                         },
                     ),
                 contentAlignment = Alignment.Center,
@@ -613,6 +626,22 @@ internal fun BookNoteCard(
                             contentDescription = stringResource(R.string.bookmarks),
                             modifier = Modifier.size(13.dp),
                             tint = MaterialTheme.colorScheme.tertiary,
+                        )
+                    }
+                    is BookNoteItem.MangaCropNote -> {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_crop),
+                            contentDescription = stringResource(R.string.crop_and_annotate),
+                            modifier = Modifier.size(13.dp),
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                    is BookNoteItem.VideoNote -> {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_comment),
+                            contentDescription = stringResource(R.string.video_add_note),
+                            modifier = Modifier.size(13.dp),
+                            tint = MaterialTheme.colorScheme.secondary,
                         )
                     }
                 }
@@ -659,32 +688,143 @@ internal fun BookNoteCard(
                             style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
                             color = MaterialTheme.colorScheme.onSurface,
                         )
-                        val imageModel = remember(item, manga) {
-                            when {
-                                !item.localSnapshotUri.isNullOrBlank() -> item.localSnapshotUri
-                                item.imageUrl?.startsWith("file://") == true -> item.imageUrl
-                                else -> item.toContentPage() ?: manga?.let {
-                                    ContentPage(
-                                        id = item.id,
-                                        url = item.imageUrl.orEmpty(),
-                                        preview = null,
-                                        source = it.source,
-                                    )
-                                } ?: item.imageUrl
+                        val contentType = (manga?.source ?: item.source)?.getContentType()
+                        val isNovel = contentType == ContentType.NOVEL || contentType == ContentType.HENTAI_NOVEL ||
+                            (item.localSnapshotUri.isNullOrBlank() && !item.imageUrl.isNullOrBlank() &&
+                                !item.imageUrl.startsWith("http://", ignoreCase = true) &&
+                                !item.imageUrl.startsWith("https://", ignoreCase = true) &&
+                                !item.imageUrl.startsWith("file://", ignoreCase = true) &&
+                                !item.imageUrl.startsWith("content://", ignoreCase = true))
+
+                        if (isNovel) {
+                            val previewText = remember(item.imageUrl) {
+                                extractNovelBookmarkPreview(item.imageUrl)
+                            }
+                            if (previewText.isNotBlank()) {
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    text = previewText,
+                                    style = MaterialTheme.typography.bodySmall.copy(
+                                        fontSize = 13.sp,
+                                        lineHeight = 19.sp,
+                                    ),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 4,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        } else {
+                            val imageModel = remember(item, manga) {
+                                when {
+                                    !item.localSnapshotUri.isNullOrBlank() -> item.localSnapshotUri
+                                    item.imageUrl?.startsWith("file://") == true -> item.imageUrl
+                                    else -> item.toContentPage() ?: manga?.let {
+                                        ContentPage(
+                                            id = item.id,
+                                            url = item.imageUrl.orEmpty(),
+                                            preview = null,
+                                            source = it.source,
+                                        )
+                                    } ?: item.imageUrl
+                                }
+                            }
+                            if (imageModel != null) {
+                                Spacer(modifier = Modifier.height(6.dp))
+                                AsyncImage(
+                                    model = imageModel,
+                                    contentDescription = null,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(140.dp)
+                                        .clip(RoundedCornerShape(8.dp)),
+                                )
                             }
                         }
-                        if (imageModel != null) {
+                    }
+                    is BookNoteItem.MangaCropNote -> {
+                        if (!item.note.isNullOrBlank()) {
+                            Text(
+                                text = item.note,
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    fontWeight = FontWeight.Medium,
+                                    fontSize = 14.sp,
+                                ),
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
                             Spacer(modifier = Modifier.height(6.dp))
+                        }
+                        if (!item.cropSnapshotUri.isNullOrBlank()) {
                             AsyncImage(
-                                model = imageModel,
+                                model = item.cropSnapshotUri,
                                 contentDescription = null,
-                                contentScale = ContentScale.Crop,
+                                contentScale = ContentScale.Inside,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(140.dp)
                                     .clip(RoundedCornerShape(8.dp)),
                             )
+                            Spacer(modifier = Modifier.height(6.dp))
                         }
+                        Text(
+                            text = stringResource(
+                                R.string.book_notes_bookmark_position,
+                                item.chapterTitle,
+                                item.page + 1,
+                            ),
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    is BookNoteItem.VideoNote -> {
+                        if (!item.note.isNullOrBlank()) {
+                            Text(
+                                text = item.note,
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    fontWeight = FontWeight.Medium,
+                                    fontSize = 14.sp,
+                                ),
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                        }
+                        if (!item.quoteText.isNullOrBlank()) {
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
+                            ) {
+                                Text(
+                                    text = "“${item.quoteText}”",
+                                    style = MaterialTheme.typography.bodySmall.copy(
+                                        fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                                        fontSize = 12.sp,
+                                    ),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 3,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                                )
+                            }
+                        }
+                        if (!item.snapshotUri.isNullOrBlank()) {
+                            AsyncImage(
+                                model = item.snapshotUri,
+                                contentDescription = null,
+                                contentScale = ContentScale.Fit,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = 220.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color.Black),
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                        }
+                        val formattedTime = org.skepsun.kototoro.video.ui.compose.formatDuration(item.positionMs)
+                        Text(
+                            text = "${item.chapterTitle} · $formattedTime",
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 }
             }
@@ -710,7 +850,7 @@ internal fun BookNoteCard(
                     tonalElevation = 0.dp,
                     shadowElevation = 3.dp,
                 ) {
-                    if (item is BookNoteItem.NovelHighlight) {
+                    if (canMakeExcerpt(item)) {
                         DropdownMenuItem(
                             text = { Text(stringResource(R.string.book_notes_make_excerpt)) },
                             onClick = {
@@ -836,3 +976,69 @@ internal fun BookNotesExportBottomSheet(
         }
     }
 }
+
+internal fun canMakeExcerpt(item: BookNoteItem): Boolean = true
+
+internal fun createExcerptData(item: BookNoteItem, manga: Content?): NovelExcerptData? {
+    val bookTitle = manga?.title.orEmpty()
+    val author = manga?.authors?.firstOrNull().orEmpty()
+    return when (item) {
+        is BookNoteItem.NovelHighlight -> NovelExcerptData(
+            selectedText = item.text,
+            bookTitle = bookTitle,
+            chapterTitle = item.chapterTitle,
+            author = author,
+            note = item.note,
+        )
+        is BookNoteItem.BookmarkEntry -> {
+            val preview = extractNovelBookmarkPreview(item.imageUrl)
+            val contentType = manga?.source?.contentType
+            val isNovel = contentType == ContentType.NOVEL || contentType == ContentType.HENTAI_NOVEL ||
+                preview.isNotBlank() || (item.imageUrl?.startsWith("kototoro://novel-page-content") == true)
+            if (isNovel) {
+                NovelExcerptData(
+                    selectedText = preview,
+                    bookTitle = bookTitle,
+                    chapterTitle = "${item.chapterTitle} · P${item.page + 1}",
+                    author = author,
+                    note = null,
+                    imageUri = null,
+                )
+            } else {
+                val imageUri = item.localSnapshotUri ?: item.imageUrl
+                NovelExcerptData(
+                    selectedText = "",
+                    bookTitle = bookTitle,
+                    chapterTitle = "${item.chapterTitle} · P${item.page + 1}",
+                    author = author,
+                    note = null,
+                    imageUri = imageUri,
+                )
+            }
+        }
+        is BookNoteItem.VideoNote -> {
+            val formattedTime = org.skepsun.kototoro.video.ui.compose.formatDuration(item.positionMs)
+            val hasQuote = !item.quoteText.isNullOrBlank()
+            val text = if (hasQuote) item.quoteText.orEmpty() else ""
+            NovelExcerptData(
+                selectedText = text,
+                bookTitle = bookTitle,
+                chapterTitle = "${item.chapterTitle} · $formattedTime",
+                author = author,
+                note = item.note,
+                imageUri = item.snapshotUri,
+            )
+        }
+        is BookNoteItem.MangaCropNote -> {
+            NovelExcerptData(
+                selectedText = item.note.orEmpty(),
+                bookTitle = bookTitle,
+                chapterTitle = "${item.chapterTitle} · P${item.page + 1}",
+                author = author,
+                note = null,
+                imageUri = item.cropSnapshotUri,
+            )
+        }
+    }
+}
+

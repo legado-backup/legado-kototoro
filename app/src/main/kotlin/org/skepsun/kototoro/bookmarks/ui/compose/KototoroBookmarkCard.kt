@@ -24,13 +24,11 @@ import androidx.compose.ui.unit.sp
 import androidx.collection.LruCache
 import androidx.core.net.toUri
 import coil3.compose.AsyncImage
-import org.jsoup.Jsoup
 import org.skepsun.kototoro.R
 import org.skepsun.kototoro.bookmarks.domain.Bookmark
+import org.skepsun.kototoro.bookmarks.domain.extractNovelBookmarkPreview
 import org.skepsun.kototoro.core.ui.compose.CompactPosterCardStyle
 import java.io.File
-
-private val novelBookmarkPreviewCache = LruCache<String, String>(128)
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -124,8 +122,7 @@ fun KototoroBookmarkCardNovel(
     onLongClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val context = LocalContext.current
-    val previewText = remember(item.imageUrl) { extractTextPreview(context, item.imageUrl) }
+    val previewText = remember(item.imageUrl) { extractNovelBookmarkPreview(item.imageUrl) }
 
     Column(
         modifier = modifier
@@ -154,7 +151,7 @@ fun KototoroBookmarkCardNovel(
 
         Box(modifier = Modifier.weight(1f)) {
             Text(
-                text = previewText,
+                text = previewText.ifBlank { stringResource(R.string.bookmark_preview_unavailable) },
                 style = MaterialTheme.typography.bodySmall.copy(lineHeight = 16.sp),
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 6,
@@ -182,43 +179,5 @@ fun KototoroBookmarkCardNovel(
             trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f),
             strokeWidth = 2.dp,
         )
-    }
-}
-
-private fun extractTextPreview(context: Context, imageUrl: String): String {
-    novelBookmarkPreviewCache.get(imageUrl)?.let { return it }
-    val result = try {
-        when {
-            imageUrl.startsWith("data:text/html") -> {
-                val base64Data = imageUrl.substringAfter("base64,", "")
-                if (base64Data.isNotEmpty()) {
-                    val htmlBytes = Base64.decode(base64Data, Base64.DEFAULT)
-                    val html = String(htmlBytes, Charsets.UTF_8)
-                    extractTextFromHtml(html)
-                } else {
-                    context.getString(R.string.bookmark_preview_unavailable)
-                }
-            }
-            imageUrl.contains("<html>") || imageUrl.contains("<!DOCTYPE") -> {
-                extractTextFromHtml(imageUrl)
-            }
-            imageUrl.isEmpty() -> context.getString(R.string.bookmark_position)
-            else -> imageUrl.take(200).trim()
-        }
-    } catch (e: Exception) {
-        context.getString(R.string.bookmark_position)
-    }
-    novelBookmarkPreviewCache.put(imageUrl, result)
-    return result
-}
-
-private fun extractTextFromHtml(html: String): String {
-    return try {
-        val doc = Jsoup.parse(html)
-        doc.select("script, style").remove()
-        val text = doc.body()?.text()?.trim() ?: ""
-        text.take(200).replace(Regex("\\s+"), " ")
-    } catch (e: Exception) {
-        ""
     }
 }

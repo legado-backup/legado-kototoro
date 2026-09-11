@@ -142,6 +142,8 @@ data class NovelExcerptData(
     val userNickname: String = "书友",
     val note: String? = null,
     val createdAtMillis: Long = System.currentTimeMillis(),
+    val imageUri: String? = null,
+    val imageBitmap: Bitmap? = null,
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -159,8 +161,24 @@ fun NovelExcerptSheet(
     var currentPageIndex by remember { mutableIntStateOf(0) }
     var optionsExpanded by remember { mutableStateOf(false) }
 
-    val activeData = remember(data, userNickname) {
-        data.copy(userNickname = userNickname.ifBlank { "书友" })
+    var loadedBitmap by remember(data.imageBitmap, data.imageUri) {
+        mutableStateOf(data.imageBitmap)
+    }
+
+    LaunchedEffect(data.imageUri, data.imageBitmap) {
+        if (loadedBitmap == null && !data.imageUri.isNullOrBlank()) {
+            val bmp = NovelExcerptHelper.loadExcerptBitmap(context, data.imageUri)
+            if (bmp != null) {
+                loadedBitmap = bmp
+            }
+        }
+    }
+
+    val activeData = remember(data, userNickname, loadedBitmap) {
+        data.copy(
+            userNickname = userNickname.ifBlank { "书友" },
+            imageBitmap = loadedBitmap ?: data.imageBitmap,
+        )
     }
 
     val pageCount = remember(activeData, configuration.font) {
@@ -424,6 +442,8 @@ internal data class ExcerptCardLayout(
     val noteStartY: Float,
     val noteLineHeight: Float = 44f,
     val footerTop: Float,
+    val imageBitmap: Bitmap? = null,
+    val imageRect: RectF? = null,
 )
 
 internal object NovelExcerptDateHelper {
@@ -512,13 +532,18 @@ internal object NovelExcerptCardRenderer {
         data: NovelExcerptData,
         font: NovelReaderFont,
     ): Int {
+        if (data.selectedText.isBlank()) {
+            return 1
+        }
         val tf = resolveTypeface(context, font)
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             typeface = tf
             textSize = 48f
         }
         val lines = wrapLines(data.selectedText, paint, 888f)
-        return maxOf(1, (lines.size + 11) / 12)
+        val hasImage = data.imageBitmap != null || !data.imageUri.isNullOrBlank()
+        val linesPerPage = if (hasImage) 6 else 12
+        return maxOf(1, (lines.size + linesPerPage - 1) / linesPerPage)
     }
 
     fun computeLayout(
@@ -547,11 +572,52 @@ internal object NovelExcerptCardRenderer {
             typeface = tf
             textSize = 48f
         }
-        val allTextLines = wrapLines(data.selectedText, paint, contentWidth)
-        val linesPerPage = 12
+
+        val initialContentTop = when (configuration.template) {
+            NovelExcerptTemplate.CALENDAR -> 450f
+            NovelExcerptTemplate.CLASSIC -> 270f
+            NovelExcerptTemplate.INK_WHITE -> 630f
+            NovelExcerptTemplate.SHADOW -> 600f
+            NovelExcerptTemplate.MANUSCRIPT -> 270f
+            NovelExcerptTemplate.JINSHU -> 540f
+        }
+
+        val img = data.imageBitmap
+        val (imgW, imgH) = if (img != null && img.width > 0 && img.height > 0) {
+            val aspect = img.width.toFloat() / img.height.toFloat()
+            val maxAllowedHeight = when (configuration.template) {
+                NovelExcerptTemplate.SHADOW, NovelExcerptTemplate.INK_WHITE -> 500f
+                else -> 600f
+            }
+            val targetW = contentWidth
+            val targetH = targetW / aspect
+            if (targetH > maxAllowedHeight) {
+                val clampedH = maxAllowedHeight
+                val clampedW = clampedH * aspect
+                clampedW to clampedH
+            } else {
+                targetW to targetH
+            }
+        } else {
+            0f to 0f
+        }
+
+        val imageRect = if (img != null && imgW > 0 && imgH > 0) {
+            val imgLeft = margin + (contentWidth - imgW) / 2f
+            val imgTop = initialContentTop
+            RectF(imgLeft, imgTop, imgLeft + imgW, imgTop + imgH)
+        } else null
+
+        val allTextLines = if (data.selectedText.isBlank()) emptyList() else wrapLines(data.selectedText, paint, contentWidth)
+        val hasImage = imageRect != null || !data.imageUri.isNullOrBlank()
+        val linesPerPage = if (hasImage) 6 else 12
         val totalPages = maxOf(pageCount, maxOf(1, (allTextLines.size + linesPerPage - 1) / linesPerPage))
         val safePageIndex = pageIndex.coerceIn(0, totalPages - 1)
-        val pageTextLines = allTextLines.drop(safePageIndex * linesPerPage).take(linesPerPage).ifEmpty { listOf("") }
+        val pageTextLines = if (allTextLines.isEmpty()) {
+            emptyList()
+        } else {
+            allTextLines.drop(safePageIndex * linesPerPage).take(linesPerPage)
+        }
 
         val noteLines = if (safePageIndex == totalPages - 1 && !data.note.isNullOrBlank()) {
             val notePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -562,18 +628,19 @@ internal object NovelExcerptCardRenderer {
         } else emptyList()
 
         val lineHeight = if (configuration.template == NovelExcerptTemplate.CALENDAR) 76f else 74f
-        val textHeight = pageTextLines.size * lineHeight
+        val textHeight = if (pageTextLines.isEmpty()) 0f else pageTextLines.size * lineHeight
 
-        val quoteStartY = when (configuration.template) {
-            NovelExcerptTemplate.CALENDAR -> 450f
-            NovelExcerptTemplate.CLASSIC -> 270f
-            NovelExcerptTemplate.INK_WHITE -> 630f
-            NovelExcerptTemplate.SHADOW -> 600f
-            NovelExcerptTemplate.MANUSCRIPT -> 270f
-            NovelExcerptTemplate.JINSHU -> 540f
+        val quoteStartY = if (imageRect != null) {
+            imageRect.bottom + (if (pageTextLines.isEmpty()) 0f else 60f)
+        } else {
+            initialContentTop
         }
 
-        val noteStartY = quoteStartY + textHeight + 32f
+        val noteStartY = if (pageTextLines.isEmpty()) {
+            (imageRect?.bottom ?: initialContentTop) + (if (imageRect != null) 36f else 0f)
+        } else {
+            quoteStartY + textHeight + 32f
+        }
         val noteLineHeight = 44f
         val noteHeight = if (noteLines.isEmpty()) 0f else (40f + noteLines.size * noteLineHeight)
 
@@ -651,6 +718,8 @@ internal object NovelExcerptCardRenderer {
             noteStartY = noteStartY,
             noteLineHeight = noteLineHeight,
             footerTop = footerTop,
+            imageBitmap = data.imageBitmap,
+            imageRect = imageRect,
         )
     }
 
@@ -677,27 +746,60 @@ internal object NovelExcerptCardRenderer {
 
         drawTemplateHeaderAndDecorations(canvas, layout, paint)
 
-        // Draw selected text lines
-        paint.color = layout.foregroundColor
-        paint.textSize = 48f
-        paint.typeface = layout.typeface
+        // Draw image if present
+        if (layout.imageBitmap != null && layout.imageRect != null) {
+            val imgBitmap = layout.imageBitmap
+            val rect = layout.imageRect
+            val cornerRadius = 20f
 
-        if (layout.template == NovelExcerptTemplate.CALENDAR) {
-            // Centered quote lines
-            var currentY = layout.quoteStartY
-            layout.textLines.forEach { line ->
-                val textWidth = paint.measureText(line)
-                val textX = (layout.width - textWidth) / 2f
-                canvas.drawText(line, textX, currentY, paint)
-                currentY += layout.lineHeight
+            canvas.save()
+            val clipPath = Path().apply {
+                addRoundRect(rect, cornerRadius, cornerRadius, Path.Direction.CW)
             }
-        } else {
-            // Left-aligned quote lines
-            val textStartX = layout.margin
-            var currentY = layout.quoteStartY
-            layout.textLines.forEach { line ->
-                canvas.drawText(line, textStartX, currentY, paint)
-                currentY += layout.lineHeight
+            canvas.clipPath(clipPath)
+            val srcRect = android.graphics.Rect(0, 0, imgBitmap.width, imgBitmap.height)
+            canvas.drawBitmap(imgBitmap, srcRect, rect, Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG))
+            canvas.restore()
+
+            val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                style = Paint.Style.STROKE
+                strokeWidth = 2f
+                color = if (layout.foregroundColor == android.graphics.Color.WHITE) {
+                    android.graphics.Color.argb(45, 255, 255, 255)
+                } else {
+                    android.graphics.Color.argb(35, 0, 0, 0)
+                }
+            }
+            canvas.drawRoundRect(rect, cornerRadius, cornerRadius, borderPaint)
+        }
+
+        // Draw selected text lines if present
+        if (layout.textLines.isNotEmpty()) {
+            paint.color = layout.foregroundColor
+            paint.textSize = 48f
+            paint.typeface = layout.typeface
+
+            if (layout.template == NovelExcerptTemplate.CALENDAR) {
+                // Centered quote lines
+                var currentY = layout.quoteStartY
+                layout.textLines.forEach { line ->
+                    if (line.isNotEmpty()) {
+                        val textWidth = paint.measureText(line)
+                        val textX = (layout.width - textWidth) / 2f
+                        canvas.drawText(line, textX, currentY, paint)
+                    }
+                    currentY += layout.lineHeight
+                }
+            } else {
+                // Left-aligned quote lines
+                val textStartX = layout.margin
+                var currentY = layout.quoteStartY
+                layout.textLines.forEach { line ->
+                    if (line.isNotEmpty()) {
+                        canvas.drawText(line, textStartX, currentY, paint)
+                    }
+                    currentY += layout.lineHeight
+                }
             }
         }
 

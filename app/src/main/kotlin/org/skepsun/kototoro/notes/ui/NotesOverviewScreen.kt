@@ -20,8 +20,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -55,6 +58,7 @@ fun NotesOverviewScreen(
     uiState: NotesUiState,
     onBookClick: (Long) -> Unit,
     onSearchQueryChange: (String) -> Unit,
+    onToggleNsfwFilter: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     contentPadding: PaddingValues = PaddingValues(0.dp),
 ) {
@@ -102,12 +106,35 @@ fun NotesOverviewScreen(
                         )
                     }
 
-                    IconButton(onClick = { searchBarVisible = !searchBarVisible }) {
-                        Icon(
-                            imageVector = if (searchBarVisible) Icons.Default.Close else Icons.Default.Search,
-                            contentDescription = stringResource(R.string.search),
-                            tint = MaterialTheme.colorScheme.onBackground,
-                        )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (!uiState.isGlobalNsfwDisabled && onToggleNsfwFilter != null) {
+                            FilterChip(
+                                selected = uiState.isNsfwFiltered,
+                                onClick = onToggleNsfwFilter,
+                                label = {
+                                    Text(
+                                        text = stringResource(R.string.nsfw),
+                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                    )
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = if (uiState.isNsfwFiltered) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp),
+                                    )
+                                },
+                                modifier = Modifier.padding(end = 4.dp),
+                            )
+                        }
+
+                        IconButton(onClick = { searchBarVisible = !searchBarVisible }) {
+                            Icon(
+                                imageVector = if (searchBarVisible) Icons.Default.Close else Icons.Default.Search,
+                                contentDescription = stringResource(R.string.search),
+                                tint = MaterialTheme.colorScheme.onBackground,
+                            )
+                        }
                     }
                 }
 

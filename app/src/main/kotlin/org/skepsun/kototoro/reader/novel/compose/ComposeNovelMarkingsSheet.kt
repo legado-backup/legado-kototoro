@@ -440,6 +440,9 @@ private fun NovelBookmarkCard(
     onDelete: () -> Unit,
 ) {
     val positionText = stringResource(R.string.bookmark_position, bookmark.page + 1)
+    val previewText = remember(bookmark.imageUrl) {
+        org.skepsun.kototoro.bookmarks.domain.extractNovelBookmarkPreview(bookmark.imageUrl)
+    }
     Surface(
         onClick = onOpen,
         shape = RoundedCornerShape(18.dp),
@@ -460,7 +463,7 @@ private fun NovelBookmarkCard(
                 )
                 Spacer(Modifier.width(10.dp))
                 Text(
-                    text = bookmark.imageUrl.ifBlank { positionText },
+                    text = previewText.ifBlank { positionText },
                     style = MaterialTheme.typography.bodyLarge,
                     maxLines = 4,
                     overflow = TextOverflow.Ellipsis,

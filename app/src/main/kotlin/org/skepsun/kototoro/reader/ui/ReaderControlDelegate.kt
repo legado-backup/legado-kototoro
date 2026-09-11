@@ -146,6 +146,8 @@ class ReaderControlDelegate(
 
         fun onDownloadClick() = Unit
 
+        fun onCropNoteClick() = Unit
+
         fun onPagesButtonClick(): Boolean = false
 
         fun onPagesButtonLongClick(): Boolean = false

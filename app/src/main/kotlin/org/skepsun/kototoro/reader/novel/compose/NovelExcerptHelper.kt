@@ -8,14 +8,41 @@ import android.os.Build
 import android.provider.MediaStore
 import android.widget.Toast
 import androidx.core.content.FileProvider
+import coil3.SingletonImageLoader
+import coil3.request.ImageRequest
+import coil3.request.allowHardware
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.skepsun.kototoro.BuildConfig
 import org.skepsun.kototoro.R
 import org.skepsun.kototoro.core.util.ShareHelper
+import org.skepsun.kototoro.core.util.ext.toBitmapOrNull
 import java.io.File
 
 object NovelExcerptHelper {
+
+    suspend fun loadExcerptBitmap(context: Context, uriString: String?): Bitmap? = withContext(Dispatchers.IO) {
+        if (uriString.isNullOrBlank()) return@withContext null
+        runCatching {
+            val request = ImageRequest.Builder(context)
+                .data(uriString)
+                .allowHardware(false)
+                .build()
+            SingletonImageLoader.get(context).execute(request).toBitmapOrNull()
+        }.getOrNull() ?: runCatching {
+            val uri = Uri.parse(uriString)
+            if (uri.scheme == "file" || uri.path?.startsWith("/") == true) {
+                val file = if (uri.scheme == "file") File(uri.path.orEmpty()) else File(uriString)
+                if (file.exists()) {
+                    android.graphics.BitmapFactory.decodeFile(file.absolutePath)
+                } else null
+            } else if (uri.scheme == "content") {
+                context.contentResolver.openInputStream(uri)?.use { stream ->
+                    android.graphics.BitmapFactory.decodeStream(stream)
+                }
+            } else null
+        }.getOrNull()
+    }
 
     suspend fun saveExcerptToGallery(
         context: Context,
@@ -23,7 +50,11 @@ object NovelExcerptHelper {
         configuration: NovelExcerptConfiguration,
     ): Result<Uri> = withContext(Dispatchers.IO) {
         runCatching {
-            val bitmap = NovelExcerptCardRenderer.render(data, configuration)
+            val resolvedData = if (data.imageBitmap == null && !data.imageUri.isNullOrBlank()) {
+                val bmp = loadExcerptBitmap(context, data.imageUri)
+                if (bmp != null) data.copy(imageBitmap = bmp) else data
+            } else data
+            val bitmap = NovelExcerptCardRenderer.render(resolvedData, configuration, context = context)
             val filename = "kototoro_excerpt_${System.currentTimeMillis()}.png"
             val values = ContentValues().apply {
                 put(MediaStore.Images.Media.DISPLAY_NAME, filename)
@@ -56,7 +87,11 @@ object NovelExcerptHelper {
         configuration: NovelExcerptConfiguration,
     ): Result<Uri> = withContext(Dispatchers.IO) {
         runCatching {
-            val bitmap = NovelExcerptCardRenderer.render(data, configuration)
+            val resolvedData = if (data.imageBitmap == null && !data.imageUri.isNullOrBlank()) {
+                val bmp = loadExcerptBitmap(context, data.imageUri)
+                if (bmp != null) data.copy(imageBitmap = bmp) else data
+            } else data
+            val bitmap = NovelExcerptCardRenderer.render(resolvedData, configuration, context = context)
             val directory = File(context.cacheDir, "shared").apply { mkdirs() }
             val file = File(directory, "kototoro_excerpt_${System.currentTimeMillis()}.png")
             file.outputStream().use { output ->

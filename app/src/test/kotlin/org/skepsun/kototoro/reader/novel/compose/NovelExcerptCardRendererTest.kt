@@ -88,4 +88,66 @@ class NovelExcerptCardRendererTest {
         assertEquals(450f, layout.quoteStartY)
         assertTrue(layout.height >= 1380)
     }
+
+    @Test
+    fun `computeLayout with image and text computes valid layout and places imageRect correctly`() {
+        val mockBitmap = io.mockk.mockk<android.graphics.Bitmap>(relaxed = true) {
+            io.mockk.every { width } returns 1600
+            io.mockk.every { height } returns 900
+        }
+        val data = NovelExcerptData(
+            selectedText = "人类的悲欢并不相通",
+            bookTitle = "鲁迅文集",
+            chapterTitle = "第一章",
+            author = "鲁迅",
+            imageBitmap = mockBitmap,
+        )
+        NovelExcerptTemplate.entries.forEach { template ->
+            val config = NovelExcerptConfiguration(template = template)
+            val layout = NovelExcerptCardRenderer.computeLayout(null, data, config)
+
+            org.junit.jupiter.api.Assertions.assertNotNull(layout.imageRect)
+            assertEquals(1080, layout.width)
+            assertTrue(layout.height >= 1280)
+            assertTrue(layout.textLines.isNotEmpty())
+        }
+    }
+
+    @Test
+    fun `computeLayout with image only and empty selectedText computes valid layout`() {
+        val mockBitmap = io.mockk.mockk<android.graphics.Bitmap>(relaxed = true) {
+            io.mockk.every { width } returns 800
+            io.mockk.every { height } returns 1200
+        }
+        val data = NovelExcerptData(
+            selectedText = "",
+            bookTitle = "海贼王",
+            chapterTitle = "第1话",
+            author = "尾田荣一郎",
+            imageBitmap = mockBitmap,
+            note = "草帽一伙出航",
+        )
+        val config = NovelExcerptConfiguration(template = NovelExcerptTemplate.CLASSIC)
+        val layout = NovelExcerptCardRenderer.computeLayout(null, data, config)
+
+        org.junit.jupiter.api.Assertions.assertNotNull(layout.imageRect)
+        assertTrue(layout.textLines.isEmpty())
+        assertTrue(layout.noteLines.isNotEmpty())
+        assertTrue(layout.height >= 1280)
+    }
+
+    @Test
+    fun `calculateTotalPages with image adjusts linesPerPage to 6`() {
+        val dataNoImage = NovelExcerptData(
+            selectedText = "1\n2\n3\n4\n5\n6\n7\n8",
+            bookTitle = "测试",
+            chapterTitle = "第1章",
+        )
+        val pagesNoImage = NovelExcerptCardRenderer.calculateTotalPages(null, dataNoImage, org.skepsun.kototoro.reader.novel.NovelReaderFont.SYSTEM_SERIF)
+        assertEquals(1, pagesNoImage) // 8 lines < 12 lines per page
+
+        val dataWithImage = dataNoImage.copy(imageUri = "file:///test.jpg")
+        val pagesWithImage = NovelExcerptCardRenderer.calculateTotalPages(null, dataWithImage, org.skepsun.kototoro.reader.novel.NovelReaderFont.SYSTEM_SERIF)
+        assertEquals(2, pagesWithImage) // 8 lines with 6 per page = 2 pages
+    }
 }

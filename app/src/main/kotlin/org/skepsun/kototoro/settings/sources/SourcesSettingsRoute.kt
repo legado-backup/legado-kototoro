@@ -61,6 +61,8 @@ fun SourcesSettingsRoute(
         settings.observeAsState(AppSettings.KEY_TRACKER_NO_NSFW) { isTrackerNsfwDisabled }.value
     val isSuggestionsExcludeNsfw =
         settings.observeAsState(AppSettings.KEY_SUGGESTIONS_EXCLUDE_NSFW) { isSuggestionsExcludeNsfw }.value
+    val isBookmarksExcludeNsfw =
+        settings.observeAsState(AppSettings.KEY_BOOKMARKS_EXCLUDE_NSFW) { isBookmarksExcludeNsfw }.value
     val incognitoModeForNsfw =
         settings.observeAsState(AppSettings.KEY_INCOGNITO_NSFW) { incognitoModeForNsfw }.value
     val globalTagBlacklist =
@@ -114,6 +116,7 @@ fun SourcesSettingsRoute(
             if (isFeedExcludeNsfw) add(AdultContentFilterTarget.FEED)
             if (isTrackerNsfwDisabled) add(AdultContentFilterTarget.UPDATES)
             if (isSuggestionsExcludeNsfw) add(AdultContentFilterTarget.SUGGESTIONS)
+            if (isBookmarksExcludeNsfw) add(AdultContentFilterTarget.BOOKMARKS)
         },
         incognitoModeForNsfw = incognitoModeForNsfw,
         blacklistedTagCount = globalTagBlacklist.size,
@@ -146,6 +149,7 @@ fun SourcesSettingsRoute(
             val hideFromFeed = AdultContentFilterTarget.FEED in targets
             val hideFromUpdates = AdultContentFilterTarget.UPDATES in targets
             val hideFromSuggestions = AdultContentFilterTarget.SUGGESTIONS in targets
+            val hideFromBookmarks = AdultContentFilterTarget.BOOKMARKS in targets
             if (hideFromSourcesAndBrowse != isNsfwContentDisabled) {
                 settings.isNsfwContentDisabled = hideFromSourcesAndBrowse
             }
@@ -163,6 +167,9 @@ fun SourcesSettingsRoute(
             }
             if (hideFromSuggestions != isSuggestionsExcludeNsfw) {
                 settings.isSuggestionsExcludeNsfw = hideFromSuggestions
+            }
+            if (hideFromBookmarks != isBookmarksExcludeNsfw) {
+                settings.isBookmarksExcludeNsfw = hideFromBookmarks
             }
         },
         onIncognitoModeForNsfwChange = { settings.incognitoModeForNsfw = it },

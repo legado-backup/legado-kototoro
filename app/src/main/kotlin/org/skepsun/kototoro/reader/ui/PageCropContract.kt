@@ -14,6 +14,11 @@ data class PageCropRequest(
     val compressQuality: Int,
     val sourceWidth: Int,
     val sourceHeight: Int,
+    val isAnnotationMode: Boolean = false,
+    val mangaId: Long = 0L,
+    val chapterId: Long = 0L,
+    val chapterIndex: Int = 0,
+    val page: Int = 0,
 )
 
 class PageCropContract : ActivityResultContract<PageCropRequest, Uri?>() {
@@ -26,6 +31,11 @@ class PageCropContract : ActivityResultContract<PageCropRequest, Uri?>() {
             putExtra(PageCropActivity.EXTRA_COMPRESS_QUALITY, input.compressQuality)
             putExtra(PageCropActivity.EXTRA_SOURCE_WIDTH, input.sourceWidth)
             putExtra(PageCropActivity.EXTRA_SOURCE_HEIGHT, input.sourceHeight)
+            putExtra(PageCropActivity.EXTRA_IS_ANNOTATION_MODE, input.isAnnotationMode)
+            putExtra(PageCropActivity.EXTRA_MANGA_ID, input.mangaId)
+            putExtra(PageCropActivity.EXTRA_CHAPTER_ID, input.chapterId)
+            putExtra(PageCropActivity.EXTRA_CHAPTER_INDEX, input.chapterIndex)
+            putExtra(PageCropActivity.EXTRA_PAGE, input.page)
         }
     }
 

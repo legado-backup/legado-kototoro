@@ -786,6 +786,10 @@ class AppSettings @Inject constructor(@ApplicationContext private val context: C
         get() = prefs.getBoolean(KEY_FEED_EXCLUDE_NSFW, false)
         set(value) = prefs.edit { putBoolean(KEY_FEED_EXCLUDE_NSFW, value) }
 
+    var isBookmarksExcludeNsfw: Boolean
+        get() = prefs.getBoolean(KEY_BOOKMARKS_EXCLUDE_NSFW, false)
+        set(value) = prefs.edit { putBoolean(KEY_BOOKMARKS_EXCLUDE_NSFW, value) }
+
     var appLocales: LocaleListCompat
         get() {
             val raw = prefs.getString(KEY_APP_LOCALE, null)
@@ -3178,6 +3182,7 @@ class AppSettings @Inject constructor(@ApplicationContext private val context: C
         const val KEY_HISTORY_EXCLUDE_NSFW = "history_exclude_nsfw"
         const val KEY_FAVOURITES_EXCLUDE_NSFW = "favourites_exclude_nsfw"
         const val KEY_FEED_EXCLUDE_NSFW = "feed_exclude_nsfw"
+        const val KEY_BOOKMARKS_EXCLUDE_NSFW = "bookmarks_exclude_nsfw"
         const val KEY_DISABLE_NSFW = "no_nsfw"
         const val KEY_SOURCE_NSFW_OVERRIDES = "source_nsfw_overrides"
         const val KEY_SOURCE_SFW_OVERRIDES = "source_sfw_overrides"

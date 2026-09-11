@@ -92,6 +92,9 @@ import org.skepsun.kototoro.core.db.migrations.Migration78To79
 import org.skepsun.kototoro.core.db.migrations.Migration79To80
 import org.skepsun.kototoro.core.db.migrations.Migration80To81
 import org.skepsun.kototoro.core.db.migrations.Migration81To82
+import org.skepsun.kototoro.core.db.migrations.Migration82To83
+import org.skepsun.kototoro.notes.data.MediaNoteDao
+import org.skepsun.kototoro.notes.data.MediaNoteEntity
 import org.skepsun.kototoro.core.db.migrations.Migration1To2
 import org.skepsun.kototoro.core.db.migrations.Migration20To21
 import org.skepsun.kototoro.core.db.migrations.Migration21To22
@@ -169,7 +172,7 @@ import org.skepsun.kototoro.core.dictionary.DictionaryRuleDao
 import org.skepsun.kototoro.core.dictionary.TranslationDictionaryDao
 import org.skepsun.kototoro.core.dictionary.TranslationDictionaryEntity
 
-const val DATABASE_VERSION = 82
+const val DATABASE_VERSION = 83
 
 @Database(
     entities = [
@@ -187,6 +190,7 @@ const val DATABASE_VERSION = 82
         SourceOriginEntity::class, SourceRefreshStateEntity::class,
         ReplaceRule::class,
         NovelMarkingEntity::class,
+        MediaNoteEntity::class,
         DictionaryRule::class,
         TranslationDictionaryEntity::class,
         // EpubChapterEntity::class,
@@ -268,6 +272,8 @@ abstract class MangaDatabase : RoomDatabase() {
     abstract fun getReplaceRuleDao(): ReplaceRuleDao
 
     abstract fun getNovelMarkingDao(): NovelMarkingDao
+
+    abstract fun getMediaNoteDao(): MediaNoteDao
 
     abstract fun getDictionaryRuleDao(): DictionaryRuleDao
 
@@ -359,6 +365,7 @@ fun getDatabaseMigrations(context: Context): Array<Migration> = arrayOf(
     Migration79To80(),
     Migration80To81(),
     Migration81To82(),
+    Migration82To83(),
 )
 
 fun MangaDatabase(context: Context): MangaDatabase = Room

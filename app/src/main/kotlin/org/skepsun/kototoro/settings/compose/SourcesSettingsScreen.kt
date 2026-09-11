@@ -51,6 +51,7 @@ enum class AdultContentFilterTarget {
     FEED,
     UPDATES,
     SUGGESTIONS,
+    BOOKMARKS,
 }
 
 @Composable
@@ -88,6 +89,7 @@ fun SourcesSettingsScreen(
         SettingsChoiceOption(AdultContentFilterTarget.FEED, stringResource(R.string.disable_feed_nsfw)),
         SettingsChoiceOption(AdultContentFilterTarget.UPDATES, stringResource(R.string.disable_updates_nsfw)),
         SettingsChoiceOption(AdultContentFilterTarget.SUGGESTIONS, stringResource(R.string.disable_suggestions_nsfw)),
+        SettingsChoiceOption(AdultContentFilterTarget.BOOKMARKS, stringResource(R.string.disable_bookmarks_nsfw)),
     )
     Scaffold(
         snackbarHost = {

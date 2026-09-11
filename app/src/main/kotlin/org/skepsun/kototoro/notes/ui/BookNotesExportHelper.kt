@@ -9,6 +9,7 @@ import androidx.core.app.ShareCompat
 import androidx.core.content.FileProvider
 import org.skepsun.kototoro.BuildConfig
 import org.skepsun.kototoro.R
+import org.skepsun.kototoro.bookmarks.domain.extractNovelBookmarkPreview
 import org.skepsun.kototoro.core.util.ext.toFileNameSafe
 import org.skepsun.kototoro.notes.domain.BookNoteItem
 import org.skepsun.kototoro.parsers.model.Content
@@ -75,7 +76,41 @@ object BookNotesExportHelper {
                                 progressStr,
                             ),
                         )
+                        val preview = extractNovelBookmarkPreview(note.imageUrl)
+                        if (preview.isNotBlank()) {
+                            sb.appendLine()
+                            sb.appendLine("> $preview")
+                        }
                         sb.appendLine()
+                        if (timeStr.isNotBlank()) {
+                            sb.appendLine("*$timeStr*")
+                            sb.appendLine()
+                        }
+                    }
+                    is BookNoteItem.MangaCropNote -> {
+                        sb.appendLine("P${note.page + 1}")
+                        sb.appendLine()
+                        if (!note.note.isNullOrBlank()) {
+                            sb.appendLine(context.getString(R.string.book_notes_markdown_thought, note.note))
+                            sb.appendLine()
+                        }
+                        if (timeStr.isNotBlank()) {
+                            sb.appendLine("*$timeStr*")
+                            sb.appendLine()
+                        }
+                    }
+                    is BookNoteItem.VideoNote -> {
+                        val duration = org.skepsun.kototoro.video.ui.compose.formatDuration(note.positionMs)
+                        sb.appendLine("⏱ $duration")
+                        sb.appendLine()
+                        if (!note.quoteText.isNullOrBlank()) {
+                            sb.appendLine("> ${note.quoteText}")
+                            sb.appendLine()
+                        }
+                        if (!note.note.isNullOrBlank()) {
+                            sb.appendLine(context.getString(R.string.book_notes_markdown_thought, note.note))
+                            sb.appendLine()
+                        }
                         if (timeStr.isNotBlank()) {
                             sb.appendLine("*$timeStr*")
                             sb.appendLine()

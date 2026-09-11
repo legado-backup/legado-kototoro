@@ -67,6 +67,7 @@ internal data class ReaderActionsCallbacks(
     val onScreenRotation: () -> Unit = {},
     val onBookmark: () -> Unit = {},
     val onBookmarkLongClick: () -> Unit = {},
+    val onCropNote: () -> Unit = {},
     val onDownload: () -> Unit = {},
     val onTranslate: () -> Unit = {},
     val onTranslateLongClick: () -> Unit = {},
@@ -218,6 +219,15 @@ internal fun ReaderActionsContent(
                 contentColor = normalContentColor,
                 onClick = callbacks.onBookmark,
                 onLongClick = callbacks.onBookmarkLongClick,
+            )
+        }
+        if (ReaderControl.CROP_NOTE in state.controls) {
+            ReaderActionButton(
+                modifier = actionModifier(),
+                iconRes = R.drawable.ic_crop,
+                contentDescription = stringResource(R.string.crop_and_annotate),
+                contentColor = normalContentColor,
+                onClick = callbacks.onCropNote,
             )
         }
         if (ReaderControl.DOWNLOAD in state.controls) {

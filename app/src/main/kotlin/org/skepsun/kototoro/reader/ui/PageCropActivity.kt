@@ -7,6 +7,7 @@ import android.net.Uri
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -37,10 +38,23 @@ import com.yalantis.ucrop.view.OverlayView
 import com.yalantis.ucrop.view.TransformImageView
 import com.yalantis.ucrop.view.UCropView
 import org.skepsun.kototoro.R
+import android.widget.Toast
+import androidx.lifecycle.lifecycleScope
+import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.skepsun.kototoro.notes.domain.BookNotesRepository
+import java.io.File
+import javax.inject.Inject
 import org.skepsun.kototoro.core.ui.BaseComposeActivity
 import org.skepsun.kototoro.core.ui.theme.KototoroTheme
 
+@AndroidEntryPoint
 class PageCropActivity : BaseComposeActivity(), TransformImageView.TransformImageListener {
+
+    @Inject
+    lateinit var bookNotesRepository: BookNotesRepository
 
     private lateinit var cropImageView: GestureCropImageView
     private lateinit var overlayView: OverlayView
@@ -51,6 +65,12 @@ class PageCropActivity : BaseComposeActivity(), TransformImageView.TransformImag
     private var isCropping by mutableStateOf(false)
     private var isImageLoaded by mutableStateOf(false)
     private var selectedRatio by mutableFloatStateOf(CropImageView.SOURCE_IMAGE_ASPECT_RATIO)
+    private var isAnnotationMode = false
+    private var mangaId = 0L
+    private var chapterId = 0L
+    private var chapterIndex = 0
+    private var page = 0
+    private var noteText by mutableStateOf("")
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -65,6 +85,11 @@ class PageCropActivity : BaseComposeActivity(), TransformImageView.TransformImag
         compressQuality = intent.getIntExtra(EXTRA_COMPRESS_QUALITY, DEFAULT_COMPRESS_QUALITY)
         val sourceWidth = intent.getIntExtra(EXTRA_SOURCE_WIDTH, 0)
         val sourceHeight = intent.getIntExtra(EXTRA_SOURCE_HEIGHT, 0)
+        isAnnotationMode = intent.getBooleanExtra(EXTRA_IS_ANNOTATION_MODE, false)
+        mangaId = intent.getLongExtra(EXTRA_MANGA_ID, 0L)
+        chapterId = intent.getLongExtra(EXTRA_CHAPTER_ID, 0L)
+        chapterIndex = intent.getIntExtra(EXTRA_CHAPTER_INDEX, 0)
+        page = intent.getIntExtra(EXTRA_PAGE, 0)
         originalRatio = if (sourceWidth > 0 && sourceHeight > 0) {
             sourceWidth.toFloat() / sourceHeight.toFloat()
         } else {
@@ -89,12 +114,12 @@ class PageCropActivity : BaseComposeActivity(), TransformImageView.TransformImag
                     ) {
                         TextButton(onClick = ::cancelCrop) { Text(stringResource(android.R.string.cancel)) }
                         Text(
-                            text = stringResource(R.string.crop_pages),
+                            text = stringResource(if (isAnnotationMode) R.string.crop_and_annotate else R.string.crop_pages),
                             color = MaterialTheme.colorScheme.onSurface,
                             style = MaterialTheme.typography.titleMedium,
                         )
                         TextButton(onClick = ::saveCrop, enabled = isImageLoaded && !isCropping) {
-                            Text(stringResource(R.string.save))
+                            Text(stringResource(if (isAnnotationMode) R.string.save_note else R.string.save))
                         }
                     }
                     AndroidView(
@@ -112,6 +137,32 @@ class PageCropActivity : BaseComposeActivity(), TransformImageView.TransformImag
                         },
                         modifier = Modifier.weight(1f).fillMaxWidth(),
                     )
+                    if (isAnnotationMode) {
+                        androidx.compose.material3.OutlinedTextField(
+                            value = noteText,
+                            onValueChange = { noteText = it },
+                            placeholder = {
+                                Text(
+                                    stringResource(R.string.manga_note_hint),
+                                    color = Color.White.copy(alpha = 0.6f),
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                            },
+                            maxLines = 2,
+                            shape = RoundedCornerShape(12.dp),
+                            colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = Color.White,
+                                unfocusedTextColor = Color.White,
+                                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                unfocusedBorderColor = Color.White.copy(alpha = 0.35f),
+                                focusedContainerColor = Color(0x33000000),
+                                unfocusedContainerColor = Color(0x22000000),
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 6.dp),
+                        )
+                    }
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
                         modifier = Modifier
@@ -163,8 +214,35 @@ class PageCropActivity : BaseComposeActivity(), TransformImageView.TransformImag
                     offsetX: Int,
                     offsetY: Int,
                 ) {
-                    setResult(Activity.RESULT_OK, Intent().setData(resultUri))
-                    finish()
+                    if (isAnnotationMode) {
+                        lifecycleScope.launch(Dispatchers.IO) {
+                            val notesDir = File(filesDir, "notes").apply { mkdirs() }
+                            val noteFile = File(notesDir, "manga_${mangaId}_${System.currentTimeMillis()}.jpg")
+                            runCatching {
+                                contentResolver.openInputStream(resultUri)?.use { input ->
+                                    noteFile.outputStream().use { output ->
+                                        input.copyTo(output)
+                                    }
+                                }
+                                bookNotesRepository.saveMangaCropNote(
+                                    mangaId = mangaId,
+                                    chapterId = chapterId,
+                                    chapterIndex = chapterIndex,
+                                    page = page,
+                                    imagePath = noteFile.absolutePath,
+                                    note = noteText.ifBlank { null },
+                                )
+                            }
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(this@PageCropActivity, R.string.manga_note_saved, Toast.LENGTH_SHORT).show()
+                                setResult(Activity.RESULT_OK, Intent().setData(resultUri))
+                                finish()
+                            }
+                        }
+                    } else {
+                        setResult(Activity.RESULT_OK, Intent().setData(resultUri))
+                        finish()
+                    }
                 }
 
                 override fun onCropFailure(t: Throwable) = cancelCrop()
@@ -210,6 +288,11 @@ class PageCropActivity : BaseComposeActivity(), TransformImageView.TransformImag
         internal const val EXTRA_COMPRESS_QUALITY = "page_crop_compress_quality"
         internal const val EXTRA_SOURCE_WIDTH = "page_crop_source_width"
         internal const val EXTRA_SOURCE_HEIGHT = "page_crop_source_height"
+        internal const val EXTRA_IS_ANNOTATION_MODE = "page_crop_is_annotation_mode"
+        internal const val EXTRA_MANGA_ID = "page_crop_manga_id"
+        internal const val EXTRA_CHAPTER_ID = "page_crop_chapter_id"
+        internal const val EXTRA_CHAPTER_INDEX = "page_crop_chapter_index"
+        internal const val EXTRA_PAGE = "page_crop_page"
 
         private const val DEFAULT_COMPRESS_QUALITY = 95
         private const val WRAP_ANIM_DURATION_MS = 180L

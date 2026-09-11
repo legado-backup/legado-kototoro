@@ -640,6 +640,30 @@ class ReaderViewModel @Inject constructor(
         }
     }
 
+    fun cropAndAnnotateCurrentPage(
+        pageSaveHelper: PageSaveHelper
+    ) {
+        val prevJob = pageSaveJob
+        pageSaveJob = launchLoadingJob(Dispatchers.Default) {
+            prevJob?.cancelAndJoin()
+            val state = checkNotNull(getCurrentState())
+            val targetPage = targetPagePosition.value ?: state.page
+            val currentContent = manga.requireValue()
+            val pages = content.value.pages
+            val page = pages.find { it.chapterId == state.chapterId && it.index == targetPage }
+                ?: pages.find { it.chapterId == state.chapterId && it.index == state.page }
+                ?: throw IllegalStateException("Cannot find current page")
+
+            val task = PageSaveHelper.Task(
+                manga = currentContent,
+                chapterId = state.chapterId,
+                pageNumber = targetPage + 1,
+                page = page.toContentPage(),
+            )
+            pageSaveHelper.cropAndAnnotate(task)
+        }
+    }
+
     fun getCurrentPage(): ContentPage? {
         val state = readingState.value ?: return null
         return content.value.pages.find {

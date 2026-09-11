@@ -120,6 +120,37 @@ class PageSaveHelper @AssistedInject constructor(
         }
     }
 
+    suspend fun cropAndAnnotate(task: Task): Uri? {
+        val pageLoader = getPageLoader()
+        val pageUrl = pageLoader.getPageUrl(task.page).toUri()
+        val pageUri = pageLoader.loadPage(task.page, force = false)
+        val outputFormat = getOutputFormat(pageUrl, pageUri)
+        val tempSource = saveToTempFile(task)
+        val tempOutput = createTempOutputFile(outputFormat.extension)
+        val sourceBounds = getImageBounds(tempSource)
+        val chapterIndex = task.manga.chapters?.indexOfFirst { it.id == task.chapterId }?.coerceAtLeast(0) ?: 0
+        return try {
+            cropPageRequest.launchAndAwait(
+                PageCropRequest(
+                    source = tempSource.toUri(),
+                    destination = tempOutput.toUri(),
+                    compressFormat = outputFormat.compressFormat,
+                    compressQuality = CROP_QUALITY,
+                    sourceWidth = sourceBounds.first,
+                    sourceHeight = sourceBounds.second,
+                    isAnnotationMode = true,
+                    mangaId = task.manga.id,
+                    chapterId = task.chapterId,
+                    chapterIndex = chapterIndex,
+                    page = task.pageNumber - 1,
+                ),
+            )
+        } finally {
+            tempSource.delete()
+            tempOutput.delete()
+        }
+    }
+
     private suspend fun saveImpl(tasks: Collection<Task>): Collection<Uri> {
         val pageLoader = getPageLoader()
         val destinationDir = getDefaultFileUri(null) ?: run {

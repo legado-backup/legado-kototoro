@@ -1253,9 +1253,11 @@ internal fun BookmarksTopLevelRouteContent(
         }
     }
 
+    val notesViewModel = spaceBoundHiltViewModel<org.skepsun.kototoro.notes.ui.NotesViewModel>("notes")
     org.skepsun.kototoro.notes.ui.AppNotesRoute(
         contentPadding = contentPadding,
         appRouter = appRouter,
+        viewModel = notesViewModel,
     )
 }
 

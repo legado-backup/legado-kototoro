@@ -303,6 +303,7 @@ class ReaderActivity :
                     onPreviousChapter = { switchChapterBy(-1) },
                     onNextChapter = { switchChapterBy(1) },
                     onSavePage = ::onSavePageClick,
+                    onCropNote = ::onCropNoteClick,
                     onTimer = ::onScrollTimerClick,
                     onPages = {
                         if (!onPagesButtonClick()) composeReaderController.toggleChapters()
@@ -435,6 +436,7 @@ class ReaderActivity :
                     },
                     onImageServerChanged = ::updateImageServer,
                     onSavePage = ::onSavePageClick,
+                    onCropNote = ::onCropNoteClick,
                     onPreviousChapter = { switchChapterBy(-1) },
                     onNextChapter = { switchChapterBy(1) },
                     onPages = { composeReaderController.toggleChapters() },
@@ -1198,6 +1200,10 @@ class ReaderActivity :
 
     override fun onSavePageClick() {
         viewModel.saveCurrentPage(pageSaveHelper)
+    }
+
+    override fun onCropNoteClick() {
+        viewModel.cropAndAnnotateCurrentPage(pageSaveHelper)
     }
 
     override fun onScrollTimerClick(isLongClick: Boolean) {

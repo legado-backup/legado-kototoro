@@ -4,7 +4,7 @@ import java.util.EnumSet
 
 enum class ReaderControl {
 
-    PREV_CHAPTER, NEXT_CHAPTER, SLIDER, PAGES_SHEET, SCREEN_ROTATION, SAVE_PAGE, TIMER, BOOKMARK, TRANSLATE, DOWNLOAD;
+    PREV_CHAPTER, NEXT_CHAPTER, SLIDER, PAGES_SHEET, SCREEN_ROTATION, SAVE_PAGE, TIMER, BOOKMARK, TRANSLATE, DOWNLOAD, CROP_NOTE;
 
     companion object {
 
@@ -19,6 +19,7 @@ enum class ReaderControl {
             BOOKMARK,
             TRANSLATE,
             DOWNLOAD,
+            CROP_NOTE,
         )
 
         val FLOATING_DEFAULT: Set<ReaderControl> = EnumSet.of(

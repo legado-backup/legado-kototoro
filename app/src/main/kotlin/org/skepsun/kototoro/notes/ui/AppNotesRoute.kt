@@ -32,6 +32,7 @@ fun AppNotesRoute(
                 uiState = uiState,
                 onBookClick = { mangaId -> viewModel.selectBook(mangaId) },
                 onSearchQueryChange = { query -> viewModel.setSearchQuery(query) },
+                onToggleNsfwFilter = { viewModel.toggleNsfwFilter() },
                 contentPadding = contentPadding,
             )
         } else {
@@ -56,6 +57,13 @@ fun AppNotesRoute(
                         is BookNoteItem.BookmarkEntry -> {
                             val state = ReaderState(chapterId = item.chapterId, page = item.page, scroll = 0)
                             appRouter.openReader(manga = content, state = state)
+                        }
+                        is BookNoteItem.MangaCropNote -> {
+                            val state = ReaderState(chapterId = item.chapterId, page = item.page, scroll = 0)
+                            appRouter.openReader(manga = content, state = state)
+                        }
+                        is BookNoteItem.VideoNote -> {
+                            appRouter.openVideo(manga = content, chapterId = item.chapterId, positionMs = item.positionMs)
                         }
                     }
                 },

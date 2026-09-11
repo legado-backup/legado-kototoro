@@ -25,6 +25,8 @@ data class BookNotesSummary(
     val readingProgressPercent: Float?,
     val readingProgressText: String?,
     val lastUpdatedAt: Long,
+    val isNsfw: Boolean = false,
+    val source: String = "",
 )
 
 sealed interface BookNoteItem {
@@ -80,5 +82,43 @@ sealed interface BookNoteItem {
                 source = it,
             )
         }
+    }
+
+    data class MangaCropNote(
+        override val id: Long,
+        override val mangaId: Long,
+        override val chapterId: Long,
+        override val chapterIndex: Int,
+        override val chapterTitle: String,
+        val page: Int,
+        val cropSnapshotUri: String?,
+        val note: String?,
+        override val createdAt: Long,
+        val updatedAt: Long,
+        val cropLeft: Float = 0f,
+        val cropTop: Float = 0f,
+        val cropRight: Float = 1f,
+        val cropBottom: Float = 1f,
+    ) : BookNoteItem {
+        override val noteType: NoteType
+            get() = if (note.isNullOrBlank()) NoteType.HIGHLIGHT else NoteType.THOUGHT
+    }
+
+    data class VideoNote(
+        override val id: Long,
+        override val mangaId: Long,
+        override val chapterId: Long,
+        override val chapterIndex: Int,
+        override val chapterTitle: String,
+        val positionMs: Long,
+        val durationMs: Long,
+        val snapshotUri: String?,
+        val quoteText: String?,
+        val note: String?,
+        override val createdAt: Long,
+        val updatedAt: Long,
+    ) : BookNoteItem {
+        override val noteType: NoteType
+            get() = if (note.isNullOrBlank()) NoteType.HIGHLIGHT else NoteType.THOUGHT
     }
 }

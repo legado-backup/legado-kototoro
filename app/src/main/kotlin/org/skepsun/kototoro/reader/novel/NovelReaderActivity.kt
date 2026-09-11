@@ -1754,28 +1754,46 @@ class NovelReaderActivity :
         lifecycleScope.launch {
             try {
                 val composeState = composeReaderViewModel.uiState.value
+                val targetChapterId = composeState.position?.chapterId ?: chapter.id
+                val targetChapter = chapters.find { it.id == targetChapterId } ?: chapter
                 val currentPage = composeState.position?.page ?: currentPageIndex
                 val percent = getCurrentProgressRatio()
 
                 // 检查是否已存在书签
                 val existingBookmark = bookmarksRepository.observeBookmark(
-                    manga, chapter.id, currentPage
+                    manga, targetChapter.id, currentPage
                 ).first()
 
                 if (existingBookmark != null) {
                     // 删除书签
-                    bookmarksRepository.removeBookmark(manga.id, chapter.id, currentPage)
+                    bookmarksRepository.removeBookmark(manga.id, targetChapter.id, currentPage)
                     contentRoot.performConfirmHapticFeedback()
                     showReaderMessage(getString(R.string.novel_bookmark_removed), 1500L)
                 } else {
                     // 添加书签 - 保存当前页面的文本预览
-                    val pageText = composeState.currentPageText.ifBlank { composeState.content }
-                    val previewText = pageText.take(200).trim() // 取前200字符作为预览
+                    val pageText = composeState.currentPageText.trim()
+                    val previewText = if (pageText.isNotBlank()) {
+                        org.skepsun.kototoro.bookmarks.domain.extractNovelBookmarkPreview(pageText)
+                            .ifBlank { pageText.take(200).trim() }
+                    } else {
+                        val rawContent = composeState.continuousChapters
+                            .firstOrNull { it.chapterId == targetChapter.id }?.content
+                            ?: composeState.content
+                        val cleanContent = org.skepsun.kototoro.bookmarks.domain.extractNovelBookmarkPreview(rawContent)
+                            .ifBlank { rawContent.take(200).trim() }
+                        if (readerSettings.readingMode == ReadingMode.SCROLL && currentPage > 0) {
+                            val paragraphs = cleanContent.split("\n").filter { it.isNotBlank() }
+                            paragraphs.getOrNull(currentPage)?.take(200)?.trim()
+                                ?: cleanContent.take(200).trim()
+                        } else {
+                            cleanContent.take(200).trim()
+                        }
+                    }
 
                     val bookmark = org.skepsun.kototoro.bookmarks.domain.Bookmark(
                         manga = manga,
                         pageId = System.currentTimeMillis(), // 使用时间戳作为 ID
-                        chapterId = chapter.id,
+                        chapterId = targetChapter.id,
                         page = currentPage,
                         scroll = 0,
                         imageUrl = previewText, // 保存文本预览

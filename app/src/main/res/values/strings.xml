@@ -1762,6 +1762,8 @@
     <string name="disable_updates_nsfw_summary">Hide adult contents from Updates</string>
     <string name="disable_suggestions_nsfw">Hide from Suggestions</string>
     <string name="disable_suggestions_nsfw_summary">Hide adult contents from Suggestions</string>
+    <string name="disable_bookmarks_nsfw">Hide from Bookmarks and Notes</string>
+    <string name="disable_bookmarks_nsfw_summary">Hide adult contents from Bookmarks and Notes</string>
     <string name="state_paused">Paused</string>
     <string name="reader_optimize">Limit image memory cache (beta)</string>
     <string name="reader_optimize_summary">Disable memory caching for animated, cropped, split, and other fallback images. Telephoto tile loading is always active and is not controlled by this option</string>
@@ -3992,4 +3994,14 @@
     <string name="local_download_chapters_count">%1$d chapters</string>
     <string name="local_download_storage_used">%1$s downloaded</string>
     <string name="local_download_storage_free">%1$s free</string>
+    <string name="crop_and_annotate">Crop &amp; note</string>
+    <string name="crop_and_annotate_summary">Crop panel screenshot and add thought note</string>
+    <string name="video_add_note">Add note</string>
+    <string name="video_note_title">Video Note</string>
+    <string name="video_note_hint">Write your thoughts or commentary on this scene…</string>
+    <string name="manga_note_hint">Write your thoughts or dialogue quote (optional)…</string>
+    <string name="manga_note_saved">Panel note saved</string>
+    <string name="video_note_saved">Video note saved</string>
+    <string name="quote_dialogue">Subtitle Quote</string>
+    <string name="save_note">Save note</string>
 </resources>

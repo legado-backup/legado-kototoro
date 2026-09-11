@@ -35,13 +35,23 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
 import coil3.compose.AsyncImage
 import org.skepsun.kototoro.R
 import org.skepsun.kototoro.bookmarks.domain.Bookmark
+import org.skepsun.kototoro.bookmarks.domain.extractNovelBookmarkPreview
+import org.skepsun.kototoro.core.model.getContentType
 import org.skepsun.kototoro.core.prefs.BackgroundStyle
 import org.skepsun.kototoro.details.ui.compose.state.DetailsPaneState
 import org.skepsun.kototoro.details.ui.compose.state.rememberDetailsPaneNestedScrollConnection
+import org.skepsun.kototoro.parsers.model.ContentType
 import org.skepsun.kototoro.core.ui.compose.performSelectionHapticFeedback
 import org.skepsun.kototoro.core.ui.theme.LocalBackgroundStyle
 import org.skepsun.kototoro.core.ui.theme.artworkAwareContainerColor
@@ -70,6 +80,9 @@ private fun BookmarkCard(
         }
     }
 
+    val contentType = bookmark.manga.source.getContentType()
+    val isNovel = contentType == ContentType.NOVEL || contentType == ContentType.HENTAI_NOVEL
+
     Card(
         modifier = modifier
             .fillMaxWidth()
@@ -86,12 +99,42 @@ private fun BookmarkCard(
         border = if (isSelected) BorderStroke(4.dp, MaterialTheme.colorScheme.primary) else null,
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
-            AsyncImage(
-                model = imageModel,
-                contentDescription = "Bookmark Thumbnail",
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize(),
-            )
+            if (isNovel) {
+                val previewText = remember(bookmark.imageUrl) {
+                    extractNovelBookmarkPreview(bookmark.imageUrl)
+                }
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(8.dp),
+                ) {
+                    Text(
+                        text = bookmark.chapterTitle.orEmpty().ifBlank {
+                            stringResource(R.string.bookmark_position, bookmark.page + 1)
+                        },
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.primary,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = previewText.ifBlank { stringResource(R.string.bookmark_preview_unavailable) },
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp, lineHeight = 15.sp),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 5,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            } else {
+                AsyncImage(
+                    model = imageModel,
+                    contentDescription = "Bookmark Thumbnail",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
             if (bookmark.percent > 0) {
                 CircularProgressIndicator(
                     progress = { bookmark.percent },
@@ -104,19 +147,21 @@ private fun BookmarkCard(
                 )
             }
 
-            Surface(
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(4.dp),
-                shape = RoundedCornerShape(4.dp),
-                color = Color.Black.copy(alpha = 0.6f),
-            ) {
-                Text(
-                    text = "P.${bookmark.page + 1}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color.White,
-                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
-                )
+            if (!isNovel) {
+                Surface(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(4.dp),
+                    shape = RoundedCornerShape(4.dp),
+                    color = Color.Black.copy(alpha = 0.6f),
+                ) {
+                    Text(
+                        text = "P.${bookmark.page + 1}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White,
+                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                    )
+                }
             }
 
             if (isSelected) {

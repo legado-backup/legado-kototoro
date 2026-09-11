@@ -799,6 +799,8 @@
     <string name="disable_nsfw_summary">关闭含有成人内容的内容源并尽可能从列表中隐藏成人作品</string>
     <string name="disable_suggestions_nsfw">从推荐中隐藏</string>
     <string name="disable_suggestions_nsfw_summary">从推荐中隐藏成人内容</string>
+    <string name="disable_bookmarks_nsfw">从书签与笔记中隐藏</string>
+    <string name="disable_bookmarks_nsfw_summary">从书签与笔记中隐藏成人内容</string>
     <string name="disable_updates_nsfw">从更新中隐藏</string>
     <string name="disable_updates_nsfw_summary">从更新中隐藏成人内容</string>
     <string name="disabled">禁用</string>
@@ -3192,4 +3194,14 @@ SHA-256 指纹:
     <string name="local_download_chapters_count">已下载 %1$d 章</string>
     <string name="local_download_storage_used">已下载 %1$s</string>
     <string name="local_download_storage_free">剩余 %1$s</string>
+    <string name="crop_and_annotate">截图批注</string>
+    <string name="crop_and_annotate_summary">自由框选分镜截图并附带批注想法</string>
+    <string name="video_add_note">记笔记</string>
+    <string name="video_note_title">视频批注</string>
+    <string name="video_note_hint">写下这一刻的想法 / 剧情解读 / 台词感悟…</string>
+    <string name="manga_note_hint">写下关于这个分镜的批注或想法（可选）…</string>
+    <string name="manga_note_saved">分镜笔记已保存</string>
+    <string name="video_note_saved">视频笔记已保存</string>
+    <string name="quote_dialogue">台词引用</string>
+    <string name="save_note">保存笔记</string>
 </resources>

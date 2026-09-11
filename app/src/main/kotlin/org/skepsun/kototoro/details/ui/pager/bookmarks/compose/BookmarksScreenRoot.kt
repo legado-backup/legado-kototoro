@@ -52,6 +52,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.skepsun.kototoro.R
 import org.skepsun.kototoro.bookmarks.domain.Bookmark
+import org.skepsun.kototoro.bookmarks.domain.extractNovelBookmarkPreview
 import org.skepsun.kototoro.core.model.getContentType
 import org.skepsun.kototoro.core.nav.AppRouter
 import org.skepsun.kototoro.core.nav.ReaderIntent
@@ -67,6 +68,7 @@ import org.skepsun.kototoro.notes.domain.NoteType
 import org.skepsun.kototoro.notes.ui.BookNotesExportHelper
 import org.skepsun.kototoro.notes.ui.BookNoteCard
 import org.skepsun.kototoro.notes.ui.BookNotesExportBottomSheet
+import org.skepsun.kototoro.notes.ui.createExcerptData
 import org.skepsun.kototoro.parsers.model.Content
 import org.skepsun.kototoro.parsers.model.ContentType
 import org.skepsun.kototoro.reader.novel.compose.NovelExcerptData
@@ -182,16 +184,16 @@ private fun NovelNotesTabContent(
         }
     }
 
-    val highlightCount = remember(notes) { notes.count { it is BookNoteItem.NovelHighlight && it.note.isNullOrBlank() } }
-    val thoughtCount = remember(notes) { notes.count { it is BookNoteItem.NovelHighlight && !it.note.isNullOrBlank() } }
-    val bookmarkCount = remember(notes) { notes.count { it is BookNoteItem.BookmarkEntry } }
+    val highlightCount = remember(notes) { notes.count { it.noteType == NoteType.HIGHLIGHT } }
+    val thoughtCount = remember(notes) { notes.count { it.noteType == NoteType.THOUGHT } }
+    val bookmarkCount = remember(notes) { notes.count { it.noteType == NoteType.BOOKMARK } }
 
     val filteredNotes = remember(notes, selectedFilter, searchQuery) {
         val base = when (selectedFilter) {
             NoteType.ALL -> notes
-            NoteType.HIGHLIGHT -> notes.filter { it is BookNoteItem.NovelHighlight && it.note.isNullOrBlank() }
-            NoteType.THOUGHT -> notes.filter { it is BookNoteItem.NovelHighlight && !it.note.isNullOrBlank() }
-            NoteType.BOOKMARK -> notes.filterIsInstance<BookNoteItem.BookmarkEntry>()
+            NoteType.HIGHLIGHT -> notes.filter { it.noteType == NoteType.HIGHLIGHT }
+            NoteType.THOUGHT -> notes.filter { it.noteType == NoteType.THOUGHT }
+            NoteType.BOOKMARK -> notes.filter { it.noteType == NoteType.BOOKMARK }
         }
         if (searchQuery.isBlank()) {
             base
@@ -204,7 +206,17 @@ private fun NovelNotesTabContent(
                             item.chapterTitle.contains(searchQuery, ignoreCase = true)
                     }
                     is BookNoteItem.BookmarkEntry -> {
-                        item.chapterTitle.contains(searchQuery, ignoreCase = true)
+                        item.chapterTitle.contains(searchQuery, ignoreCase = true) ||
+                            (item.imageUrl?.contains(searchQuery, ignoreCase = true) == true)
+                    }
+                    is BookNoteItem.MangaCropNote -> {
+                        item.note?.contains(searchQuery, ignoreCase = true) == true ||
+                            item.chapterTitle.contains(searchQuery, ignoreCase = true)
+                    }
+                    is BookNoteItem.VideoNote -> {
+                        item.note?.contains(searchQuery, ignoreCase = true) == true ||
+                            item.quoteText?.contains(searchQuery, ignoreCase = true) == true ||
+                            item.chapterTitle.contains(searchQuery, ignoreCase = true)
                     }
                 }
             }
@@ -423,28 +435,58 @@ private fun NovelNotesTabContent(
                                             state = targetState,
                                         )
                                     }
+                                    is BookNoteItem.MangaCropNote -> {
+                                        val targetState = ReaderState(
+                                            chapterId = item.chapterId,
+                                            page = item.page,
+                                            scroll = 0,
+                                        )
+                                        (activityViewModel as? DetailsViewModel)?.recordDetailsJump(targetState, "detail_crop_note")
+                                        router.openReader(
+                                            manga = manga,
+                                            state = targetState,
+                                        )
+                                    }
+                                    is BookNoteItem.VideoNote -> {
+                                        router.openVideo(
+                                            manga = manga,
+                                            chapterId = item.chapterId,
+                                            positionMs = item.positionMs,
+                                        )
+                                    }
                                 }
                             },
                             onMakeExcerpt = {
-                                if (item is BookNoteItem.NovelHighlight) {
-                                    activeExcerptData = NovelExcerptData(
-                                        selectedText = item.text,
-                                        bookTitle = manga.title,
-                                        chapterTitle = item.chapterTitle,
-                                        author = manga.authors.firstOrNull().orEmpty(),
-                                    )
-                                }
+                                activeExcerptData = createExcerptData(item, manga)
                             },
                             onCopy = {
                                 val copyText = when (item) {
                                     is BookNoteItem.NovelHighlight -> item.note?.let {
                                         "$it\n${context.getString(R.string.book_notes_quote_prefix, item.text)}"
                                     } ?: item.text
-                                    is BookNoteItem.BookmarkEntry -> context.getString(
+                                    is BookNoteItem.BookmarkEntry -> {
+                                        val preview = extractNovelBookmarkPreview(item.imageUrl)
+                                        if (preview.isNotBlank()) {
+                                            "${context.getString(R.string.book_notes_bookmark_position, item.chapterTitle, item.page + 1)}\n$preview"
+                                        } else {
+                                            context.getString(
+                                                R.string.book_notes_bookmark_position,
+                                                item.chapterTitle,
+                                                item.page + 1,
+                                            )
+                                        }
+                                    }
+                                    is BookNoteItem.MangaCropNote -> item.note ?: context.getString(
                                         R.string.book_notes_bookmark_position,
                                         item.chapterTitle,
                                         item.page + 1,
                                     )
+                                    is BookNoteItem.VideoNote -> {
+                                        val time = org.skepsun.kototoro.video.ui.compose.formatDuration(item.positionMs)
+                                        val quote = item.quoteText?.let { "\n${context.getString(R.string.book_notes_quote_prefix, it)}" }.orEmpty()
+                                        val note = item.note?.let { "$it\n" }.orEmpty()
+                                        "${note}${item.chapterTitle} $time$quote"
+                                    }
                                 }
                                 val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                                 cm.setPrimaryClip(ClipData.newPlainText("note", copyText))

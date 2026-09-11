@@ -192,6 +192,10 @@ import org.skepsun.kototoro.video.ui.compose.VideoSuperResolutionDialogState
 import org.skepsun.kototoro.video.ui.compose.DlnaDeviceDialog
 import org.skepsun.kototoro.video.ui.compose.DlnaDeviceDialogState
 import org.skepsun.kototoro.video.ui.compose.VideoPlayerRenderLayer
+import org.skepsun.kototoro.video.ui.compose.VideoAnnotationDialog
+import org.skepsun.kototoro.video.ui.compose.VideoAnnotationState
+import org.skepsun.kototoro.notes.domain.BookNotesRepository
+import java.io.FileOutputStream
 
 @AndroidEntryPoint
 class VideoPlayerActivity : BaseComposeFullscreenActivity(), ReaderNavigationCallback {
@@ -303,6 +307,7 @@ class VideoPlayerActivity : BaseComposeFullscreenActivity(), ReaderNavigationCal
     private var unlockButtonVisible by mutableStateOf(false)
     private var seekFeedbackState by mutableStateOf<VideoSeekFeedbackState?>(null)
     private var actionDialogState by mutableStateOf<VideoActionDialogState?>(null)
+    private var videoAnnotationState by mutableStateOf<VideoAnnotationState?>(null)
     private var chapterDialogState by mutableStateOf<VideoChapterDialogState?>(null)
     private var subtitleSettingsDialogVisible by mutableStateOf(false)
     private var submenuAnchorBounds = IntRect.Zero
@@ -341,6 +346,9 @@ class VideoPlayerActivity : BaseComposeFullscreenActivity(), ReaderNavigationCal
     @Inject
     lateinit var webViewExecutor: WebViewExecutor
 
+    @Inject
+    lateinit var bookNotesRepository: BookNotesRepository
+
     // ReaderState（用于历史保存时提供章节与页信息?
     private var readerState: ReaderState? = null
     private var mangaContent: Content? = null
@@ -349,6 +357,7 @@ class VideoPlayerActivity : BaseComposeFullscreenActivity(), ReaderNavigationCal
     private var sessionStartPercent: Float = 0f
     // 待应用的历史定位百分比（在播放器 STATE_READY 时按时长换算?seek?
     private var pendingInitialSeekPercent: Float? = null
+    private var pendingInitialSeekPositionMs: Long? = null
     // 标志：是否已经恢复过进度（避免重复恢复）
     private var hasRestoredProgress: Boolean = false
     // 标志：用户是否正在拖动底部进度条（避免定时刷新抢占用户交互）
@@ -776,6 +785,16 @@ class VideoPlayerActivity : BaseComposeFullscreenActivity(), ReaderNavigationCal
                             onDeviceSelected = ::castToDlnaDevice,
                         )
                     }
+                    videoAnnotationState?.let { state ->
+                        VideoAnnotationDialog(
+                            state = state,
+                            onDismissRequest = { videoAnnotationState = null },
+                            onSave = { note ->
+                                saveVideoAnnotation(state, note)
+                                videoAnnotationState = null
+                            },
+                        )
+                    }
                     spaceSwitcherDelegate.Fab(
                         modifier = Modifier.fillMaxSize(),
                     )
@@ -901,6 +920,7 @@ class VideoPlayerActivity : BaseComposeFullscreenActivity(), ReaderNavigationCal
             VideoPlayerAction.ToggleScreenLock -> {
                 if (isScreenLocked) exitScreenLock() else enterScreenLock()
             }
+            VideoPlayerAction.AddNote -> openVideoAnnotation()
         }
         syncComposeControlState()
     }
@@ -977,6 +997,10 @@ class VideoPlayerActivity : BaseComposeFullscreenActivity(), ReaderNavigationCal
 
         // 读取传入 ReaderState（可能来自阅读器路由，用于历史保存与初始定位）
         readerState = intent.getParcelableExtraCompat<ReaderState>(ReaderIntent.EXTRA_STATE)
+        val targetPos = intent.getLongExtra(org.skepsun.kototoro.core.nav.AppRouter.KEY_POSITION_MS, -1L)
+        if (targetPos >= 0) {
+            pendingInitialSeekPositionMs = targetPos
+        }
 
         // Apply default orientation: portrait when foldable unfolded in portrait; else landscape
         observeFoldableStateForOrientation()
@@ -2563,6 +2587,11 @@ class VideoPlayerActivity : BaseComposeFullscreenActivity(), ReaderNavigationCal
                     onClick = ::takeScreenshot,
                 ),
                 VideoActionDialogItem(
+                    title = getString(R.string.video_add_note),
+                    iconRes = R.drawable.ic_comment,
+                    onClick = ::openVideoAnnotation,
+                ),
+                VideoActionDialogItem(
                     title = getString(R.string.video_aspect_ratio),
                     iconRes = R.drawable.ic_aspect_ratio,
                     onClick = ::showAspectRatioDialog,
@@ -3858,30 +3887,101 @@ class VideoPlayerActivity : BaseComposeFullscreenActivity(), ReaderNavigationCal
         }
     }
 
-    fun takeScreenshot() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-        val surfaceView = playerView.videoSurfaceView as? android.view.SurfaceView
-        if (surfaceView == null) {
-            showPlayerMessage(org.skepsun.kototoro.R.string.error_occurred)
+    private fun captureCurrentFrame(callback: (Bitmap?) -> Unit) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            callback(null)
             return
         }
-        if (surfaceView.width <= 0 || surfaceView.height <= 0) {
-            showPlayerMessage(org.skepsun.kototoro.R.string.error_occurred)
+        val targetSurface: android.view.SurfaceView? = if (::enhancementView.isInitialized && enhancementView.visibility == View.VISIBLE && enhancementView.alpha > 0f) {
+            enhancementView
+        } else if (::playerView.isInitialized) {
+            playerView.videoSurfaceView as? android.view.SurfaceView
+        } else {
+            null
+        }
+        if (targetSurface == null || targetSurface.width <= 0 || targetSurface.height <= 0) {
+            callback(null)
             return
         }
-        val bitmap = Bitmap.createBitmap(surfaceView.width, surfaceView.height, Bitmap.Config.ARGB_8888)
+        val bitmap = Bitmap.createBitmap(targetSurface.width, targetSurface.height, Bitmap.Config.ARGB_8888)
         PixelCopy.request(
-            surfaceView,
+            targetSurface,
             bitmap,
             { result ->
                 if (result == PixelCopy.SUCCESS) {
-                    saveBitmapToGallery(bitmap)
+                    callback(bitmap)
                 } else {
-                    showPlayerMessage(org.skepsun.kototoro.R.string.error_occurred)
+                    callback(null)
                 }
             },
             Handler(Looper.getMainLooper()),
         )
+    }
+
+    fun takeScreenshot() {
+        captureCurrentFrame { bitmap ->
+            if (bitmap != null) {
+                saveBitmapToGallery(bitmap)
+            } else {
+                showPlayerMessage(org.skepsun.kototoro.R.string.error_occurred)
+            }
+        }
+    }
+
+    fun openVideoAnnotation() {
+        videoPlayer?.pause()
+        captureCurrentFrame { bitmap ->
+            if (bitmap == null) {
+                showPlayerMessage(org.skepsun.kototoro.R.string.error_occurred)
+                return@captureCurrentFrame
+            }
+            val manga = currentMangaContent()
+            val chapters = chaptersViewModel.chapters.value.map { it.chapter }.ifEmpty {
+                manga?.chapters.orEmpty()
+            }
+            val currentId = readerState?.chapterId ?: chapters.firstOrNull()?.id ?: 0L
+            val currentIndex = chapters.indexOfFirst { it.id == currentId }.takeIf { it >= 0 } ?: 0
+            val currentChapter = playerChapterList().find { it.id == currentId } ?: chapters.find { it.id == currentId }
+            val chapterTitle = currentChapter?.title ?: getString(org.skepsun.kototoro.R.string.book_notes_chapter_fallback, currentIndex + 1)
+            val pos = videoPlayer?.positionMs ?: 0L
+            val dur = videoPlayer?.durationMs ?: 0L
+            val activeSubtitle = subtitleOverlayState.text
+
+            videoAnnotationState = VideoAnnotationState(
+                mangaId = manga?.id ?: intent.getLongExtra(org.skepsun.kototoro.core.nav.AppRouter.KEY_ID, 0L),
+                chapterId = currentId,
+                chapterIndex = currentIndex,
+                chapterTitle = chapterTitle,
+                positionMs = pos,
+                durationMs = dur,
+                bitmap = bitmap,
+                subtitleText = activeSubtitle,
+            )
+        }
+    }
+
+    private fun saveVideoAnnotation(state: VideoAnnotationState, noteText: String?) {
+        lifecycleScope.launch {
+            val file = withContext(Dispatchers.IO) {
+                val notesDir = File(filesDir, "notes").apply { mkdirs() }
+                val target = File(notesDir, "video_${state.mangaId}_${System.currentTimeMillis()}.jpg")
+                FileOutputStream(target).use { out ->
+                    state.bitmap.compress(Bitmap.CompressFormat.JPEG, 90, out)
+                }
+                target
+            }
+            bookNotesRepository.saveVideoNote(
+                mangaId = state.mangaId,
+                chapterId = state.chapterId,
+                chapterIndex = state.chapterIndex,
+                positionMs = state.positionMs,
+                durationMs = state.durationMs,
+                imagePath = file.toURI().toString(),
+                quoteText = state.subtitleText?.takeIf { it.isNotBlank() },
+                note = noteText?.takeIf { it.isNotBlank() },
+            )
+            showPlayerMessage(org.skepsun.kototoro.R.string.video_note_saved)
+        }
     }
 
     private fun saveBitmapToGallery(bitmap: Bitmap) {
@@ -4137,6 +4237,13 @@ class VideoPlayerActivity : BaseComposeFullscreenActivity(), ReaderNavigationCal
     }
 
     private fun tryApplyInitialSeek() {
+        val targetPos = pendingInitialSeekPositionMs
+        if (targetPos != null && targetPos >= 0L) {
+            videoPlayer?.seekTo(targetPos)
+            pendingInitialSeekPositionMs = null
+            pendingInitialSeekPercent = null
+            return
+        }
         val p = pendingInitialSeekPercent ?: return
         if (p >= 0.98f) {
             android.util.Log.d("VideoPlayer", "Skip initial seek: percent=$p")

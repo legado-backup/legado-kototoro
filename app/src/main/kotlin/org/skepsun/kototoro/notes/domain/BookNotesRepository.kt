@@ -9,6 +9,8 @@ import kotlinx.coroutines.flow.combine
 import org.skepsun.kototoro.R
 import org.skepsun.kototoro.core.db.MangaDatabase
 import org.skepsun.kototoro.core.db.entity.toContent
+import org.skepsun.kototoro.core.model.isNsfw
+import org.skepsun.kototoro.notes.data.MediaNoteEntity
 import java.io.File
 import javax.inject.Inject
 
@@ -21,9 +23,11 @@ class BookNotesRepository @Inject constructor(
     fun observeSummaries(): Flow<List<BookNotesSummary>> = combine(
         database.getNovelMarkingDao().observeAll(),
         database.getBookmarksDao().observe(),
-    ) { markings, bookmarksMap ->
+        database.getMediaNoteDao().observeAll(),
+    ) { markings, bookmarksMap, mediaNotes ->
         val markingsByManga = markings.groupBy { it.mangaId }
-        val allMangaIds = (markingsByManga.keys + bookmarksMap.keys.map { it.manga.id }).distinct()
+        val mediaNotesByManga = mediaNotes.groupBy { it.mangaId }
+        val allMangaIds = (markingsByManga.keys + bookmarksMap.keys.map { it.manga.id } + mediaNotesByManga.keys).distinct()
         if (allMangaIds.isEmpty()) return@combine emptyList<BookNotesSummary>()
 
         val historyMap = database.getHistoryDao().findAllByMangaIds(allMangaIds).associateBy { it.mangaId }
@@ -41,9 +45,12 @@ class BookNotesRepository @Inject constructor(
 
             val bookMarkings = markingsByManga[mangaId].orEmpty()
             val bookBookmarks = bookmarksMap[mangaWithTags].orEmpty()
+            val bookMediaNotes = mediaNotesByManga[mangaId].orEmpty()
 
-            val highlightCount = bookMarkings.count { it.note.isNullOrBlank() }
-            val thoughtCount = bookMarkings.count { !it.note.isNullOrBlank() }
+            val highlightCount = bookMarkings.count { it.note.isNullOrBlank() } +
+                bookMediaNotes.count { it.note.isNullOrBlank() }
+            val thoughtCount = bookMarkings.count { !it.note.isNullOrBlank() } +
+                bookMediaNotes.count { !it.note.isNullOrBlank() }
             val bookmarkCount = bookBookmarks.size
             val totalCount = highlightCount + thoughtCount + bookmarkCount
 
@@ -62,7 +69,8 @@ class BookNotesRepository @Inject constructor(
 
             val lastMarkingTime = bookMarkings.maxOfOrNull { it.updatedAt } ?: 0L
             val lastBookmarkTime = bookBookmarks.maxOfOrNull { it.createdAt } ?: 0L
-            val lastTime = maxOf(lastMarkingTime, lastBookmarkTime)
+            val lastMediaNoteTime = bookMediaNotes.maxOfOrNull { it.updatedAt } ?: 0L
+            val lastTime = maxOf(lastMarkingTime, lastBookmarkTime, lastMediaNoteTime)
 
             BookNotesSummary(
                 mangaId = mangaId,
@@ -76,6 +84,8 @@ class BookNotesRepository @Inject constructor(
                 readingProgressPercent = progressPercent,
                 readingProgressText = progressText,
                 lastUpdatedAt = lastTime,
+                isNsfw = manga.isNsfw(),
+                source = manga.source.name,
             )
         }.sortedByDescending { it.lastUpdatedAt }
     }
@@ -83,7 +93,8 @@ class BookNotesRepository @Inject constructor(
     fun observeBookNotes(mangaId: Long): Flow<List<BookNoteItem>> = combine(
         database.getNovelMarkingDao().observe(mangaId),
         database.getBookmarksDao().observe(mangaId),
-    ) { markings, bookmarks ->
+        database.getMediaNoteDao().observe(mangaId),
+    ) { markings, bookmarks, mediaNotes ->
         val chapters = database.getChaptersDao().findAll(mangaId).associateBy { it.chapterId }
 
         val highlightItems = markings.map { m ->
@@ -142,12 +153,56 @@ class BookNotesRepository @Inject constructor(
             )
         }
 
-        (highlightItems + bookmarkItems).sortedWith(
+        val mediaItems = mediaNotes.map { mn ->
+            val chapter = chapters[mn.chapterId]
+            val chapterTitle = chapter?.title ?: if (mn.mediaType == MediaNoteEntity.MEDIA_TYPE_VIDEO_TIMESTAMP) {
+                context.getString(R.string.book_notes_chapter_fallback, mn.chapterIndex + 1)
+            } else {
+                context.getString(R.string.book_notes_page_fallback, mn.page + 1)
+            }
+            if (mn.mediaType == MediaNoteEntity.MEDIA_TYPE_VIDEO_TIMESTAMP) {
+                BookNoteItem.VideoNote(
+                    id = mn.id,
+                    mangaId = mn.mangaId,
+                    chapterId = mn.chapterId,
+                    chapterIndex = mn.chapterIndex,
+                    chapterTitle = chapterTitle,
+                    positionMs = mn.positionMs,
+                    durationMs = mn.durationMs,
+                    snapshotUri = mn.imagePath,
+                    quoteText = mn.quoteText,
+                    note = mn.note,
+                    createdAt = mn.createdAt,
+                    updatedAt = mn.updatedAt,
+                )
+            } else {
+                BookNoteItem.MangaCropNote(
+                    id = mn.id,
+                    mangaId = mn.mangaId,
+                    chapterId = mn.chapterId,
+                    chapterIndex = mn.chapterIndex,
+                    chapterTitle = chapterTitle,
+                    page = mn.page,
+                    cropSnapshotUri = mn.imagePath,
+                    note = mn.note,
+                    createdAt = mn.createdAt,
+                    updatedAt = mn.updatedAt,
+                    cropLeft = mn.cropLeft,
+                    cropTop = mn.cropTop,
+                    cropRight = mn.cropRight,
+                    cropBottom = mn.cropBottom,
+                )
+            }
+        }
+
+        (highlightItems + bookmarkItems + mediaItems).sortedWith(
             compareBy<BookNoteItem> { it.chapterIndex }
                 .thenBy { item ->
                     when (item) {
-                        is BookNoteItem.NovelHighlight -> item.startOffset
-                        is BookNoteItem.BookmarkEntry -> item.page
+                        is BookNoteItem.NovelHighlight -> item.startOffset.toLong()
+                        is BookNoteItem.BookmarkEntry -> item.page.toLong()
+                        is BookNoteItem.MangaCropNote -> item.page.toLong()
+                        is BookNoteItem.VideoNote -> item.positionMs
                     }
                 }
                 .thenBy { it.createdAt },
@@ -164,6 +219,20 @@ class BookNotesRepository @Inject constructor(
                     snapshotFile.delete()
                 }
             }
+            is BookNoteItem.MangaCropNote -> {
+                database.getMediaNoteDao().deleteById(item.id)
+                item.cropSnapshotUri?.let { path ->
+                    val file = File(path.removePrefix("file://"))
+                    if (file.exists()) file.delete()
+                }
+            }
+            is BookNoteItem.VideoNote -> {
+                database.getMediaNoteDao().deleteById(item.id)
+                item.snapshotUri?.let { path ->
+                    val file = File(path.removePrefix("file://"))
+                    if (file.exists()) file.delete()
+                }
+            }
         }
     }
 
@@ -172,6 +241,74 @@ class BookNotesRepository @Inject constructor(
             id = id,
             note = note,
             updatedAt = System.currentTimeMillis(),
+        )
+    }
+
+    suspend fun updateMediaThoughtNote(id: Long, note: String?) {
+        database.getMediaNoteDao().updateNote(
+            id = id,
+            note = note,
+            updatedAt = System.currentTimeMillis(),
+        )
+    }
+
+    suspend fun saveMangaCropNote(
+        mangaId: Long,
+        chapterId: Long,
+        chapterIndex: Int,
+        page: Int,
+        imagePath: String,
+        note: String?,
+        cropLeft: Float = 0f,
+        cropTop: Float = 0f,
+        cropRight: Float = 1f,
+        cropBottom: Float = 1f,
+    ): Long {
+        val now = System.currentTimeMillis()
+        return database.getMediaNoteDao().insert(
+            MediaNoteEntity(
+                mangaId = mangaId,
+                chapterId = chapterId,
+                chapterIndex = chapterIndex,
+                mediaType = MediaNoteEntity.MEDIA_TYPE_MANGA_CROP,
+                page = page,
+                imagePath = imagePath,
+                note = note,
+                cropLeft = cropLeft,
+                cropTop = cropTop,
+                cropRight = cropRight,
+                cropBottom = cropBottom,
+                createdAt = now,
+                updatedAt = now,
+            ),
+        )
+    }
+
+    suspend fun saveVideoNote(
+        mangaId: Long,
+        chapterId: Long,
+        chapterIndex: Int,
+        positionMs: Long,
+        durationMs: Long,
+        imagePath: String?,
+        quoteText: String?,
+        note: String?,
+    ): Long {
+        val now = System.currentTimeMillis()
+        return database.getMediaNoteDao().insert(
+            MediaNoteEntity(
+                mangaId = mangaId,
+                chapterId = chapterId,
+                chapterIndex = chapterIndex,
+                mediaType = MediaNoteEntity.MEDIA_TYPE_VIDEO_TIMESTAMP,
+                positionMs = positionMs,
+                durationMs = durationMs,
+                imagePath = imagePath,
+                quoteText = quoteText,
+                note = note,
+                createdAt = now,
+                updatedAt = now,
+            ),
         )
     }
 }

@@ -14,7 +14,9 @@ import org.skepsun.kototoro.R
 import org.skepsun.kototoro.bookmarks.domain.Bookmark
 import org.skepsun.kototoro.bookmarks.domain.BookmarksRepository
 import org.skepsun.kototoro.core.jsonsource.SourceGroupManager
+import org.skepsun.kototoro.core.model.isNsfw
 import org.skepsun.kototoro.core.prefs.AppSettings
+import org.skepsun.kototoro.core.prefs.observeAsFlow
 import org.skepsun.kototoro.core.prefs.observeAsStateFlow
 import org.skepsun.kototoro.core.ui.BaseViewModel
 import org.skepsun.kototoro.core.ui.util.ReversibleAction
@@ -29,6 +31,7 @@ import org.skepsun.kototoro.list.ui.model.LoadingState
 import org.skepsun.kototoro.list.ui.model.toErrorState
 import org.skepsun.kototoro.parsers.model.Content
 import org.skepsun.kototoro.reader.ui.PageSaveHelper
+import org.skepsun.kototoro.space.domain.SpaceContentPolicy
 import org.skepsun.kototoro.space.ui.SpaceBrowseScope
 import org.skepsun.kototoro.space.ui.SpaceBindableViewModel
 import org.skepsun.kototoro.space.ui.scopedToSpace
@@ -39,6 +42,7 @@ class AllBookmarksViewModel @Inject constructor(
     private val repository: BookmarksRepository,
     private val sourceGroupManager: SourceGroupManager,
     private val globalFavoritesState: org.skepsun.kototoro.favourites.domain.GlobalFavoritesState,
+    private val spaceContentPolicy: SpaceContentPolicy,
     settings: AppSettings,
     spaceBrowseScope: SpaceBrowseScope,
 ) : BaseViewModel(), SpaceBindableViewModel {
@@ -62,8 +66,10 @@ class AllBookmarksViewModel @Inject constructor(
         repository.observeBookmarks(),
         currentGroupTab,
         currentSourceTags,
-    ) { bookmarks, groupTab, sourceTags ->
-        bookmarks.filterByTopBar(groupTab, sourceTags)
+        spaceBinding.spaceId,
+        settings.observeAsFlow(AppSettings.KEY_BOOKMARKS_EXCLUDE_NSFW) { isBookmarksExcludeNsfw },
+    ) { bookmarks, groupTab, sourceTags, spaceId, isNsfwDisabled ->
+        bookmarks.filterBookmarks(groupTab, sourceTags, spaceId, isNsfwDisabled)
     }.map { filteredBookmarks ->
             if (filteredBookmarks.isEmpty()) {
                 listOf(
@@ -122,19 +128,29 @@ class AllBookmarksViewModel @Inject constructor(
         return result
     }
 
-    private fun Map<Content, List<Bookmark>>.filterByTopBar(
+    private fun Map<Content, List<Bookmark>>.filterBookmarks(
         groupTab: BrowseGroupTab,
         sourceTags: Set<SourceTag>,
+        spaceId: org.skepsun.kototoro.space.domain.SpaceId?,
+        isNsfwDisabled: Boolean,
     ): Map<Content, List<Bookmark>> {
-        if (groupTab == BrowseGroupTab.All && sourceTags.isEmpty()) {
-            return this
-        }
+        val allowedTypes = spaceId?.let { spaceContentPolicy.allowedTypes(it) }?.takeIf { it.isNotEmpty() }
+        val allowedSources = spaceId?.let { spaceContentPolicy.allowedSourceNames(it) }
         val result = LinkedHashMap<Content, List<Bookmark>>(size)
         for ((content, bookmarks) in this) {
+            if (isNsfwDisabled && content.isNsfw()) {
+                continue
+            }
+            if (allowedTypes != null && content.source.contentType !in allowedTypes) {
+                continue
+            }
+            if (allowedSources != null && content.source.name !in allowedSources) {
+                continue
+            }
             val source = content.source
             val contentGroup = sourceGroupManager.getContentGroup(source)
             val originGroup = sourceGroupManager.getOriginGroup(source)
-            val matchesGroup = groupTab.matchesContentGroup(contentGroup) && groupTab.matchesOriginGroup(originGroup)
+            val matchesGroup = groupTab == BrowseGroupTab.All || (groupTab.matchesContentGroup(contentGroup) && groupTab.matchesOriginGroup(originGroup))
             val matchesSourceTag = sourceTags.isEmpty() || sourceTags.any { it.matches(contentGroup, originGroup) }
             if (matchesGroup && matchesSourceTag) {
                 result[content] = bookmarks

@@ -130,6 +130,7 @@ internal data class ComposeReaderOptionsCallbacks(
     val onNextChapter: () -> Unit = {},
     val onPages: () -> Unit = {},
     val onBookmark: () -> Unit = {},
+    val onCropNote: () -> Unit = {},
     val onDownload: () -> Unit = {},
     val onRotate: () -> Unit = {},
     val onAutoScroll: () -> Unit = {},
@@ -708,6 +709,12 @@ private fun ReaderToolsOptionsPage(
                     icon = R.drawable.ic_save,
                     title = stringResource(R.string.save_page),
                     onClick = dismissThen(callbacks.onSavePage),
+                )
+                ReaderOptionDivider()
+                ReaderToolActionRow(
+                    icon = R.drawable.ic_crop,
+                    title = stringResource(R.string.crop_and_annotate),
+                    onClick = dismissThen(callbacks.onCropNote),
                 )
                 ReaderOptionDivider()
                 ReaderToolActionRow(
