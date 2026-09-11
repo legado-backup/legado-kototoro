@@ -1939,6 +1939,9 @@
     <string name="reader_translation_task_panel_empty_for_filter">フィルター「%1$s」に該当するタスクはありません</string>
     <string name="reader_translation_task_panel_summary">ページ数: %1$d | 準備完了: %2$d | 実行中: %3$d | 失敗: %4$d</string>
     <string name="reader_translation_task_panel_title">翻訳タスクパネル</string>
+    <string name="reader_translation_tab_settings">翻訳設定</string>
+    <string name="reader_translation_tab_logs">タスクログ</string>
+    <string name="reader_translation_view_logs_summary">各ページの翻訳状況、ベンチマーク、ログを表示</string>
     <string name="reader_translation_task_stat_bubble">吹き出し: %1$s</string>
     <string name="reader_translation_task_stat_hit">ヒット</string>
     <string name="reader_translation_task_stat_miss">ミス</string>

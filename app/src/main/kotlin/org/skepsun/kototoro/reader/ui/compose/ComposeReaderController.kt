@@ -86,7 +86,11 @@ internal class ComposeReaderController(
                         chaptersPanelContent(selectedTabId, panelState, onSelectionStateChange, dragModifier)
                     },
                     translationTaskPanelContent = {
-                        ComposeTranslationTaskPanelContent(viewModel = viewModel, modifier = Modifier.fillMaxSize())
+                        ComposeTranslationTaskPanelContent(
+                            viewModel = viewModel,
+                            modifier = Modifier.fillMaxSize(),
+                            showTitle = false,
+                        )
                     },
                     callbacks = chromeCallbacks.copy(
                         onZoomIn = ::onZoomIn,

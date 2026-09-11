@@ -13,6 +13,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -20,9 +21,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.skepsun.kototoro.R
@@ -35,6 +39,7 @@ import org.skepsun.kototoro.reader.ui.TranslationTaskBenchmarkFormatter
 internal fun ComposeTranslationTaskPanelContent(
     viewModel: ReaderViewModel,
     modifier: Modifier = Modifier,
+    showTitle: Boolean = true,
 ) {
     val version by viewModel.translationTaskPanelVersion.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -54,10 +59,12 @@ internal fun ComposeTranslationTaskPanelContent(
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 4.dp),
     ) {
-        Text(
-            text = stringResource(R.string.reader_translation_task_panel_title),
-            style = MaterialTheme.typography.titleMedium,
-        )
+        if (showTitle) {
+            Text(
+                text = stringResource(R.string.reader_translation_task_panel_title),
+                style = MaterialTheme.typography.titleMedium,
+            )
+        }
         Text(
             text = if (snapshots.isEmpty()) {
                 stringResource(R.string.reader_translation_task_panel_empty)
@@ -181,17 +188,52 @@ private fun TranslationTaskRow(
     onClick: () -> Unit,
 ) {
     val state = translationStateLabel(snapshot.state)
+    val stateColor = when (snapshot.state) {
+        TranslationLayerState.READY -> MaterialTheme.colorScheme.primary
+        TranslationLayerState.FAILED -> MaterialTheme.colorScheme.error
+        TranslationLayerState.GENERATING -> MaterialTheme.colorScheme.tertiary
+        TranslationLayerState.IDLE -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
     val preview = snapshot.log.lineSequence().lastOrNull().orEmpty().ifBlank {
         stringResource(R.string.reader_translation_page_log_empty)
     }
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(vertical = 10.dp),
+    Surface(
+        onClick = onClick,
+        shape = MaterialTheme.shapes.small,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        modifier = Modifier.fillMaxWidth(),
     ) {
-        Text("P${snapshot.pageIndex + 1} [$state]", style = MaterialTheme.typography.titleSmall)
-        Text(preview, style = MaterialTheme.typography.bodySmall)
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    text = "P${snapshot.pageIndex + 1}",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Medium,
+                )
+                Text(
+                    text = state,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = stateColor,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+            Text(
+                text = preview,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
     }
 }
 

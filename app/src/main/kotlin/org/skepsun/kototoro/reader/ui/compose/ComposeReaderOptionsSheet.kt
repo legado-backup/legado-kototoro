@@ -39,6 +39,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -580,12 +581,59 @@ private fun ReaderDoublePageSensitivity(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+private enum class TranslationPageTab {
+    SETTINGS,
+    LOGS,
+}
+
 @Composable
 private fun ReaderTranslationOptionsPage(
     state: ComposeReaderOptionsState,
     callbacks: ComposeReaderOptionsCallbacks,
     translationTaskPanelContent: @Composable () -> Unit,
+) {
+    var selectedTab by rememberSaveable { mutableStateOf(TranslationPageTab.SETTINGS) }
+
+    Column(
+        modifier = Modifier.fillMaxSize(),
+    ) {
+        ReaderSegmentedChoice(
+            options = listOf(
+                stringResource(R.string.reader_translation_tab_settings),
+                stringResource(R.string.reader_translation_tab_logs),
+            ),
+            selectedIndex = selectedTab.ordinal,
+            onSelected = { selectedTab = TranslationPageTab.entries[it] },
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+        )
+
+        when (selectedTab) {
+            TranslationPageTab.SETTINGS -> {
+                ReaderTranslationSettingsContent(
+                    state = state,
+                    callbacks = callbacks,
+                    onViewLogs = { selectedTab = TranslationPageTab.LOGS },
+                )
+            }
+            TranslationPageTab.LOGS -> {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                ) {
+                    translationTaskPanelContent()
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ReaderTranslationSettingsContent(
+    state: ComposeReaderOptionsState,
+    callbacks: ComposeReaderOptionsCallbacks,
+    onViewLogs: () -> Unit,
 ) {
     fun dismissThen(action: () -> Unit): () -> Unit = {
         callbacks.onDismiss()
@@ -599,73 +647,96 @@ private fun ReaderTranslationOptionsPage(
         val index = values.indexOf(selected)
         return labels.getOrElse(index) { selected }
     }
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 12.dp, vertical = 4.dp),
-    ) {
-        Text(
-            text = stringResource(R.string.reader_more_tab_translation),
-            style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
-        )
-        ReaderOptionGroup {
-            ReaderOptionSwitchRow(
-                label = stringResource(R.string.reader_translation_show_translated),
-                checked = state.translationEnabled && state.translationShowTranslated,
-                enabled = state.translationEnabled,
-                onCheckedChange = callbacks.onTranslationShowTranslatedChanged,
-            )
-            ReaderOptionDivider()
-            ReaderOptionValueRow(
-                label = stringResource(R.string.reader_translation_source_lang),
-                value = selectedLabel(sourceValues, sourceLabels, state.translationSourceLanguage),
-                onClick = callbacks.onTranslationLanguageActions,
-            )
-            ReaderOptionDivider()
-            ReaderOptionValueRow(
-                label = stringResource(R.string.reader_translation_target_lang),
-                value = selectedLabel(targetValues, targetLabels, state.translationTargetLanguage),
-                onClick = callbacks.onTranslationLanguageActions,
-            )
-            ReaderOptionDivider()
-            ReaderSegmentedChoice(
-                title = stringResource(R.string.reader_translation_ocr_mode),
-                options = listOf(
-                    stringResource(R.string.reader_translation_ocr_mode_basic),
-                    stringResource(R.string.reader_translation_ocr_mode_advanced),
-                ),
-                selectedIndex = ReaderOcrMode.entries.indexOf(state.translationOcrMode),
-                onSelected = { callbacks.onTranslationOcrModeChanged(ReaderOcrMode.entries[it]) },
-                stackedTitle = true,
-                // Keep the option cards clear of the parent MD3 group's rounded clip.
-                modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
-            )
+
+    OptionsPageList {
+        item {
+            ReaderOptionGroup {
+                ReaderOptionSwitchRow(
+                    label = stringResource(R.string.reader_translation_show_translated),
+                    checked = state.translationEnabled && state.translationShowTranslated,
+                    enabled = state.translationEnabled,
+                    onCheckedChange = callbacks.onTranslationShowTranslatedChanged,
+                )
+                ReaderOptionDivider()
+                ReaderOptionValueRow(
+                    label = stringResource(R.string.reader_translation_source_lang),
+                    value = selectedLabel(sourceValues, sourceLabels, state.translationSourceLanguage),
+                    onClick = callbacks.onTranslationLanguageActions,
+                )
+                ReaderOptionDivider()
+                ReaderOptionValueRow(
+                    label = stringResource(R.string.reader_translation_target_lang),
+                    value = selectedLabel(targetValues, targetLabels, state.translationTargetLanguage),
+                    onClick = callbacks.onTranslationLanguageActions,
+                )
+                ReaderOptionDivider()
+                ReaderSegmentedChoice(
+                    title = stringResource(R.string.reader_translation_ocr_mode),
+                    options = listOf(
+                        stringResource(R.string.reader_translation_ocr_mode_basic),
+                        stringResource(R.string.reader_translation_ocr_mode_advanced),
+                    ),
+                    selectedIndex = ReaderOcrMode.entries.indexOf(state.translationOcrMode),
+                    onSelected = { callbacks.onTranslationOcrModeChanged(ReaderOcrMode.entries[it]) },
+                    stackedTitle = true,
+                    // Keep the option cards clear of the parent MD3 group's rounded clip.
+                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
+                )
+            }
         }
-        OptionsActionGrid {
-            OptionAction(R.drawable.ic_translate, R.string.reader_translation_action, dismissThen(callbacks.onTranslation))
-            OptionAction(R.drawable.ic_language, R.string.reader_translation_quick_actions, callbacks.onTranslationLanguageActions)
-            OptionAction(R.drawable.ic_retry, R.string.reader_translation_retranslate_current_page, callbacks.onRetranslatePage)
-            OptionAction(R.drawable.ic_retry, R.string.reader_translation_retry_failed_pages, callbacks.onRetryFailedTranslations)
-            OptionAction(R.drawable.ic_retry, R.string.reader_translation_retranslate_current_chapter, callbacks.onRetranslateChapter)
-            OptionAction(R.drawable.ic_settings, R.string.reader_translation_action_settings, dismissThen(callbacks.onTranslationSettings))
+        item {
+            OptionsActionGrid {
+                OptionAction(R.drawable.ic_translate, R.string.reader_translation_action, dismissThen(callbacks.onTranslation))
+                OptionAction(R.drawable.ic_language, R.string.reader_translation_quick_actions, callbacks.onTranslationLanguageActions)
+                OptionAction(R.drawable.ic_retry, R.string.reader_translation_retranslate_current_page, callbacks.onRetranslatePage)
+                OptionAction(R.drawable.ic_retry, R.string.reader_translation_retry_failed_pages, callbacks.onRetryFailedTranslations)
+                OptionAction(R.drawable.ic_retry, R.string.reader_translation_retranslate_current_chapter, callbacks.onRetranslateChapter)
+                OptionAction(R.drawable.ic_settings, R.string.reader_translation_action_settings, dismissThen(callbacks.onTranslationSettings))
+            }
         }
-        ReaderOptionDivider()
-        Text(
-            text = stringResource(R.string.reader_translation_task_panel_title),
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 4.dp, vertical = 6.dp),
-        )
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                // Keep the live log bounded so this page keeps its outer scroll surface.
-                // The log itself remains independently scrollable inside this viewport.
-                .height(240.dp),
-        ) {
-            translationTaskPanelContent()
+        item {
+            ReaderOptionDivider()
+        }
+        item {
+            Surface(
+                onClick = onViewLogs,
+                shape = MaterialTheme.shapes.medium,
+                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_list_detailed),
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(22.dp),
+                    )
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(start = 12.dp),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.reader_translation_task_panel_title),
+                            style = MaterialTheme.typography.titleSmall,
+                        )
+                        Text(
+                            text = stringResource(R.string.reader_translation_view_logs_summary),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Icon(
+                        painter = painterResource(R.drawable.ic_arrow_forward),
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+            }
         }
     }
 }

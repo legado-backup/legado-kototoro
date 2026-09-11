@@ -1873,6 +1873,9 @@
     <string name="reader_translation_page_log_title">第 %1$d 页翻译日志</string>
     <string name="reader_translation_page_log_empty">当前页还没有翻译日志。</string>
     <string name="reader_translation_task_panel_title">翻译任务面板</string>
+    <string name="reader_translation_tab_settings">翻译设置</string>
+    <string name="reader_translation_tab_logs">任务日志</string>
+    <string name="reader_translation_view_logs_summary">查看各页翻译状态、耗时基准与详细日志</string>
     <string name="novel_translation_progress_started">本章开始翻译（%1$d/%2$d 段）</string>
     <string name="novel_translation_progress_update">本章翻译进度 %1$d/%2$d 段</string>
     <string name="novel_translation_progress_complete">本章翻译完成（%1$d/%2$d 段）</string>

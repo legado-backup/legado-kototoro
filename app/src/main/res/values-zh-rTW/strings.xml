@@ -2013,6 +2013,9 @@
     <string name="reader_translation_task_panel_empty_for_filter">篩選條件 %1$s 下沒有任務。</string>
     <string name="reader_translation_task_panel_summary">總頁數：%1$d | 完成：%2$d | 進行中：%3$d | 失敗：%4$d</string>
     <string name="reader_translation_task_panel_title">翻譯任務面板</string>
+    <string name="reader_translation_tab_settings">翻譯設定</string>
+    <string name="reader_translation_tab_logs">任務日誌</string>
+    <string name="reader_translation_view_logs_summary">查看各頁翻譯狀態、耗時基準與詳細日誌</string>
     <string name="reader_translation_task_stat_bubble">氣泡數: %1$s</string>
     <string name="reader_translation_task_stat_hit">命中</string>
     <string name="reader_translation_task_stat_miss">未命中</string>

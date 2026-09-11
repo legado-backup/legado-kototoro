@@ -2096,6 +2096,9 @@
     <string name="reader_translation_task_panel_empty_for_filter">筛选条件 %1$s 下没有任务。</string>
     <string name="reader_translation_task_panel_summary">总页数：%1$d | 完成：%2$d | 进行中：%3$d | 失败：%4$d</string>
     <string name="reader_translation_task_panel_title">翻译任务面板</string>
+    <string name="reader_translation_tab_settings">翻译设置</string>
+    <string name="reader_translation_tab_logs">任务日志</string>
+    <string name="reader_translation_view_logs_summary">查看各页翻译状态、耗时基准与详细日志</string>
     <string name="reader_translation_task_stat_bubble">气泡数: %1$s</string>
     <string name="reader_translation_task_stat_hit">命中</string>
     <string name="reader_translation_task_stat_miss">未命中</string>

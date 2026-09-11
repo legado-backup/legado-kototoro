@@ -2024,6 +2024,9 @@
     <string name="reader_translation_page_log_title">Page %1$d translation log</string>
     <string name="reader_translation_page_log_empty">No translation log for this page yet.</string>
     <string name="reader_translation_task_panel_title">Translation task panel</string>
+    <string name="reader_translation_tab_settings">Settings</string>
+    <string name="reader_translation_tab_logs">Tasks &amp; Logs</string>
+    <string name="reader_translation_view_logs_summary">View per-page translation progress, benchmarks, and logs</string>
     <string name="novel_translation_progress_started">Novel translation started (%1$d/%2$d paragraphs)</string>
     <string name="novel_translation_progress_update">Novel translation progress %1$d/%2$d paragraphs</string>
     <string name="novel_translation_progress_complete">Novel translation complete (%1$d/%2$d paragraphs)</string>
