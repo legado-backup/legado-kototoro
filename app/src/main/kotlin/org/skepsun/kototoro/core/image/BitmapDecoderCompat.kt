@@ -7,7 +7,6 @@ import android.graphics.ImageDecoder
 import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.core.graphics.createBitmap
-import okio.IOException
 import okio.buffer
 import okio.source
 import org.aomedia.avif.android.AvifDecoder
@@ -20,6 +19,7 @@ import org.skepsun.kototoro.core.util.ext.readByteBuffer
 import org.skepsun.kototoro.core.util.ext.toByteBuffer
 import org.skepsun.kototoro.core.util.ext.toMimeTypeOrNull
 import org.skepsun.kototoro.parsers.util.runCatchingCancellable
+import java.io.BufferedInputStream
 import java.io.File
 import java.io.InputStream
 import java.nio.ByteBuffer
@@ -27,10 +27,12 @@ import java.nio.ByteBuffer
 object BitmapDecoderCompat {
 
     private const val FORMAT_AVIF = "avif"
+    private const val FORMAT_JXL = MihonImageDecoderCompat.FORMAT_JXL
 
     @Blocking
     fun decode(file: File): Bitmap = when (val format = probeMimeType(file)?.subtype) {
         FORMAT_AVIF -> file.source().buffer().use { decodeAvif(it.readByteBuffer()) }
+        FORMAT_JXL -> file.inputStream().use { MihonImageDecoderCompat.decode(it, file.absolutePath) }
         else -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             ImageDecoder.decodeBitmap(ImageDecoder.createSource(file))
         } else {
@@ -44,14 +46,27 @@ object BitmapDecoderCompat {
         if (format == FORMAT_AVIF) {
             return decodeAvif(stream.toByteBuffer())
         }
+        if (format == FORMAT_JXL) {
+            return MihonImageDecoderCompat.decode(stream)
+        }
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
+            val buffered = stream as? BufferedInputStream ?: BufferedInputStream(stream)
+            val header = ByteArray(JXL_HEADER_SIZE)
+            buffered.mark(JXL_HEADER_SIZE)
+            val count = buffered.readAtMost(header)
+            buffered.reset()
+            if (count >= 2 && MihonImageDecoderCompat.isJxl(header.copyOf(count))) {
+                return MihonImageDecoderCompat.decode(buffered)
+            }
             val opts = BitmapFactory.Options()
             opts.inMutable = isMutable
-            return checkBitmapNotNull(BitmapFactory.decodeStream(stream, null, opts), format)
+            return checkBitmapNotNull(BitmapFactory.decodeStream(buffered, null, opts), format)
         }
         val byteBuffer = stream.toByteBuffer()
         return if (AvifDecoder.isAvifImage(byteBuffer)) {
             decodeAvif(byteBuffer)
+        } else if (MihonImageDecoderCompat.isJxl(byteBuffer)) {
+            decodeJxl(byteBuffer)
         } else {
             ImageDecoder.decodeBitmap(ImageDecoder.createSource(byteBuffer), DecoderConfigListener(isMutable))
         }
@@ -65,7 +80,7 @@ object BitmapDecoderCompat {
             @Suppress("DEPRECATION")
             BitmapRegionDecoder.newInstance(inoutStream, false)
         }
-    } catch (e: IOException) {
+    } catch (e: Exception) {
         e.printStackTraceDebug()
         null
     }
@@ -130,6 +145,9 @@ object BitmapDecoderCompat {
 
     @Blocking
     fun probeMimeType(file: File): MimeType? {
+        if (MihonImageDecoderCompat.isJxl(file)) {
+            return "image/jxl".toMimeTypeOrNull()
+        }
         return MimeTypes.probeMimeType(file) ?: detectBitmapType(file)
     }
 
@@ -162,6 +180,22 @@ object BitmapDecoderCompat {
         }
         return bitmap
     }
+
+    private fun decodeJxl(bytes: ByteBuffer): Bitmap {
+        return MihonImageDecoderCompat.decode(bytes)
+    }
+
+    private fun InputStream.readAtMost(buffer: ByteArray): Int {
+        var offset = 0
+        while (offset < buffer.size) {
+            val count = read(buffer, offset, buffer.size - offset)
+            if (count <= 0) break
+            offset += count
+        }
+        return offset
+    }
+
+    private const val JXL_HEADER_SIZE = 32
 
     @RequiresApi(Build.VERSION_CODES.P)
     private class DecoderConfigListener(

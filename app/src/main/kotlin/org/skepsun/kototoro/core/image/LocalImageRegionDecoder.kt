@@ -11,6 +11,7 @@ import androidx.exifinterface.media.ExifInterface
 import org.skepsun.kototoro.core.util.ext.isZipUri
 import org.skepsun.kototoro.core.util.ext.isContentZipUri
 import org.skepsun.kototoro.core.util.ext.toUnderlyingZipUri
+import tachiyomi.decoder.ImageDecoder as MihonDecoder
 import java.io.Closeable
 import java.io.IOException
 import java.io.InputStream
@@ -19,19 +20,14 @@ import java.util.zip.ZipInputStream
 
 class LocalImageRegionDecoder private constructor(
     private val uri: Uri,
-    private val decoder: BitmapRegionDecoder,
-    private val bitmapConfig: Bitmap.Config,
+    private val decoder: RegionDecoder,
     private val exif: LocalExifMetadata,
 ) : Closeable {
 
     val size = Point(decoder.width, decoder.height)
 
     fun decodeRegion(region: Rect, sampleSize: Int): Bitmap {
-        val options = BitmapFactory.Options().apply {
-            inPreferredConfig = bitmapConfig
-            inSampleSize = sampleSize.coerceAtLeast(1)
-        }
-        return decoder.decodeRegion(region, options) ?: throw ImageDecodeException(
+        return decoder.decodeRegion(region, sampleSize) ?: throw ImageDecodeException(
             uri = uri.toString(),
             format = null,
         )
@@ -62,7 +58,7 @@ class LocalImageRegionDecoder private constructor(
     }
 
     override fun close() {
-        decoder.recycle()
+        decoder.close()
     }
 
     companion object {
@@ -78,13 +74,50 @@ class LocalImageRegionDecoder private constructor(
                 }
             }.getOrNull() ?: LocalExifMetadata()
             val decoder = try {
-                withUriInputStream(contentResolver, uri, BitmapDecoderCompat::createRegionDecoder)
+                withUriInputStream(contentResolver, uri) { input ->
+                    BitmapDecoderCompat.createRegionDecoder(input)
+                }?.let { AndroidRegionDecoder(it, bitmapConfig) }
+                    ?: withUriInputStream(contentResolver, uri) { input ->
+                        MihonImageDecoderCompat.newInstance(input, uri.toString())
+                    }?.let(::MihonRegionDecoder)
             } catch (error: Throwable) {
                 throw ImageDecodeException(uri.toString(), null, cause = error)
             } ?: throw ImageDecodeException(uri.toString(), null)
-            return LocalImageRegionDecoder(uri, decoder, bitmapConfig, exif)
+            return LocalImageRegionDecoder(uri, decoder, exif)
         }
     }
+}
+
+private interface RegionDecoder : Closeable {
+    val width: Int
+    val height: Int
+    fun decodeRegion(region: Rect, sampleSize: Int): Bitmap?
+}
+
+private class AndroidRegionDecoder(
+    private val delegate: BitmapRegionDecoder,
+    private val bitmapConfig: Bitmap.Config,
+) : RegionDecoder {
+    override val width: Int get() = delegate.width
+    override val height: Int get() = delegate.height
+    override fun decodeRegion(region: Rect, sampleSize: Int): Bitmap? {
+        val options = BitmapFactory.Options().apply {
+            inPreferredConfig = bitmapConfig
+            inSampleSize = sampleSize.coerceAtLeast(1)
+        }
+        return delegate.decodeRegion(region, options)
+    }
+    override fun close() = delegate.recycle()
+}
+
+private class MihonRegionDecoder(
+    private val delegate: MihonDecoder,
+) : RegionDecoder {
+    override val width: Int get() = delegate.width
+    override val height: Int get() = delegate.height
+    override fun decodeRegion(region: Rect, sampleSize: Int): Bitmap? =
+        delegate.decode(region, Integer.highestOneBit(sampleSize.coerceAtLeast(1)))
+    override fun close() = delegate.recycle()
 }
 
 private data class LocalExifMetadata(

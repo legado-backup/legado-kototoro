@@ -84,7 +84,7 @@ public object CloudFlareHelper {
         val host = httpUrl.host.lowercase()
         
         // If it's a known asset host or ends with static extensions, resolve to the parent root domain
-        val isAsset = httpUrl.encodedPath.substringAfterLast('.').lowercase() in setOf("jpg", "jpeg", "png", "webp", "gif", "svg") ||
+        val isAsset = httpUrl.encodedPath.substringAfterLast('.').lowercase() in setOf("jpg", "jpeg", "png", "webp", "gif", "svg", "jxl") ||
                 host.startsWith("imagenes.") || host.startsWith("images.") || host.startsWith("cdn.") || host.startsWith("img.") || host.startsWith("static.")
         
         if (isAsset) {
@@ -117,7 +117,7 @@ public object CloudFlareHelper {
         }
         val host = httpUrl.host.lowercase()
         val extension = httpUrl.encodedPath.substringAfterLast('.', "").lowercase()
-        val isAsset = extension in setOf("jpg", "jpeg", "png", "webp", "gif", "svg", "ico", "css", "js") ||
+        val isAsset = extension in setOf("jpg", "jpeg", "png", "webp", "gif", "svg", "jxl", "ico", "css", "js") ||
             host.startsWith("imagenes.") || host.startsWith("images.") || host.startsWith("cdn.") ||
             host.startsWith("img.") || host.startsWith("static.")
         return if (isAsset) getChallengeUrl(url) else httpUrl.toString()

@@ -102,7 +102,14 @@ private inline fun <T> withUriInputStream(
 
 private fun IntRect.toAndroidRect() = Rect(left, top, right, bottom)
 
-internal fun Uri.isAvifImage(): Boolean {
+internal fun Uri.isMihonNativeImage(): Boolean {
     val fileName = fragment ?: lastPathSegment ?: return false
-    return fileName.substringAfterLast('.', missingDelimiterValue = "").equals("avif", ignoreCase = true)
+    return when (fileName.substringAfterLast('.', missingDelimiterValue = "").lowercase()) {
+        "avif", "jxl" -> true
+        else -> false
+    }
 }
+
+internal fun Uri.isAvifImage(): Boolean = isMihonNativeImage() &&
+    (fragment ?: lastPathSegment ?: "").substringAfterLast('.', missingDelimiterValue = "")
+        .equals("avif", ignoreCase = true)

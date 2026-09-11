@@ -584,7 +584,7 @@ class NovelContentLoader @Inject constructor(
 
     private fun String.isImageName(): Boolean {
         val ext = substringAfterLast('.', missingDelimiterValue = "").lowercase()
-        return ext in setOf("jpg", "jpeg", "png", "webp", "gif", "avif", "bmp")
+        return ext in setOf("jpg", "jpeg", "png", "webp", "gif", "avif", "jxl", "bmp")
     }
 
     private fun normalizeZipPath(base: String, src: String): String {

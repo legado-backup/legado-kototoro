@@ -33,18 +33,29 @@ object MimeTypes {
     fun getMimeTypeFromExtension(fileName: String): MimeType? {
         val ext = getNormalizedExtension(fileName) ?: return null
         // 优先使用 Coil 的映射
-        val fromCoil = CoilMimeTypeMap.getMimeTypeFromExtension(ext)?.toMimeTypeOrNull()
+        val fromCoil = runCatching {
+            CoilMimeTypeMap.getMimeTypeFromExtension(ext)?.toMimeTypeOrNull()
+        }.getOrNull()
         if (fromCoil != null) return fromCoil
         // 回退到内置映射（主要为 webp 等格式提供支持）
         return FALLBACK_MIME_TYPES[ext]?.toMimeTypeOrNull()
     }
 
     fun getMimeTypeFromUrl(url: String): MimeType? {
-        return CoilMimeTypeMap.getMimeTypeFromUrl(url)?.toMimeTypeOrNull()
+        return runCatching {
+            CoilMimeTypeMap.getMimeTypeFromUrl(url)?.toMimeTypeOrNull()
+        }.getOrNull()
+            ?: getMimeTypeFromExtension(
+                url.substringBefore('#').substringBefore('?').substringAfterLast('/'),
+            )
     }
 
     fun getExtension(mimeType: MimeType?): String? {
-        return MimeTypeMap.getSingleton().getExtensionFromMimeType(mimeType?.toString() ?: return null)?.nullIfEmpty()
+        val value = mimeType?.toString() ?: return null
+        return runCatching {
+            MimeTypeMap.getSingleton().getExtensionFromMimeType(value)?.nullIfEmpty()
+        }.getOrNull()
+            ?: FALLBACK_MIME_TYPES.entries.firstOrNull { it.value == value }?.key
     }
 
     @Blocking

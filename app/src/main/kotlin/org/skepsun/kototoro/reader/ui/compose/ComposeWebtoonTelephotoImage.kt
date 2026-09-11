@@ -135,7 +135,7 @@ private fun ComposeTelephotoSubsamplingImage(
     val currentOnImageError by rememberUpdatedState(onImageError)
     val currentOnZoomedChanged by rememberUpdatedState(onZoomedChanged)
     val imageSource = remember(uri, split, cropBounds, context) {
-        val source = if (uri.isAvifImage() || uri.isContentZipUri()) {
+        val source = if (uri.isMihonNativeImage() || uri.isContentZipUri()) {
             NativeSubSamplingImageSource(context, uri)
         } else if (uri.isZipUri()) {
             val entryName = uri.fragment

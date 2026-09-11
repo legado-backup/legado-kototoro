@@ -146,7 +146,7 @@ class EpubImageExtractor(private val epubFile: File) {
      */
     private fun isImageFile(filename: String): Boolean {
         val extension = filename.substringAfterLast('.', "").lowercase()
-        return extension in listOf("jpg", "jpeg", "png", "gif", "webp", "bmp", "svg")
+        return extension in listOf("jpg", "jpeg", "png", "gif", "webp", "bmp", "svg", "jxl")
     }
 
     /**

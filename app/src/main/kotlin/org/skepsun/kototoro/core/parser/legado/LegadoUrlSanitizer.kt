@@ -7,7 +7,7 @@ package org.skepsun.kototoro.core.parser.legado
  */
 internal object LegadoUrlSanitizer {
 
-    private val knownImageExtensions = setOf("jpg", "jpeg", "png", "webp", "gif", "bmp", "avif")
+    private val knownImageExtensions = setOf("jpg", "jpeg", "png", "webp", "gif", "bmp", "avif", "jxl")
 
     fun sanitizeImageUrl(url: String): String {
         val trimmed = url.trim()

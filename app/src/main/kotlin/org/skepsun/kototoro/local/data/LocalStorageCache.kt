@@ -113,7 +113,10 @@ class LocalStorageCache(
     }.getOrDefault(defaultSize)
 
     private suspend fun createBufferFile(url: String, mimeType: MimeType?): File {
-        val ext = MimeTypes.getExtension(mimeType) ?: MimeTypeMap.getFileExtensionFromUrl(url).ifNullOrEmpty { "dat" }
+        val ext = MimeTypes.getExtension(mimeType)
+            ?: runCatching { MimeTypeMap.getFileExtensionFromUrl(url) }.getOrNull().ifNullOrEmpty {
+                MimeTypes.getNormalizedExtension(url.substringBefore('#').substringBefore('?')) ?: "dat"
+            }
         val cacheDir = cacheDir.get()
         val rootDir = checkNotNull(cacheDir.parentFile) { "Cannot get parent for ${cacheDir.absolutePath}" }
         val name = UUID.randomUUID().toString() + "." + ext

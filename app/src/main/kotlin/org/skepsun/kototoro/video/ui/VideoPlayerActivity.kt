@@ -2205,7 +2205,7 @@ class VideoPlayerActivity : BaseComposeFullscreenActivity(), ReaderNavigationCal
 
     private fun isImageLabelledHlsSegment(url: String): Boolean {
         return when (Uri.parse(url).lastPathSegment?.substringAfterLast('.', missingDelimiterValue = "")?.lowercase()) {
-            "jpg", "jpeg", "png", "webp", "avif" -> true
+            "jpg", "jpeg", "png", "webp", "avif", "jxl" -> true
             else -> false
         }
     }

@@ -37,6 +37,7 @@ import org.skepsun.kototoro.backups.domain.BackupObserver
 import org.skepsun.kototoro.core.db.MangaDatabase
 import org.skepsun.kototoro.core.exceptions.resolve.CaptchaHandler
 import org.skepsun.kototoro.core.image.AvifImageDecoder
+import org.skepsun.kototoro.core.image.JxlImageDecoder
 import org.skepsun.kototoro.core.image.CbzFetcher
 import org.skepsun.kototoro.core.image.ContentSourceHeaderInterceptor
 import org.skepsun.kototoro.core.image.TVBoxSearchCoverFetcher
@@ -228,6 +229,7 @@ interface AppModule {
                     add(SvgDecoder.Factory())
                     add(CbzFetcher.Factory())
                     add(AvifImageDecoder.Factory())
+                    add(JxlImageDecoder.Factory())
                     add(faviconFetcherFactory)
                     add(ContentPageKeyer())
                     add(pageFetcherFactory)

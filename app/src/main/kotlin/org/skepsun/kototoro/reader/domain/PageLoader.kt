@@ -608,6 +608,8 @@ class PageLoader @Inject constructor(
 
     companion object {
 
+        private const val IMAGE_ACCEPT =
+            "image/avif,image/jxl,image/webp,image/png;q=0.9,image/jpeg,*/*;q=0.8"
         private const val PROGRESS_UNDEFINED = -1f
         private const val LOAD_PRIORITY_PREFETCH = 0
         private const val LOAD_PRIORITY_VISIBLE = 1
@@ -619,7 +621,7 @@ class PageLoader @Inject constructor(
             val builder = Request.Builder()
                 .url(pageUrl)
                 .get()
-                .header(CommonHeaders.ACCEPT, "image/avif,image/webp,image/png;q=0.9,image/jpeg,*/*;q=0.8")
+                .header(CommonHeaders.ACCEPT, IMAGE_ACCEPT)
                 .cacheControl(CommonHeaders.CACHE_CONTROL_NO_STORE)
                 .tag(ContentSource::class.java, page.source)
                 // 传递 source 名称，便于下游拦截器获知来源
@@ -644,7 +646,7 @@ class PageLoader @Inject constructor(
             val builder = Request.Builder()
                 .url(pageUrl)
                 .get()
-                .header(CommonHeaders.ACCEPT, "image/avif,image/webp,image/png;q=0.9,image/jpeg,*/*;q=0.8")
+                .header(CommonHeaders.ACCEPT, IMAGE_ACCEPT)
                 .cacheControl(CommonHeaders.CACHE_CONTROL_NO_STORE)
                 // 传递来源，便于下游拦截器注入默认 UA/Referer
                 .header(CommonHeaders.MANGA_SOURCE, mangaSource.name)
